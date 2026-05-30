@@ -1,7 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class OutboxService implements OnModuleInit, OnModuleDestroy {
@@ -11,10 +11,11 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue('outbox_relay') private readonly outboxRelayQueue: Queue,
+    @InjectQueue('document_enrichment') private readonly enrichmentQueue: Queue,
   ) {}
 
   onModuleInit() {
-    console.log('Outbox Poller daemon starting...');
+    console.log('Outbox poller daemon starting...');
     this.startPolling();
   }
 
@@ -23,29 +24,24 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     if (this.pollTimeout) {
       clearTimeout(this.pollTimeout);
     }
-    console.log('Outbox Poller daemon stopped.');
+    console.log('Outbox poller daemon stopped.');
   }
 
   private async startPolling() {
     if (!this.running) return;
-
     try {
       await this.pollAndRelay();
     } catch (err) {
-      console.error('Outbox Poller error during run:', err);
+      console.error('Outbox poller error during run:', err);
     }
-
-    // Schedule next poll in 5 seconds
     this.pollTimeout = setTimeout(() => this.startPolling(), 5000);
   }
 
   async pollAndRelay() {
-    // 1. Fetch pending outbox events (limit 10 per batch)
-    // In production, we'd use SELECT FOR UPDATE SKIP LOCKED. With Prisma, we can do it in a transaction.
     const events = await this.prisma.$transaction(async (tx) => {
       const pendingEvents = await tx.outbox_events.findMany({
         where: { status: 'PENDING' },
-        orderBy: { created_at: 'asc' },
+        orderBy: { occurred_at: 'asc' },
         take: 10,
       });
 
@@ -53,66 +49,50 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
         return [];
       }
 
-      // Mark them as PROCESSING to avoid double-processing
-      const eventIds = pendingEvents.map(e => e.id);
       await tx.outbox_events.updateMany({
-        where: { id: { in: eventIds } },
-        data: {
-          status: 'PROCESSING',
-          updated_at: new Date(),
-        },
+        where: { event_id: { in: pendingEvents.map((event) => event.event_id) } },
+        data: { status: 'PROCESSING' },
       });
 
       return pendingEvents;
     });
 
-    if (events.length === 0) {
-      return;
-    }
-
-    console.log(`Outbox Poller: Found ${events.length} pending events to relay.`);
-
-    // 2. Relay events to BullMQ
     for (const event of events) {
       try {
         const payload = {
-          event_id: event.id,
+          event_id: event.event_id,
           event_type: event.event_type,
+          aggregate_type: event.aggregate_type,
           aggregate_id: event.aggregate_id,
-          payload: event.payload_json,
+          payload: event.payload,
         };
 
-        // Enqueue job in BullMQ
-        await this.outboxRelayQueue.add(event.event_type, payload, {
+        const queue =
+          event.event_type === 'CONTENT_GENERATION_REQUESTED'
+            ? this.enrichmentQueue
+            : this.outboxRelayQueue;
+
+        await queue.add(event.event_type, payload, {
           attempts: 5,
-          backoff: {
-            type: 'exponential',
-            delay: 2000,
-          },
+          backoff: { type: 'exponential', delay: 2000 },
         });
 
-        // Update status to COMPLETED
         await this.prisma.outbox_events.update({
-          where: { id: event.id },
+          where: { event_id: event.event_id },
           data: {
-            status: 'COMPLETED',
-            attempts: event.attempts + 1,
-            updated_at: new Date(),
+            status: 'PROCESSED',
+            retry_count: (event.retry_count || 0) + 1,
+            processed_at: new Date(),
           },
         });
-
-        console.log(`Outbox Poller: Successfully relayed event ${event.id} (${event.event_type})`);
-      } catch (err: any) {
-        console.error(`Outbox Poller: Failed to relay event ${event.id}:`, err);
-
-        // Update status to FAILED and record error message
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         await this.prisma.outbox_events.update({
-          where: { id: event.id },
+          where: { event_id: event.event_id },
           data: {
             status: 'FAILED',
-            attempts: event.attempts + 1,
-            error_msg: err.message || String(err),
-            updated_at: new Date(),
+            retry_count: (event.retry_count || 0) + 1,
+            last_error: message,
           },
         });
       }

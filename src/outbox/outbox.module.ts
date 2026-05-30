@@ -7,6 +7,9 @@ import { OutboxService } from './outbox.service';
     BullModule.registerQueue({
       name: 'outbox_relay',
     }),
+    BullModule.registerQueue({
+      name: 'document_enrichment',
+    }),
   ],
   providers: [OutboxService],
   exports: [OutboxService],

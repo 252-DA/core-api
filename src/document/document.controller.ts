@@ -1,57 +1,94 @@
-import { Controller, Get, Post, Delete, Body, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { DocumentService } from './document.service';
+import { BffJwtGuard } from '../auth/bff-jwt.guard';
+import { CurrentBffClaims } from '../auth/current-bff-claims.decorator';
+import type { BffClaims } from '../auth/bff-claims';
 
 @Controller('api/documents')
+@UseGuards(BffJwtGuard)
 export class DocumentController {
   constructor(private readonly documentService: DocumentService) {}
 
   @Get()
   async listDocuments(
-    @Query('course_id') courseId?: string,
+    @CurrentBffClaims() claims: BffClaims,
+    @Query('course_id') courseId: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
     const lim = limit ? parseInt(limit, 10) : 50;
     const off = offset ? parseInt(offset, 10) : 0;
-    return this.documentService.listDocuments(courseId, lim, off);
+    return this.documentService.listDocuments(claims, courseId, lim, off);
   }
 
   @Get(':id')
-  async getDocument(@Param('id') id: string) {
-    return this.documentService.getDocument(id);
+  async getDocument(
+    @CurrentBffClaims() claims: BffClaims,
+    @Param('id') id: string,
+  ) {
+    return this.documentService.getDocument(claims, id);
   }
 
   @Get(':id/chunks')
-  async getDocumentChunks(@Param('id') id: string) {
-    return this.documentService.getDocumentChunks(id);
+  async getDocumentChunks(
+    @CurrentBffClaims() claims: BffClaims,
+    @Param('id') id: string,
+  ) {
+    return this.documentService.getDocumentChunks(claims, id);
+  }
+
+  @Post('upload-session')
+  async createUploadSession(
+    @CurrentBffClaims() claims: BffClaims,
+    @Body()
+    body: {
+      courseId: string;
+      title: string;
+      fileName: string;
+      mimeType?: string;
+      checksum?: string;
+    },
+  ) {
+    return this.documentService.createUploadSession(claims, body);
+  }
+
+  @Post(':id/confirm-upload')
+  async confirmUpload(
+    @CurrentBffClaims() claims: BffClaims,
+    @Param('id') id: string,
+  ) {
+    return this.documentService.confirmUpload(claims, id);
   }
 
   @Post()
   async registerAndProcess(
+    @CurrentBffClaims() claims: BffClaims,
     @Body()
     body: {
-      document_id?: string;
-      document_name: string;
-      doc_type: string;
-      mime_type: string;
-      size_bytes: number;
-      storage_key: string;
-      course_id?: string;
-      owner_id?: string;
-      language?: string;
-      metadata_json?: any;
+      title: string;
+      file_path: string;
+      mime_type?: string;
+      checksum?: string;
+      course_id: string;
     },
   ) {
-    return this.documentService.registerAndProcess(body);
-  }
-
-  @Post(':id/enrich')
-  async triggerEnrichment(@Param('id') id: string) {
-    return this.documentService.triggerEnrichment(id);
+    return this.documentService.registerAndProcess(claims, body);
   }
 
   @Delete(':id')
-  async deleteDocument(@Param('id') id: string) {
-    return this.documentService.deleteDocument(id);
+  async deleteDocument(
+    @CurrentBffClaims() claims: BffClaims,
+    @Param('id') id: string,
+  ) {
+    return this.documentService.deleteDocument(claims, id);
   }
 }

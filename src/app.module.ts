@@ -9,6 +9,13 @@ import { DocumentModule } from './document/document.module';
 import { ContentModule } from './content/content.module';
 import { ReviewModule } from './review/review.module';
 import { OutboxModule } from './outbox/outbox.module';
+import { LtiModule } from './lti/lti.module';
+import { AuthModule } from './auth/auth.module';
+import { LessonModule } from './lesson/lesson.module';
+import { CurriculumModule } from './curriculum/curriculum.module';
+import { QuizModule } from './quiz/quiz.module';
+import { ContentGenerationModule } from './content-generation/content-generation.module';
+import { GrpcModule } from './grpc/grpc.module';
 
 // Parse Redis URL for BullMQ connection
 const getRedisConnection = () => {
@@ -42,6 +49,13 @@ const getRedisConnection = () => {
     ContentModule,
     ReviewModule,
     OutboxModule,
+    LtiModule,
+    AuthModule,
+    LessonModule,
+    CurriculumModule,
+    QuizModule,
+    ContentGenerationModule,
+    GrpcModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,41 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable } from '@nestjs/common';
+import { LessonService } from '../lesson/lesson.service';
+import type { BffClaims } from '../auth/bff-claims';
 
 @Injectable()
 export class ContentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly lessonService: LessonService) {}
 
-  async getLessonCards(documentId: string) {
-    // Check if document exists
-    const doc = await this.prisma.documents_metadata.findUnique({
-      where: { document_id: documentId },
-    });
-    if (!doc) {
-      throw new NotFoundException(`Document not found: ${documentId}`);
-    }
-
-    return this.prisma.lesson_cards.findMany({
-      where: { document_id: documentId },
-      orderBy: { card_index: 'asc' },
-    });
+  async getLessonCards(claims: BffClaims, lessonId: string) {
+    return this.lessonService.cards(claims, lessonId, 'PUBLISHED');
   }
 
-  async getQuizItems(documentId: string) {
-    // Check if document exists
-    const doc = await this.prisma.documents_metadata.findUnique({
-      where: { document_id: documentId },
-    });
-    if (!doc) {
-      throw new NotFoundException(`Document not found: ${documentId}`);
-    }
-
-    return this.prisma.quiz_items.findMany({
-      where: { document_id: documentId },
-      orderBy: { question_index: 'asc' },
-      include: {
-        learning_outcomes: true,
-        assessments: true,
-      },
-    });
+  async getQuizItems(claims: BffClaims, lessonId: string) {
+    return this.lessonService.quiz(claims, lessonId, 'PUBLISHED');
   }
 }
