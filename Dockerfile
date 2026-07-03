@@ -10,7 +10,7 @@ COPY core-api/ .
 RUN npx prisma generate
 
 FROM base AS dev
-CMD ["pnpm", "run", "start:dev"]
+CMD ["./node_modules/.bin/nest", "start", "--watch"]
 
 FROM base AS build
 RUN pnpm run build
