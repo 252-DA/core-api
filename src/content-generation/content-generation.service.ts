@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
+import { OUTBOX_EVENT_TYPES } from '../outbox/outbox-event.constants';
 
 @Injectable()
 export class ContentGenerationService {
@@ -33,7 +34,7 @@ export class ContentGenerationService {
 
       await tx.outbox_events.create({
         data: {
-          event_type: 'CONTENT_GENERATION_REQUESTED',
+          event_type: OUTBOX_EVENT_TYPES.CONTENT_GENERATION_REQUESTED,
           aggregate_type: 'content_generation_request',
           aggregate_id: request.request_id,
           payload: {

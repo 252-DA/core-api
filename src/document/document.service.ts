@@ -9,6 +9,7 @@ import { Client as MinioClient } from 'minio';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
+import { OUTBOX_EVENT_TYPES } from '../outbox/outbox-event.constants';
 
 const DEFAULT_BUCKET = process.env.MINIO__BUCKET_NAME || 'documents';
 
@@ -267,7 +268,7 @@ export class DocumentService {
       });
       await tx.outbox_events.create({
         data: {
-          event_type: 'DOCUMENT_DELETED',
+          event_type: OUTBOX_EVENT_TYPES.DOCUMENT_DELETED,
           aggregate_type: 'document',
           aggregate_id: documentId,
           payload: { document_id: documentId, course_id: doc.course_id },

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
+import { OUTBOX_EVENT_TYPES } from '../outbox/outbox-event.constants';
 
 @Injectable()
 export class LessonService {
@@ -109,7 +110,7 @@ export class LessonService {
 
       await tx.outbox_events.create({
         data: {
-          event_type: 'LESSON_PUBLISHED',
+          event_type: OUTBOX_EVENT_TYPES.LESSON_PUBLISHED,
           aggregate_type: 'lesson',
           aggregate_id: lessonId,
           payload: {
