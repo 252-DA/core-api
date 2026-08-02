@@ -11,12 +11,39 @@ import { LessonService } from '../lesson/lesson.service';
 import { ReviewService } from '../review/review.service';
 import { QuizService } from '../quiz/quiz.service';
 import { ContentGenerationService } from '../content-generation/content-generation.service';
+import {
+  type CoreRpcMethod,
+  type CoreRpcRequest,
+  type CoreRpcResponse,
+  type JsonRequestEnvelope,
+  type JsonResponseEnvelope,
+  parseCoreRpcRequest,
+} from './core-api-rpc.contract';
 
-type JsonRequest = { json?: string };
-type JsonResponse = { json: string };
-type EmptyRequest = Record<string, never>;
-type UnaryCall<T> = grpc.ServerUnaryCall<T, JsonResponse>;
-type UnaryCallback = grpc.sendUnaryData<JsonResponse>;
+type UnaryCall = grpc.ServerUnaryCall<
+  JsonRequestEnvelope,
+  JsonResponseEnvelope
+>;
+type UnaryCallback = grpc.sendUnaryData<JsonResponseEnvelope>;
+type CoreRpcHandler<TMethod extends CoreRpcMethod> = (
+  claims: BffClaims,
+  body: CoreRpcRequest<TMethod>,
+) => Promise<CoreRpcResponse<TMethod>> | CoreRpcResponse<TMethod>;
+type UnaryImplementation = (
+  call: UnaryCall,
+  callback: UnaryCallback,
+) => Promise<void>;
+type CoreRpcHandlerMap = {
+  [TMethod in CoreRpcMethod]: UnaryImplementation;
+};
+
+interface LoadedCorePackage {
+  ai_lms?: {
+    v1?: {
+      CoreApiService?: grpc.ServiceClientConstructor;
+    };
+  };
+}
 
 @Injectable()
 export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
@@ -42,7 +69,9 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       defaults: true,
       oneofs: true,
     });
-    const loaded = grpc.loadPackageDefinition(packageDefinition) as any;
+    const loaded = grpc.loadPackageDefinition(
+      packageDefinition,
+    ) as unknown as LoadedCorePackage;
     const service = loaded.ai_lms?.v1?.CoreApiService?.service;
     if (!service) {
       throw new Error('CoreApiService not found in proto definition');
@@ -70,83 +99,101 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private handlers(): grpc.UntypedServiceImplementation {
-    return {
-      LaunchSync: this.unary((claims, body) => {
+    const handlers = {
+      LaunchSync: this.unary('LaunchSync', (claims, body) => {
         if (claims.scope !== 'admin' || claims.sub !== 'lti-bootstrap') {
           throw new Error('Invalid bootstrap claims');
         }
         return this.lti.syncLaunch(body);
       }),
-      ListCourses: this.unary((claims) => this.courses.listCourses(claims)),
-      GetCourse: this.unary((claims, body) => this.courses.getCourse(claims, body.courseId)),
-      ListChapters: this.unary((claims, body) => this.courses.getChapters(claims, body.courseId)),
-      ListLearningOutcomes: this.unary((claims, body) =>
+      ListCourses: this.unary('ListCourses', (claims) =>
+        this.courses.listCourses(claims),
+      ),
+      GetCourse: this.unary('GetCourse', (claims, body) =>
+        this.courses.getCourse(claims, body.courseId),
+      ),
+      ListChapters: this.unary('ListChapters', (claims, body) =>
+        this.courses.getChapters(claims, body.courseId),
+      ),
+      ListLearningOutcomes: this.unary('ListLearningOutcomes', (claims, body) =>
         this.courses.getLearningOutcomes(claims, body.courseId),
       ),
-      CreateUploadSession: this.unary((claims, body) =>
+      CreateUploadSession: this.unary('CreateUploadSession', (claims, body) =>
         this.documents.createUploadSession(claims, body),
       ),
-      ConfirmUpload: this.unary((claims, body) =>
+      ConfirmUpload: this.unary('ConfirmUpload', (claims, body) =>
         this.documents.confirmUpload(claims, body.documentId),
       ),
-      ListDocuments: this.unary((claims, body) =>
-        this.documents.listDocuments(claims, body.courseId, body.limit, body.offset),
+      ListDocuments: this.unary('ListDocuments', (claims, body) =>
+        this.documents.listDocuments(
+          claims,
+          body.courseId,
+          body.limit,
+          body.offset,
+        ),
       ),
-      DeleteDocument: this.unary((claims, body) =>
+      DeleteDocument: this.unary('DeleteDocument', (claims, body) =>
         this.documents.deleteDocument(claims, body.documentId),
       ),
-      ListLessons: this.unary((claims, body) =>
+      ListLessons: this.unary('ListLessons', (claims, body) =>
         this.lessons.list(claims, body.courseId, body.status),
       ),
-      GetLesson: this.unary((claims, body) => this.lessons.get(claims, body.lessonId)),
-      GetLessonCards: this.unary((claims, body) =>
+      GetLesson: this.unary('GetLesson', (claims, body) =>
+        this.lessons.get(claims, body.lessonId),
+      ),
+      GetLessonCards: this.unary('GetLessonCards', (claims, body) =>
         this.lessons.cards(claims, body.lessonId, body.status),
       ),
-      GetLessonQuiz: this.unary((claims, body) =>
+      GetLessonQuiz: this.unary('GetLessonQuiz', (claims, body) =>
         this.lessons.quiz(claims, body.lessonId, body.status),
       ),
-      PublishLesson: this.unary((claims, body) =>
+      PublishLesson: this.unary('PublishLesson', (claims, body) =>
         this.lessons.publish(claims, body.lessonId),
       ),
-      ListReviewDrafts: this.unary((claims, body) =>
+      ListReviewDrafts: this.unary('ListReviewDrafts', (claims, body) =>
         this.review.listDrafts(claims, body.courseId, body.kind),
       ),
-      ApproveCard: this.unary((claims, body) => this.review.approveCard(claims, body.cardId)),
-      RejectCard: this.unary((claims, body) =>
+      ApproveCard: this.unary('ApproveCard', (claims, body) =>
+        this.review.approveCard(claims, body.cardId),
+      ),
+      RejectCard: this.unary('RejectCard', (claims, body) =>
         this.review.rejectCard(claims, body.cardId, body.reason),
       ),
-      UpdateCard: this.unary((claims, body) =>
+      UpdateCard: this.unary('UpdateCard', (claims, body) =>
         this.review.updateCard(claims, body.cardId, body.content),
       ),
-      ApproveQuizItem: this.unary((claims, body) =>
+      ApproveQuizItem: this.unary('ApproveQuizItem', (claims, body) =>
         this.review.approveQuizItem(claims, body.quizId),
       ),
-      RejectQuizItem: this.unary((claims, body) =>
+      RejectQuizItem: this.unary('RejectQuizItem', (claims, body) =>
         this.review.rejectQuizItem(claims, body.quizId, body.reason),
       ),
-      UpdateQuizItem: this.unary((claims, body) =>
+      UpdateQuizItem: this.unary('UpdateQuizItem', (claims, body) =>
         this.review.updateQuizItem(claims, body.quizId, body.data),
       ),
-      SubmitQuiz: this.unary((claims, body) => this.quiz.submit(claims, body)),
-      ListQuizAttempts: this.unary((claims, body) =>
+      SubmitQuiz: this.unary('SubmitQuiz', (claims, body) =>
+        this.quiz.submit(claims, body),
+      ),
+      ListQuizAttempts: this.unary('ListQuizAttempts', (claims, body) =>
         this.quiz.attempts(claims, body.lessonId),
       ),
-      CreateContentGenerationRequest: this.unary((claims, body) =>
-        this.contentGeneration.createRequest(claims, body),
+      CreateContentGenerationRequest: this.unary(
+        'CreateContentGenerationRequest',
+        (claims, body) => this.contentGeneration.createRequest(claims, body),
       ),
-    };
+    } satisfies CoreRpcHandlerMap;
+
+    return handlers;
   }
 
-  private unary<TBody = any>(
-    handler: (claims: BffClaims, body: TBody) => Promise<unknown> | unknown,
+  private unary<TMethod extends CoreRpcMethod>(
+    method: TMethod,
+    handler: CoreRpcHandler<TMethod>,
   ) {
-    return async (
-      call: UnaryCall<JsonRequest | EmptyRequest>,
-      callback: UnaryCallback,
-    ) => {
+    return async (call: UnaryCall, callback: UnaryCallback) => {
       try {
         const claims = await this.claimsFromMetadata(call.metadata);
-        const body = this.parseBody<TBody>(call.request as JsonRequest);
+        const body = parseCoreRpcRequest(method, call.request?.json);
         const result = await handler(claims, body);
         callback(null, { json: JSON.stringify(result ?? null) });
       } catch (error: unknown) {
@@ -154,16 +201,9 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
         callback({
           code: grpc.status.INTERNAL,
           message,
-        } as grpc.ServiceError);
+        });
       }
     };
-  }
-
-  private parseBody<TBody>(request: JsonRequest): TBody {
-    if (!request?.json) {
-      return {} as TBody;
-    }
-    return JSON.parse(request.json) as TBody;
   }
 
   private async claimsFromMetadata(metadata: grpc.Metadata) {
