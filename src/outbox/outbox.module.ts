@@ -2,9 +2,11 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { OutboxService } from './outbox.service';
 import { OUTBOX_QUEUE_NAMES } from './outbox-event.constants';
+import { MetricsModule } from '../metrics/metrics.module';
 
 @Module({
   imports: [
+    MetricsModule,
     BullModule.registerQueue({
       name: OUTBOX_QUEUE_NAMES.OUTBOX_RELAY,
     }),

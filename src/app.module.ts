@@ -16,6 +16,7 @@ import { CurriculumModule } from './curriculum/curriculum.module';
 import { QuizModule } from './quiz/quiz.module';
 import { ContentGenerationModule } from './content-generation/content-generation.module';
 import { GrpcModule } from './grpc/grpc.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 // Parse Redis URL for BullMQ connection
 const getRedisConnection = () => {
@@ -56,6 +57,7 @@ const getRedisConnection = () => {
     QuizModule,
     ContentGenerationModule,
     GrpcModule,
+    MetricsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

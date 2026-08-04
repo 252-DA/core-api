@@ -1,5 +1,6 @@
 import type { Queue } from 'bullmq';
 import type { PrismaService } from '../prisma/prisma.service';
+import type { MetricsService } from '../metrics/metrics.service';
 import {
   OUTBOX_EVENT_TYPES,
   OUTBOX_QUEUE_NAMES,
@@ -40,6 +41,7 @@ describe('OutboxService', () => {
   let transaction: jest.Mock;
   let outboxRelayAdd: jest.Mock;
   let contentGenerationAdd: jest.Mock;
+  let incrementOutboxEventFailed: jest.Mock;
   let service: OutboxService;
   let claimedQuery: string;
 
@@ -68,11 +70,16 @@ describe('OutboxService', () => {
     const contentGenerationQueue = {
       add: contentGenerationAdd,
     } as unknown as Queue;
+    incrementOutboxEventFailed = jest.fn();
+    const metrics = {
+      incrementOutboxEventFailed,
+    } as unknown as MetricsService;
 
     service = new OutboxService(
       prisma,
       outboxRelayQueue,
       contentGenerationQueue,
+      metrics,
     );
   });
 
@@ -149,6 +156,7 @@ describe('OutboxService', () => {
 
     expect(outboxRelayAdd).not.toHaveBeenCalled();
     expect(contentGenerationAdd).not.toHaveBeenCalled();
+    expect(incrementOutboxEventFailed).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledWith({
       where: { event_id: event.event_id },
       data: {
@@ -177,6 +185,10 @@ describe('OutboxService', () => {
         processed_at: null,
       },
     });
+    expect(incrementOutboxEventFailed).toHaveBeenCalledTimes(1);
+    expect(incrementOutboxEventFailed).toHaveBeenCalledWith(
+      OUTBOX_EVENT_TYPES.DOCUMENT_DELETED,
+    );
   });
 
   it('propagates a status-write failure so the database transaction rolls back', async () => {
