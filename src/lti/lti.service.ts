@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { LaunchSyncDto } from './dto/launch-sync.dto';
+import { CanvasSyncJobsService } from '../document/canvas-sync-jobs.service';
 
 function stableCourseCode(lmsType: string, lmsContextId: string) {
   const hash = createHash('sha256')
@@ -19,7 +20,10 @@ function nullableUuid(value?: string) {
 
 @Injectable()
 export class LtiService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly canvasSyncJobs: CanvasSyncJobsService,
+  ) {}
 
   async syncLaunch(dto: LaunchSyncDto) {
     if (!dto.lmsContextId?.trim()) {
@@ -32,7 +36,7 @@ export class LtiService {
     const contextTitle = dto.contextTitle?.trim() || `LMS Course ${lmsContextId}`;
     const customClaims = (dto.customClaims || {}) as Prisma.InputJsonValue;
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const userMapping = await tx.lms_user_mappings.upsert({
         where: {
           lms_type_lms_sub: {
@@ -113,6 +117,12 @@ export class LtiService {
       });
 
       let internalResourceLinkId: string | undefined;
+      if (dto.targetKind === 'quiz_set') {
+        const target = nullableUuid(dto.targetId);
+        if (!target || !await tx.quiz_sets.findFirst({ where: { quiz_set_id: target, course_id: course.course_id, deleted_at: null } })) {
+          throw new BadRequestException('Quiz không thuộc khóa học Canvas hiện tại.');
+        }
+      }
       if (dto.resourceLinkId && dto.targetKind) {
         const resourceLink = await tx.lti_resource_links.upsert({
           where: {
@@ -164,5 +174,9 @@ export class LtiService {
         ...(internalResourceLinkId && { resourceLinkId: internalResourceLinkId }),
       };
     });
+    // Only enqueue after the course/reference transaction has committed. Do not
+    // await Redis here: an unavailable queue must never delay the LTI launch.
+    void this.canvasSyncJobs.triggerLaunch(result.internalCourseId, dto.lmsType, dto.courseRole);
+    return result;
   }
 }

@@ -4,7 +4,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
 
-const DRAFT_STATUSES = ['GENERATED_DRAFT', 'REVIEWING', 'CHANGES_REQUESTED'];
+const DRAFT_STATUSES = [
+  'GENERATED_DRAFT',
+  'REVIEWING',
+  'CHANGES_REQUESTED',
+  'APPROVED',
+];
 
 @Injectable()
 export class ReviewService {

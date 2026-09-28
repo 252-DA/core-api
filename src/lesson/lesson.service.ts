@@ -26,17 +26,32 @@ export class LessonService {
   async get(claims: BffClaims, lessonId: string) {
     const lesson = await this.prisma.lessons.findFirst({
       where: { lesson_id: lessonId, deleted_at: null },
-      include: { learning_outcomes: { include: { chapters: true } } },
+      include: {
+        learning_outcomes: { include: { chapter_los: { include: { chapters: true } } } },
+      },
     });
     if (!lesson) {
       throw new NotFoundException(`Lesson not found: ${lessonId}`);
     }
     await this.authz.assertCourseAccess(claims, lesson.course_id);
-    return lesson;
+
+    // LO có thể được dạy ở nhiều chương; trang bài học lấy chương đầu tiên làm tiêu đề.
+    const { chapter_los, ...lo } = lesson.learning_outcomes;
+    const chapters = chapter_los
+      .map((link) => link.chapters)
+      .filter((chapter) => !chapter.deleted_at)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    return { ...lesson, learning_outcomes: { ...lo, chapters: chapters[0] ?? null } };
   }
 
   async cards(claims: BffClaims, lessonId: string, status?: string) {
     const lesson = await this.get(claims, lessonId);
+    if (status !== 'PUBLISHED') {
+      await this.authz.assertCourseAccess(claims, lesson.course_id, [
+        'instructor',
+        'ta',
+      ]);
+    }
     return this.prisma.lesson_cards.findMany({
       where: {
         lesson_id: lesson.lesson_id,
@@ -49,6 +64,12 @@ export class LessonService {
 
   async quiz(claims: BffClaims, lessonId: string, status?: string) {
     const lesson = await this.get(claims, lessonId);
+    if (status !== 'PUBLISHED') {
+      await this.authz.assertCourseAccess(claims, lesson.course_id, [
+        'instructor',
+        'ta',
+      ]);
+    }
     return this.prisma.quiz_items.findMany({
       where: {
         lesson_id: lesson.lesson_id,

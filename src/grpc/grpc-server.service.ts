@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { HttpException, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { resolve } from 'path';
@@ -10,7 +10,10 @@ import { DocumentService } from '../document/document.service';
 import { LessonService } from '../lesson/lesson.service';
 import { ReviewService } from '../review/review.service';
 import { QuizService } from '../quiz/quiz.service';
+import { QuizSetService } from '../quiz/quiz-set.service';
 import { ContentGenerationService } from '../content-generation/content-generation.service';
+import { CurriculumImportService } from '../curriculum/curriculum-import.service';
+import { CanvasDocumentSyncService } from '../document/canvas-document-sync.service';
 
 type JsonRequest = { json?: string };
 type JsonResponse = { json: string };
@@ -30,7 +33,10 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
     private readonly lessons: LessonService,
     private readonly review: ReviewService,
     private readonly quiz: QuizService,
+    private readonly quizSets: QuizSetService,
     private readonly contentGeneration: ContentGenerationService,
+    private readonly curriculumImports: CurriculumImportService,
+    private readonly canvasDocuments: CanvasDocumentSyncService,
   ) {}
 
   async onModuleInit() {
@@ -83,6 +89,15 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       ListLearningOutcomes: this.unary((claims, body) =>
         this.courses.getLearningOutcomes(claims, body.courseId),
       ),
+      SyncCurriculumFromCanvas: this.unary((claims, body) =>
+        this.curriculumImports.syncFromCanvas(claims, body.courseId),
+      ),
+      ListCurriculumImports: this.unary((claims, body) =>
+        this.curriculumImports.listImports(claims, body.courseId, body.limit),
+      ),
+      ApplyCurriculumImport: this.unary((claims, body) =>
+        this.curriculumImports.applyImport(claims, body.importId),
+      ),
       CreateUploadSession: this.unary((claims, body) =>
         this.documents.createUploadSession(claims, body),
       ),
@@ -94,6 +109,15 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       ),
       DeleteDocument: this.unary((claims, body) =>
         this.documents.deleteDocument(claims, body.documentId),
+      ),
+      SyncDocumentsFromCanvas: this.unary((claims, body) =>
+        this.canvasDocuments.syncFromCanvas(claims, body.courseId),
+      ),
+      UpdateDocumentPlacement: this.unary((claims, body) =>
+        this.canvasDocuments.updatePlacement(claims, body.documentId, {
+          role: body.role,
+          chapterCode: body.chapterCode,
+        }),
       ),
       ListLessons: this.unary((claims, body) =>
         this.lessons.list(claims, body.courseId, body.status),
@@ -128,11 +152,26 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
         this.review.updateQuizItem(claims, body.quizId, body.data),
       ),
       SubmitQuiz: this.unary((claims, body) => this.quiz.submit(claims, body)),
+      GetCanvasQuizContext: this.unary((claims, body) => this.quizSets.context(claims, body)),
+      CreateQuizSet: this.unary((claims, body) => this.quizSets.create(claims, body)),
+      GetQuizSet: this.unary((claims, body) => this.quizSets.get(claims, body.quizSetId)),
+      GetQuizBuilderContext: this.unary((claims, body) => this.quizSets.builderContext(claims, body)),
+      StartQuizSet: this.unary((claims, body) => this.quizSets.start(claims, body)),
+      SubmitQuizSet: this.unary((claims, body) => this.quizSets.submit(claims, body)),
+      GetQuizSetResults: this.unary((claims, body) => this.quizSets.results(claims, body)),
       ListQuizAttempts: this.unary((claims, body) =>
         this.quiz.attempts(claims, body.lessonId),
       ),
       CreateContentGenerationRequest: this.unary((claims, body) =>
         this.contentGeneration.createRequest(claims, body),
+      ),
+      ListContentGenerationRequests: this.unary((claims, body) =>
+        this.contentGeneration.listRequests(
+          claims,
+          body.courseId,
+          body.limit,
+          body.type,
+        ),
       ),
     };
   }
@@ -152,7 +191,9 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         callback({
-          code: grpc.status.INTERNAL,
+          code: error instanceof HttpException
+            ? ({ 400: grpc.status.INVALID_ARGUMENT, 401: grpc.status.UNAUTHENTICATED, 403: grpc.status.PERMISSION_DENIED, 404: grpc.status.NOT_FOUND, 409: grpc.status.ALREADY_EXISTS }[error.getStatus()] ?? grpc.status.INTERNAL)
+            : grpc.status.INTERNAL,
           message,
         } as grpc.ServiceError);
       }

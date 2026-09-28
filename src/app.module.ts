@@ -16,6 +16,7 @@ import { CurriculumModule } from './curriculum/curriculum.module';
 import { QuizModule } from './quiz/quiz.module';
 import { ContentGenerationModule } from './content-generation/content-generation.module';
 import { GrpcModule } from './grpc/grpc.module';
+import { AgsModule } from './ags/ags.module';
 
 // Parse Redis URL for BullMQ connection
 const getRedisConnection = () => {
@@ -25,6 +26,8 @@ const getRedisConnection = () => {
     return {
       host: parsed.hostname || 'localhost',
       port: parsed.port ? parseInt(parsed.port, 10) : 6379,
+      username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
+      password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
     };
   } catch (err) {
     // Fallback if URL is invalid or in a different format
@@ -56,6 +59,7 @@ const getRedisConnection = () => {
     QuizModule,
     ContentGenerationModule,
     GrpcModule,
+    AgsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

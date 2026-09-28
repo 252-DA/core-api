@@ -11,7 +11,8 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue('outbox_relay') private readonly outboxRelayQueue: Queue,
-    @InjectQueue('document_enrichment') private readonly enrichmentQueue: Queue,
+    @InjectQueue('content_generation')
+    private readonly contentGenerationQueue: Queue,
   ) {}
 
   onModuleInit() {
@@ -69,7 +70,7 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
 
         const queue =
           event.event_type === 'CONTENT_GENERATION_REQUESTED'
-            ? this.enrichmentQueue
+            ? this.contentGenerationQueue
             : this.outboxRelayQueue;
 
         await queue.add(event.event_type, payload, {

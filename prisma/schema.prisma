@@ -7,183 +7,353 @@ datasource db {
 }
 
 model lms_user_mappings {
-  internal_user_id  String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  lms_type          String               @default("canvas") @db.VarChar(50)
-  lms_sub           String               @db.VarChar(255)
-  display_name      String               @db.VarChar(255)
-  role              String               @db.VarChar(50)
-  created_at        DateTime?            @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime?            @default(now()) @db.Timestamptz(6)
-  deleted_at        DateTime?            @db.Timestamptz(6)
+  internal_user_id   String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  lms_type           String               @default("canvas") @db.VarChar(50)
+  lms_sub            String               @db.VarChar(255)
+  display_name       String               @db.VarChar(255)
+  role               String               @db.VarChar(50)
+  created_at         DateTime?            @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime?            @default(now()) @db.Timestamptz(6)
+  deleted_at         DateTime?            @db.Timestamptz(6)
   course_memberships course_memberships[]
-  documents         documents[]
-  flashcard_reviews flashcard_reviews[]
-  quiz_attempts     quiz_attempts[]
-  chat_messages     chat_messages[]
-  learning_events   learning_events[]
-  review_audit_logs review_audit_logs[]
-  llm_usage_logs    llm_usage_logs[]
-  user_llm_quota    user_llm_quota?
+  documents          documents[]
+  flashcard_reviews  flashcard_reviews[]
+  quiz_attempts      quiz_attempts[]
+  chat_messages      chat_messages[]
+  learning_events    learning_events[]
+  review_audit_logs  review_audit_logs[]
+  llm_usage_logs     llm_usage_logs[]
+  quiz_set_sessions  quiz_set_sessions[]
+  user_llm_quota     user_llm_quota?
 
   @@unique([lms_type, lms_sub], map: "uq_lms_user")
   @@index([lms_type, lms_sub], map: "idx_lms_mapping")
 }
 
 model courses {
-  course_id        String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  lms_id           String?              @unique @db.VarChar(100)
-  code             String               @unique @db.VarChar(50)
-  name             String               @db.VarChar(255)
-  description      String?
-  created_at       DateTime?            @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime?            @default(now()) @db.Timestamptz(6)
-  deleted_at       DateTime?            @db.Timestamptz(6)
-  lms_course_ref   lms_course_ref[]
-  course_memberships course_memberships[]
-  chapters         chapters[]
-  assessments      assessments[]
-  documents        documents[]
-  chunks           chunks[]
-  videos           videos[]
-  video_segments   video_segments[]
-  lessons          lessons[]
-  lesson_cards     lesson_cards[]
-  quiz_items       quiz_items[]
-  quiz_attempts    quiz_attempts[]
-  chat_messages    chat_messages[]
-  learning_events  learning_events[]
-  llm_usage_logs   llm_usage_logs[]
-  content_generation_requests content_generation_requests[]
+  quiz_sets                    quiz_sets[]
+  course_id                    String                         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  lms_id                       String?                        @unique @db.VarChar(100)
+  code                         String                         @unique @db.VarChar(50)
+  name                         String                         @db.VarChar(255)
+  description                  String?
+  created_at                   DateTime?                      @default(now()) @db.Timestamptz(6)
+  updated_at                   DateTime?                      @default(now()) @db.Timestamptz(6)
+  deleted_at                   DateTime?                      @db.Timestamptz(6)
+  lms_course_ref               lms_course_ref[]
+  course_memberships           course_memberships[]
+  chapters                     chapters[]
+  assessments                  assessments[]
+  documents                    documents[]
+  chunks                       chunks[]
+  videos                       videos[]
+  video_segments               video_segments[]
+  lessons                      lessons[]
+  lesson_cards                 lesson_cards[]
+  quiz_items                   quiz_items[]
+  quiz_attempts                quiz_attempts[]
+  chat_messages                chat_messages[]
+  learning_events              learning_events[]
+  llm_usage_logs               llm_usage_logs[]
+  content_generation_requests  content_generation_requests[]
+  learning_outcomes            learning_outcomes[]
+  course_goals                 course_goals[]
+  course_sessions              course_sessions[]
+  curriculum_extraction_issues curriculum_extraction_issues[]
+  curriculum_imports           curriculum_imports[]
 
   @@index([lms_id], map: "idx_course_lms")
 }
 
 model lms_course_ref {
-  course_ref_id      String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  course_id          String               @db.Uuid
-  lms_context_id     String               @db.VarChar(255)
-  lms_custom_settings Json?               @default("{}")
-  synced_at          DateTime?            @default(now()) @db.Timestamptz(6)
-  deleted_at         DateTime?            @db.Timestamptz(6)
-  courses            courses              @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
-  lti_resource_links lti_resource_links[]
+  course_ref_id       String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id           String               @db.Uuid
+  lms_context_id      String               @db.VarChar(255)
+  lms_custom_settings Json?                @default("{}")
+  synced_at           DateTime?            @default(now()) @db.Timestamptz(6)
+  deleted_at          DateTime?            @db.Timestamptz(6)
+  courses             courses              @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  lti_resource_links  lti_resource_links[]
 
   @@unique([course_id, lms_context_id], map: "uq_course_context")
 }
 
 model lti_resource_links {
-  resource_link_id    String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  course_ref_id       String          @db.Uuid
-  lms_resource_link_id String         @db.VarChar(255)
-  target_kind         String          @db.VarChar(30)
-  target_id           String?         @db.Uuid
-  custom_claims       Json?           @default("{}")
-  created_at          DateTime?       @default(now()) @db.Timestamptz(6)
-  deleted_at          DateTime?       @db.Timestamptz(6)
-  lms_course_ref      lms_course_ref  @relation(fields: [course_ref_id], references: [course_ref_id], onDelete: Restrict, onUpdate: NoAction)
-  lti_line_items      lti_line_items?
-  quiz_attempts       quiz_attempts[]
+  resource_link_id     String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_ref_id        String          @db.Uuid
+  lms_resource_link_id String          @db.VarChar(255)
+  target_kind          String          @db.VarChar(30)
+  target_id            String?         @db.Uuid
+  custom_claims        Json?           @default("{}")
+  created_at           DateTime?       @default(now()) @db.Timestamptz(6)
+  deleted_at           DateTime?       @db.Timestamptz(6)
+  lms_course_ref       lms_course_ref  @relation(fields: [course_ref_id], references: [course_ref_id], onDelete: Restrict, onUpdate: NoAction)
+  lti_line_items       lti_line_items?
+  quiz_attempts        quiz_attempts[]
+  quiz_set_sessions    quiz_set_sessions[]
 
   @@unique([course_ref_id, lms_resource_link_id], map: "uq_resource_link")
 }
 
 model lti_line_items {
-  line_item_id      String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  resource_link_id  String             @unique(map: "uq_line_item") @db.Uuid
-  lms_line_item_url String             @db.VarChar(512)
-  score_maximum     Decimal            @default(100.00) @db.Decimal(7, 2)
-  label             String?            @db.VarChar(255)
-  created_at        DateTime?          @default(now()) @db.Timestamptz(6)
-  deleted_at        DateTime?          @db.Timestamptz(6)
+  line_item_id       String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  resource_link_id   String             @unique(map: "uq_line_item") @db.Uuid
+  lms_line_item_url  String             @db.VarChar(512)
+  score_maximum      Decimal            @default(100.00) @db.Decimal(7, 2)
+  label              String?            @db.VarChar(255)
+  created_at         DateTime?          @default(now()) @db.Timestamptz(6)
+  deleted_at         DateTime?          @db.Timestamptz(6)
   lti_resource_links lti_resource_links @relation(fields: [resource_link_id], references: [resource_link_id], onDelete: Restrict, onUpdate: NoAction)
 }
 
 model course_memberships {
-  user_id      String            @db.Uuid
-  course_id    String            @db.Uuid
-  role         String            @db.VarChar(30)
-  last_seen_at DateTime?         @default(now()) @db.Timestamptz(6)
+  user_id           String            @db.Uuid
+  course_id         String            @db.Uuid
+  role              String            @db.VarChar(30)
+  last_seen_at      DateTime?         @default(now()) @db.Timestamptz(6)
   lms_user_mappings lms_user_mappings @relation(fields: [user_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
-  courses      courses           @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  courses           courses           @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
 
   @@id([user_id, course_id, role])
 }
 
 model chapters {
-  chapter_id        String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  course_id         String              @db.Uuid
-  title             String              @db.VarChar(255)
-  sort_order        Int
-  created_at        DateTime?           @default(now()) @db.Timestamptz(6)
-  deleted_at        DateTime?           @db.Timestamptz(6)
-  courses           courses             @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
-  learning_outcomes learning_outcomes[]
+  quiz_sets       quiz_sets[]
+  chapter_id      String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id       String            @db.Uuid
+  code            String            @db.VarChar(20)
+  title           String            @db.VarChar(255)
+  title_en        String?           @db.VarChar(255)
+  sort_order      Int
+  /// Mục con trong bảng mục 6 của đề cương, dùng để khớp tài liệu với chương.
+  topics          String?
+  source_section  String?           @db.VarChar(20)
+  source_page     Int?
+  created_at      DateTime?         @default(now()) @db.Timestamptz(6)
+  deleted_at      DateTime?         @db.Timestamptz(6)
+  courses         courses           @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  chapter_los     chapter_los[]
+  course_sessions course_sessions[]
+  lo_assessments  lo_assessments[]
 
+  @@unique([course_id, code], map: "uq_chapters_course_code")
   @@index([course_id, sort_order], map: "idx_chapters_course")
 }
 
+/// Chuẩn đầu ra (mục 4.2 của DCMH).
+///
+/// LO thuộc về HỌC PHẦN, không thuộc một chương. Một LO được dạy qua nhiều
+/// chương và một chương phục vụ nhiều LO — quan hệ đó nằm ở `chapter_los`.
+/// Mã LO (`L.O.2.2`) KHÔNG mã hoá số chương; `parent_code` giữ cây LO.
 model learning_outcomes {
   lo_id             String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  chapter_id        String              @db.Uuid
+  course_id         String              @db.Uuid
   code              String              @db.VarChar(50)
+  parent_code       String?             @db.VarChar(50)
   statement_vi      String
   statement_en      String?
-  bloom_level       Int
-  cdio_level        String              @db.VarChar(5)
+  /// Tài liệu không ghi Bloom/CDIO ⇒ nullable, và `*_provenance` nói rõ giá trị
+  /// đến từ đâu: extracted | inferred | confirmed.
+  bloom_level       Int?
+  bloom_provenance  String              @default("inferred") @db.VarChar(20)
+  cdio_level        String?             @db.VarChar(5)
+  cdio_provenance   String              @default("inferred") @db.VarChar(20)
+  source_section    String?             @db.VarChar(20)
+  source_page       Int?
   academic_year     String?             @db.VarChar(10)
   version           Int                 @default(1)
   is_current        Boolean             @default(true)
   created_at        DateTime?           @default(now()) @db.Timestamptz(6)
   deleted_at        DateTime?           @db.Timestamptz(6)
-  chapters          chapters            @relation(fields: [chapter_id], references: [chapter_id], onDelete: Restrict, onUpdate: NoAction)
+  courses           courses             @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  chapter_los       chapter_los[]
   lo_assessments    lo_assessments[]
   chunk_lo_mappings chunk_lo_mappings[]
   lessons           lessons[]
   lesson_cards      lesson_cards[]
   quiz_items        quiz_items[]
 
-  @@unique([chapter_id, code, academic_year, version], map: "uq_lo_code_versioned")
-  @@index([chapter_id], map: "idx_lo_chapter")
-  @@index([chapter_id, code], map: "idx_lo_current")
+  @@unique([course_id, code, academic_year, version], map: "uq_lo_code_versioned")
+  @@index([course_id], map: "idx_lo_course")
+  @@index([course_id, code], map: "idx_lo_current")
+  @@index([course_id, parent_code], map: "idx_lo_parent")
 }
 
+/// Chương ↔ LO, nhiều–nhiều, như bảng mục 6 của đề cương ghi.
+model chapter_los {
+  chapter_id        String            @db.Uuid
+  lo_id             String            @db.Uuid
+  provenance        String            @default("extracted") @db.VarChar(20)
+  source_section    String?           @db.VarChar(20)
+  source_page       Int?
+  created_at        DateTime?         @default(now()) @db.Timestamptz(6)
+  chapters          chapters          @relation(fields: [chapter_id], references: [chapter_id], onDelete: Cascade, onUpdate: NoAction)
+  learning_outcomes learning_outcomes @relation(fields: [lo_id], references: [lo_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([chapter_id, lo_id])
+  @@index([lo_id], map: "idx_chapter_los_lo")
+}
+
+/// Mục tiêu học phần (mục 4.1). Dùng chung ký hiệu `L.O.n` với mục 4.2 nhưng
+/// nội dung khác, nên lưu tách khỏi `learning_outcomes`.
+model course_goals {
+  goal_id        String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id      String    @db.Uuid
+  code           String    @db.VarChar(50)
+  statement_vi   String
+  statement_en   String?
+  source_section String?   @db.VarChar(20)
+  source_page    Int?
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  courses        courses   @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([course_id, code], map: "uq_course_goals_code")
+}
+
+/// Một hàng của bảng mục 6 — một buổi học. Buổi và chương là hai trục khác
+/// nhau: buổi ôn tập / báo cáo không gắn chương nào, nên `chapter_id` nullable.
+model course_sessions {
+  session_id     String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id      String    @db.Uuid
+  order_index    Int
+  session_no     Int?
+  chapter_id     String?   @db.Uuid
+  title_vi       String    @db.VarChar(500)
+  title_en       String?   @db.VarChar(500)
+  source_section String?   @db.VarChar(20)
+  source_page    Int?
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  courses        courses   @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  chapters       chapters? @relation(fields: [chapter_id], references: [chapter_id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([course_id, order_index], map: "uq_course_sessions_order")
+}
+
+/// Chỗ chưa chắc chắn khi trích đề cương — đầu vào của màn hình kiểm tra.
+/// Thay cho một điểm confidence trung bình duy nhất.
+model curriculum_extraction_issues {
+  issue_id       String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id      String    @db.Uuid
+  document_id    String?   @db.Uuid
+  code           String    @db.VarChar(60)
+  severity       String    @db.VarChar(10)
+  message        String
+  source_section String?   @db.VarChar(20)
+  source_page    Int?
+  source_locator String?   @db.VarChar(120)
+  resolved_at    DateTime? @db.Timestamptz(6)
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  courses        courses   @relation(fields: [course_id], references: [course_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([course_id, severity], map: "idx_curriculum_issues_course")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model curriculum_imports {
+  import_id    String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id    String    @db.Uuid
+  source       String    @db.VarChar(20)
+  source_ref   String?   @db.VarChar(255)
+  file_name    String    @db.VarChar(255)
+  storage_key  String    @db.VarChar(512)
+  mime_type    String?   @db.VarChar(100)
+  checksum     String?   @db.VarChar(64)
+  size_bytes   Int?
+  status       String    @default("QUEUED") @db.VarChar(20)
+  preview      Json?
+  error        String?
+  requested_by String?   @db.Uuid
+  applied_by   String?   @db.Uuid
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @default(now()) @db.Timestamptz(6)
+  applied_at   DateTime? @db.Timestamptz(6)
+  courses      courses   @relation(fields: [course_id], references: [course_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([course_id, created_at(sort: Desc)], map: "idx_curriculum_imports_course")
+}
+
+/// Hoạt động đánh giá (mục 5.2). Có cây cha–con giống LO: `A.O.1.1` là con của
+/// `A.O.1`, nên `code` phải giữ nguyên nhiều cấp.
 model assessments {
-  assessment_id  String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  course_id      String           @db.Uuid
-  title          String           @db.VarChar(255)
-  max_points     Decimal          @default(100.00) @db.Decimal(5, 2)
-  sort_order     Int
-  type           String           @db.VarChar(50)
-  created_at     DateTime?        @default(now()) @db.Timestamptz(6)
-  deleted_at     DateTime?        @db.Timestamptz(6)
-  courses        courses          @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
-  lo_assessments lo_assessments[]
+  assessment_id     String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id         String           @db.Uuid
+  code              String           @db.VarChar(50)
+  parent_code       String?          @db.VarChar(50)
+  title             String           @db.VarChar(255)
+  title_en          String?          @db.VarChar(255)
+  activity_type     String?          @db.VarChar(20)
+  max_points        Decimal          @default(100.00) @db.Decimal(5, 2)
+  /// Tỷ trọng ở mục 1.1 là của hình thức học tập, không phải của từng cạnh
+  /// LO–AO. Để null trừ khi khớp chắc chắn; `weight_provenance` nói rõ nguồn.
+  weight            Decimal?         @db.Decimal(5, 4)
+  weight_provenance String           @default("inferred") @db.VarChar(20)
+  sort_order        Int
+  type              String           @db.VarChar(50)
+  source_section    String?          @db.VarChar(20)
+  source_page       Int?
+  created_at        DateTime?        @default(now()) @db.Timestamptz(6)
+  deleted_at        DateTime?        @db.Timestamptz(6)
+  courses           courses          @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  lo_assessments    lo_assessments[]
+
+  @@unique([course_id, code], map: "uq_assessments_course_code")
+  @@index([course_id, parent_code], map: "idx_assessments_parent")
 }
 
+/// LO ↔ hoạt động đánh giá.
+///
+/// `scope='course'` là phát biểu chung ở mục 5.3. `scope='session'` là cạnh mà
+/// một hàng cụ thể của mục 6 khẳng định — ví dụ Chương 10 chỉ đánh giá `L.O.3`
+/// qua `A.O.1`, trong khi mục 5.3 gắn `L.O.3` với cả `A.O.1` và `A.O.2`. Làm
+/// phẳng thành một cạnh duy nhất sẽ mất khác biệt đó.
 model lo_assessments {
   lo_id             String            @db.Uuid
   assessment_id     String            @db.Uuid
-  weight            Decimal           @default(1.00) @db.Decimal(3, 2)
+  session_order     Int               @default(0)
+  scope             String            @default("course") @db.VarChar(20)
+  chapter_id        String?           @db.Uuid
+  weight            Decimal?          @db.Decimal(5, 4)
+  weight_provenance String            @default("inferred") @db.VarChar(20)
+  provenance        String            @default("extracted") @db.VarChar(20)
+  source_section    String?           @db.VarChar(20)
+  source_page       Int?
   learning_outcomes learning_outcomes @relation(fields: [lo_id], references: [lo_id], onDelete: Restrict, onUpdate: NoAction)
   assessments       assessments       @relation(fields: [assessment_id], references: [assessment_id], onDelete: Restrict, onUpdate: NoAction)
+  chapters          chapters?         @relation(fields: [chapter_id], references: [chapter_id], onDelete: SetNull, onUpdate: NoAction)
 
-  @@id([lo_id, assessment_id])
+  @@id([lo_id, assessment_id, session_order])
+  @@index([assessment_id], map: "idx_lo_assessments_ao")
 }
 
 model documents {
-  document_id String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  course_id   String    @db.Uuid
-  title       String    @db.VarChar(255)
-  file_path   String    @db.VarChar(512)
-  mime_type   String?   @db.VarChar(100)
-  checksum    String?   @db.VarChar(64)
-  status      String    @default("PENDING") @db.VarChar(50)
-  created_by  String?   @db.Uuid
-  created_at  DateTime? @default(now()) @db.Timestamptz(6)
-  deleted_at  DateTime? @db.Timestamptz(6)
-  courses     courses   @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  document_id       String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id         String             @db.Uuid
+  title             String             @db.VarChar(255)
+  file_path         String             @db.VarChar(512)
+  mime_type         String?            @db.VarChar(100)
+  checksum          String?            @db.VarChar(64)
+  status            String             @default("PENDING") @db.VarChar(50)
+  created_by        String?            @db.Uuid
+  created_at        DateTime?          @default(now()) @db.Timestamptz(6)
+  deleted_at        DateTime?          @db.Timestamptz(6)
+  /// upload | canvas
+  source             String            @default("upload") @db.VarChar(20)
+  lms_file_id        String?           @db.VarChar(64)
+  lms_module         String?           @db.VarChar(255)
+  lms_published      Boolean?
+  lms_updated_at     DateTime?         @db.Timestamptz(6)
+  /// lecture | reference | exercise
+  role               String            @default("lecture") @db.VarChar(20)
+  /// inferred | confirmed
+  role_provenance    String            @default("inferred") @db.VarChar(20)
+  chapter_code       String?           @db.VarChar(20)
+  /// module | file_name | content | confirmed
+  chapter_provenance String?           @db.VarChar(20)
+  chapter_confidence Decimal?          @db.Decimal(3, 2)
+  chapter_reason     String?           @db.VarChar(255)
+  courses           courses            @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
   lms_user_mappings lms_user_mappings? @relation(fields: [created_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
-  chunks      chunks[]
+  chunks            chunks[]
 
   @@index([course_id, status], map: "idx_documents_course_status")
 }
@@ -212,6 +382,12 @@ model chunk_lo_mappings {
   chunk_id          String            @db.Uuid
   lo_id             String            @db.Uuid
   confidence        Decimal           @default(1.00) @db.Decimal(3, 2)
+  /// Tín hiệu sinh ra cạnh: chapter | heading | embedding | llm | manual.
+  source            String            @default("heading") @db.VarChar(30)
+  /// extracted | inferred | confirmed — để phân biệt phỏng đoán của hệ thống
+  /// với liên kết giảng viên đã xác nhận.
+  provenance        String            @default("inferred") @db.VarChar(20)
+  created_at        DateTime?         @default(now()) @db.Timestamptz(6)
   chunks            chunks            @relation(fields: [chunk_id], references: [chunk_id], onDelete: Restrict, onUpdate: NoAction)
   learning_outcomes learning_outcomes @relation(fields: [lo_id], references: [lo_id], onDelete: Restrict, onUpdate: NoAction)
 
@@ -235,50 +411,50 @@ model concepts {
 }
 
 model chunk_concepts {
-  chunk_id   String   @db.Uuid
+  chunk_id   String    @db.Uuid
   concept_id String
-  confidence Decimal  @default(1.00) @db.Decimal(3, 2)
-  source     String   @default("heading")
+  confidence Decimal   @default(1.00) @db.Decimal(3, 2)
+  source     String    @default("heading")
   created_at DateTime? @default(now()) @db.Timestamptz(6)
   updated_at DateTime? @default(now()) @db.Timestamptz(6)
-  chunks     chunks   @relation(fields: [chunk_id], references: [chunk_id], onDelete: Restrict, onUpdate: NoAction)
-  concepts   concepts @relation(fields: [concept_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  chunks     chunks    @relation(fields: [chunk_id], references: [chunk_id], onDelete: Restrict, onUpdate: NoAction)
+  concepts   concepts  @relation(fields: [concept_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@id([chunk_id, concept_id])
   @@index([concept_id], map: "idx_chunk_concepts_concept_id")
 }
 
 model videos {
-  video_id     String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  course_id    String           @db.Uuid
-  title        String           @db.VarChar(255)
-  file_path    String           @db.VarChar(512)
-  is_youtube   Boolean?         @default(false)
-  external_url String?          @db.VarChar(512)
-  language     String?          @default("vi") @db.VarChar(10)
-  status       String           @default("UPLOADING") @db.VarChar(50)
-  created_at   DateTime?        @default(now()) @db.Timestamptz(6)
-  deleted_at   DateTime?        @db.Timestamptz(6)
-  courses      courses          @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  video_id       String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id      String           @db.Uuid
+  title          String           @db.VarChar(255)
+  file_path      String           @db.VarChar(512)
+  is_youtube     Boolean?         @default(false)
+  external_url   String?          @db.VarChar(512)
+  language       String?          @default("vi") @db.VarChar(10)
+  status         String           @default("UPLOADING") @db.VarChar(50)
+  created_at     DateTime?        @default(now()) @db.Timestamptz(6)
+  deleted_at     DateTime?        @db.Timestamptz(6)
+  courses        courses          @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
   video_segments video_segments[]
 
   @@index([course_id], map: "idx_video_course")
 }
 
 model video_segments {
-  segment_id      String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  video_id        String             @db.Uuid
-  course_id       String             @db.Uuid
-  start_ms        Int
-  end_ms          Int
-  clip_url        String?            @db.VarChar(512)
-  thumbnail_url   String?            @db.VarChar(512)
-  title           String?            @db.VarChar(255)
-  created_at      DateTime?          @default(now()) @db.Timestamptz(6)
-  deleted_at      DateTime?          @db.Timestamptz(6)
-  videos          videos             @relation(fields: [video_id], references: [video_id], onDelete: Restrict, onUpdate: NoAction)
-  courses         courses            @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
-  transcript_segments transcript_segments[]
+  segment_id             String                   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  video_id               String                   @db.Uuid
+  course_id              String                   @db.Uuid
+  start_ms               Int
+  end_ms                 Int
+  clip_url               String?                  @db.VarChar(512)
+  thumbnail_url          String?                  @db.VarChar(512)
+  title                  String?                  @db.VarChar(255)
+  created_at             DateTime?                @default(now()) @db.Timestamptz(6)
+  deleted_at             DateTime?                @db.Timestamptz(6)
+  videos                 videos                   @relation(fields: [video_id], references: [video_id], onDelete: Restrict, onUpdate: NoAction)
+  courses                courses                  @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  transcript_segments    transcript_segments[]
   card_video_attachments card_video_attachments[]
 
   @@index([video_id], map: "idx_segments_video")
@@ -286,52 +462,52 @@ model video_segments {
 }
 
 model transcript_segments {
-  transcript_id String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  segment_id    String         @db.Uuid
-  text          String
-  start_ms      Int
-  end_ms        Int
-  language      String?        @default("vi") @db.VarChar(10)
-  deleted_at    DateTime?      @db.Timestamptz(6)
+  transcript_id  String         @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  segment_id     String         @db.Uuid
+  text           String
+  start_ms       Int
+  end_ms         Int
+  language       String?        @default("vi") @db.VarChar(10)
+  deleted_at     DateTime?      @db.Timestamptz(6)
   video_segments video_segments @relation(fields: [segment_id], references: [segment_id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([segment_id], map: "idx_transcript_segment")
 }
 
 model lessons {
-  lesson_id    String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  course_id    String          @db.Uuid
-  lo_id        String          @db.Uuid
-  title        String          @db.VarChar(255)
-  status       String          @default("DRAFT") @db.VarChar(50)
-  published_at DateTime?       @db.Timestamptz(6)
-  created_at   DateTime?       @default(now()) @db.Timestamptz(6)
-  updated_at   DateTime?       @default(now()) @db.Timestamptz(6)
-  deleted_at   DateTime?       @db.Timestamptz(6)
-  courses      courses         @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  lesson_id         String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id         String            @db.Uuid
+  lo_id             String            @db.Uuid
+  title             String            @db.VarChar(255)
+  status            String            @default("DRAFT") @db.VarChar(50)
+  published_at      DateTime?         @db.Timestamptz(6)
+  created_at        DateTime?         @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?         @default(now()) @db.Timestamptz(6)
+  deleted_at        DateTime?         @db.Timestamptz(6)
+  courses           courses           @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
   learning_outcomes learning_outcomes @relation(fields: [lo_id], references: [lo_id], onDelete: Restrict, onUpdate: NoAction)
-  lesson_cards lesson_cards[]
-  quiz_items   quiz_items[]
+  lesson_cards      lesson_cards[]
+  quiz_items        quiz_items[]
 
   @@unique([course_id, lo_id], map: "uq_lesson_per_lo")
 }
 
 model lesson_cards {
-  card_id          String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  lesson_id        String          @db.Uuid
-  course_id        String          @db.Uuid
-  lo_id            String?         @db.Uuid
-  title            String          @db.VarChar(255)
-  content          Json
-  source_chunk_ids String[]        @db.Uuid
-  status           String          @default("GENERATED_DRAFT") @db.VarChar(50)
-  published_at     DateTime?       @db.Timestamptz(6)
-  created_at       DateTime?       @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime?       @default(now()) @db.Timestamptz(6)
-  deleted_at       DateTime?       @db.Timestamptz(6)
-  lessons          lessons         @relation(fields: [lesson_id], references: [lesson_id], onDelete: Restrict, onUpdate: NoAction)
-  courses          courses         @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
-  learning_outcomes learning_outcomes? @relation(fields: [lo_id], references: [lo_id], onDelete: Restrict, onUpdate: NoAction)
+  card_id                String                   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  lesson_id              String                   @db.Uuid
+  course_id              String                   @db.Uuid
+  lo_id                  String?                  @db.Uuid
+  title                  String                   @db.VarChar(255)
+  content                Json
+  source_chunk_ids       String[]                 @db.Uuid
+  status                 String                   @default("GENERATED_DRAFT") @db.VarChar(50)
+  published_at           DateTime?                @db.Timestamptz(6)
+  created_at             DateTime?                @default(now()) @db.Timestamptz(6)
+  updated_at             DateTime?                @default(now()) @db.Timestamptz(6)
+  deleted_at             DateTime?                @db.Timestamptz(6)
+  lessons                lessons                  @relation(fields: [lesson_id], references: [lesson_id], onDelete: Restrict, onUpdate: NoAction)
+  courses                courses                  @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  learning_outcomes      learning_outcomes?       @relation(fields: [lo_id], references: [lo_id], onDelete: Restrict, onUpdate: NoAction)
   card_video_attachments card_video_attachments[]
 
   @@index([lo_id, status], map: "idx_lesson_cards_lo_published")
@@ -339,151 +515,201 @@ model lesson_cards {
 }
 
 model card_video_attachments {
-  card_id    String         @db.Uuid
-  segment_id String         @db.Uuid
-  sort_order Int            @default(1)
-  lesson_cards lesson_cards @relation(fields: [card_id], references: [card_id], onDelete: Restrict, onUpdate: NoAction)
+  card_id        String         @db.Uuid
+  segment_id     String         @db.Uuid
+  sort_order     Int            @default(1)
+  lesson_cards   lesson_cards   @relation(fields: [card_id], references: [card_id], onDelete: Restrict, onUpdate: NoAction)
   video_segments video_segments @relation(fields: [segment_id], references: [segment_id], onDelete: Restrict, onUpdate: NoAction)
 
   @@id([card_id, segment_id])
 }
 
+/// A published quiz is a snapshot: reviewing a source question later cannot
+/// silently change an assignment that students already started in Canvas.
+model quiz_sets {
+  quiz_set_id        String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id          String              @db.Uuid
+  /// Chương chính khi đề thuộc đúng một chương; đề nhiều chương để trống.
+  chapter_id         String?             @db.Uuid
+  chapter_ids        String[]            @default([]) @db.Uuid
+  /// Ma trận đề LO × Bloom và tài liệu nguồn (đề soạn từ trang Soạn đề).
+  blueprint          Json?
+  title              String              @db.VarChar(255)
+  items              Json
+  created_by         String              @db.Uuid
+  created_at         DateTime            @default(now()) @db.Timestamptz(6)
+  deleted_at         DateTime?           @db.Timestamptz(6)
+  mode               String              @default("practice") @db.VarChar(20)
+  points_possible    Decimal             @default(100) @db.Decimal(7, 2)
+  max_attempts       Int?
+  time_limit_minutes Int?
+  shuffle            Boolean             @default(false)
+  available_from     DateTime?           @db.Timestamptz(6)
+  available_until    DateTime?           @db.Timestamptz(6)
+  due_at             DateTime?           @db.Timestamptz(6)
+  courses            courses             @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  chapters           chapters?           @relation(fields: [chapter_id], references: [chapter_id], onDelete: Restrict, onUpdate: NoAction)
+  quiz_set_sessions  quiz_set_sessions[]
+
+  @@index([course_id, chapter_id])
+}
+
+/// Một lượt làm bài kiểm tra (mode = exam): thứ tự câu đã xáo và mốc hết giờ.
+model quiz_set_sessions {
+  session_id         String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  quiz_set_id        String             @db.Uuid
+  user_id            String             @db.Uuid
+  resource_link_id   String             @db.Uuid
+  item_order         Json
+  started_at         DateTime           @default(now()) @db.Timestamptz(6)
+  expires_at         DateTime?          @db.Timestamptz(6)
+  ended_at           DateTime?          @db.Timestamptz(6)
+  submission_id      String?            @db.Uuid
+  quiz_sets          quiz_sets          @relation(fields: [quiz_set_id], references: [quiz_set_id], onDelete: Restrict, onUpdate: NoAction)
+  lms_user_mappings  lms_user_mappings  @relation(fields: [user_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+  lti_resource_links lti_resource_links @relation(fields: [resource_link_id], references: [resource_link_id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([quiz_set_id, user_id])
+}
+
 model quiz_items {
-  quiz_id          String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  lesson_id        String          @db.Uuid
-  course_id        String          @db.Uuid
-  lo_id            String?         @db.Uuid
-  type             String          @db.VarChar(30)
-  question         String
-  options          Json?
-  correct_answer   Json
-  explanation      String?
-  bloom_level      Int?
-  source_chunk_ids String[]        @db.Uuid
-  status           String          @default("GENERATED_DRAFT") @db.VarChar(50)
-  published_at     DateTime?       @db.Timestamptz(6)
-  created_at       DateTime?       @default(now()) @db.Timestamptz(6)
-  updated_at       DateTime?       @default(now()) @db.Timestamptz(6)
-  deleted_at       DateTime?       @db.Timestamptz(6)
-  lessons          lessons         @relation(fields: [lesson_id], references: [lesson_id], onDelete: Restrict, onUpdate: NoAction)
-  courses          courses         @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  quiz_id           String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  lesson_id         String             @db.Uuid
+  course_id         String             @db.Uuid
+  lo_id             String?            @db.Uuid
+  type              String             @db.VarChar(30)
+  question          String
+  options           Json?
+  correct_answer    Json
+  explanation       String?
+  bloom_level       Int?
+  source_chunk_ids  String[]           @db.Uuid
+  status            String             @default("GENERATED_DRAFT") @db.VarChar(50)
+  published_at      DateTime?          @db.Timestamptz(6)
+  created_at        DateTime?          @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?          @default(now()) @db.Timestamptz(6)
+  deleted_at        DateTime?          @db.Timestamptz(6)
+  lessons           lessons            @relation(fields: [lesson_id], references: [lesson_id], onDelete: Restrict, onUpdate: NoAction)
+  courses           courses            @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
   learning_outcomes learning_outcomes? @relation(fields: [lo_id], references: [lo_id], onDelete: Restrict, onUpdate: NoAction)
-  quiz_attempts    quiz_attempts[]
+  quiz_attempts     quiz_attempts[]
 
   @@index([lo_id, status], map: "idx_quiz_items_lo_published")
   @@index([status, created_at], map: "idx_quiz_items_review")
 }
 
 model flashcard_reviews {
-  review_id    String           @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  user_id      String           @db.Uuid
-  card_id      String           @db.Uuid
-  state        String           @default("NEW") @db.VarChar(20)
-  last_seen_at DateTime?        @db.Timestamptz(6)
-  next_due_at  DateTime?        @db.Timestamptz(6)
-  review_count Int              @default(0)
-  updated_at   DateTime?        @default(now()) @db.Timestamptz(6)
+  review_id         String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  user_id           String            @db.Uuid
+  card_id           String            @db.Uuid
+  state             String            @default("NEW") @db.VarChar(20)
+  last_seen_at      DateTime?         @db.Timestamptz(6)
+  next_due_at       DateTime?         @db.Timestamptz(6)
+  review_count      Int               @default(0)
+  updated_at        DateTime?         @default(now()) @db.Timestamptz(6)
   lms_user_mappings lms_user_mappings @relation(fields: [user_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([user_id, card_id], map: "uq_user_card")
 }
 
 model quiz_attempts {
-  attempt_id       String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  user_id          String              @db.Uuid
-  quiz_id          String              @db.Uuid
-  course_id        String              @db.Uuid
-  resource_link_id String?             @db.Uuid
-  score            Decimal             @db.Decimal(5, 2)
-  chosen_answer    Json
-  is_correct       Boolean
-  response_time_ms Int?
-  feedback         String?
-  ags_status       String              @default("PENDING") @db.VarChar(20)
-  ags_posted_at    DateTime?           @db.Timestamptz(6)
-  attempted_at     DateTime?           @default(now()) @db.Timestamptz(6)
-  deleted_at       DateTime?           @db.Timestamptz(6)
-  lms_user_mappings lms_user_mappings  @relation(fields: [user_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
-  quiz_items       quiz_items          @relation(fields: [quiz_id], references: [quiz_id], onDelete: Restrict, onUpdate: NoAction)
-  courses          courses             @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  submission_id      String?             @db.Uuid
+  attempt_id         String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  user_id            String              @db.Uuid
+  quiz_id            String              @db.Uuid
+  course_id          String              @db.Uuid
+  resource_link_id   String?             @db.Uuid
+  score              Decimal             @db.Decimal(5, 2)
+  chosen_answer      Json
+  is_correct         Boolean
+  response_time_ms   Int?
+  feedback           String?
+  ags_status         String              @default("PENDING") @db.VarChar(20)
+  ags_posted_at      DateTime?           @db.Timestamptz(6)
+  attempted_at       DateTime?           @default(now()) @db.Timestamptz(6)
+  deleted_at         DateTime?           @db.Timestamptz(6)
+  lms_user_mappings  lms_user_mappings   @relation(fields: [user_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+  quiz_items         quiz_items          @relation(fields: [quiz_id], references: [quiz_id], onDelete: Restrict, onUpdate: NoAction)
+  courses            courses             @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
   lti_resource_links lti_resource_links? @relation(fields: [resource_link_id], references: [resource_link_id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([user_id, quiz_id], map: "idx_quiz_attempts_user_lo")
+  @@index([submission_id])
 }
 
 model chat_messages {
-  message_id String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  session_id String    @db.Uuid
-  user_id    String    @db.Uuid
-  course_id  String?   @db.Uuid
-  role       String    @db.VarChar(20)
-  content    String
-  metadata   Json?     @default("{}")
-  sent_at    DateTime? @default(now()) @db.Timestamptz(6)
-  deleted_at DateTime? @db.Timestamptz(6)
+  message_id        String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  session_id        String            @db.Uuid
+  user_id           String            @db.Uuid
+  course_id         String?           @db.Uuid
+  role              String            @db.VarChar(20)
+  content           String
+  metadata          Json?             @default("{}")
+  sent_at           DateTime?         @default(now()) @db.Timestamptz(6)
+  deleted_at        DateTime?         @db.Timestamptz(6)
   lms_user_mappings lms_user_mappings @relation(fields: [user_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
-  courses    courses?  @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  courses           courses?          @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([session_id, sent_at], map: "idx_chat_session")
   @@index([user_id, course_id, sent_at], map: "idx_chat_user_course")
 }
 
 model learning_events {
-  event_id           String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  user_id            String    @db.Uuid
-  course_id          String    @db.Uuid
-  event_type         String    @db.VarChar(100)
-  target_entity_type String    @db.VarChar(50)
-  target_entity_id   String    @db.Uuid
+  event_id           String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  user_id            String            @db.Uuid
+  course_id          String            @db.Uuid
+  event_type         String            @db.VarChar(100)
+  target_entity_type String            @db.VarChar(50)
+  target_entity_id   String            @db.Uuid
   duration_sec       Int?
-  metadata           Json?     @default("{}")
-  created_at         DateTime? @default(now()) @db.Timestamptz(6)
+  metadata           Json?             @default("{}")
+  created_at         DateTime?         @default(now()) @db.Timestamptz(6)
   lms_user_mappings  lms_user_mappings @relation(fields: [user_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
-  courses            courses   @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  courses            courses           @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([user_id, course_id, event_type], map: "idx_event_user_course")
   @@index([target_entity_type, target_entity_id], map: "idx_event_target")
 }
 
 model review_audit_logs {
-  log_id       String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  action       String    @db.VarChar(100)
-  entity_type  String    @db.VarChar(50)
-  entity_id    String    @db.Uuid
-  performed_by String    @db.Uuid
-  raw_changes  Json
-  logged_at    DateTime? @default(now()) @db.Timestamptz(6)
+  log_id            String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  action            String            @db.VarChar(100)
+  entity_type       String            @db.VarChar(50)
+  entity_id         String            @db.Uuid
+  performed_by      String            @db.Uuid
+  raw_changes       Json
+  logged_at         DateTime?         @default(now()) @db.Timestamptz(6)
   lms_user_mappings lms_user_mappings @relation(fields: [performed_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
 }
 
 model llm_usage_logs {
-  usage_id          String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  user_id           String?   @db.Uuid
-  course_id         String?   @db.Uuid
-  provider          String    @db.VarChar(50)
-  model             String    @db.VarChar(100)
-  use_case          String    @db.VarChar(50)
-  prompt_tokens     Int       @default(0)
-  completion_tokens Int       @default(0)
-  total_tokens      Int       @default(dbgenerated("(prompt_tokens + completion_tokens)"))
-  cost_usd          Decimal   @default(0) @db.Decimal(10, 6)
+  usage_id          String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  user_id           String?            @db.Uuid
+  course_id         String?            @db.Uuid
+  provider          String             @db.VarChar(50)
+  model             String             @db.VarChar(100)
+  use_case          String             @db.VarChar(50)
+  prompt_tokens     Int                @default(0)
+  completion_tokens Int                @default(0)
+  total_tokens      Int                @default(dbgenerated("(prompt_tokens + completion_tokens)"))
+  cost_usd          Decimal            @default(0) @db.Decimal(10, 6)
   latency_ms        Int?
-  status            String    @db.VarChar(20)
-  trace_id          String?   @db.VarChar(64)
-  called_at         DateTime? @default(now()) @db.Timestamptz(6)
+  status            String             @db.VarChar(20)
+  trace_id          String?            @db.VarChar(64)
+  called_at         DateTime?          @default(now()) @db.Timestamptz(6)
   lms_user_mappings lms_user_mappings? @relation(fields: [user_id], references: [internal_user_id], onDelete: SetNull, onUpdate: NoAction)
-  courses           courses?  @relation(fields: [course_id], references: [course_id], onDelete: SetNull, onUpdate: NoAction)
+  courses           courses?           @relation(fields: [course_id], references: [course_id], onDelete: SetNull, onUpdate: NoAction)
 }
 
 model user_llm_quota {
-  user_id             String    @id @db.Uuid
-  daily_tokens_used   Int       @default(0)
-  daily_limit         Int       @default(100000)
-  monthly_tokens_used Int       @default(0)
-  monthly_limit       Int       @default(2000000)
-  daily_reset_at      DateTime  @default(now()) @db.Date
-  monthly_reset_at    DateTime  @default(dbgenerated("(date_trunc('month'::text, CURRENT_DATE))::date")) @db.Date
-  updated_at          DateTime? @default(now()) @db.Timestamptz(6)
+  user_id             String            @id @db.Uuid
+  daily_tokens_used   Int               @default(0)
+  daily_limit         Int               @default(100000)
+  monthly_tokens_used Int               @default(0)
+  monthly_limit       Int               @default(2000000)
+  daily_reset_at      DateTime          @default(now()) @db.Date
+  monthly_reset_at    DateTime          @default(dbgenerated("(date_trunc('month'::text, CURRENT_DATE))::date")) @db.Date
+  updated_at          DateTime?         @default(now()) @db.Timestamptz(6)
   lms_user_mappings   lms_user_mappings @relation(fields: [user_id], references: [internal_user_id], onDelete: Cascade, onUpdate: NoAction)
 }
 
@@ -529,9 +755,9 @@ model outbox_events {
 }
 
 model youtube_search_cache {
-  query_hash    String    @id @db.VarChar(64)
-  search_query  String
+  query_hash     String    @id @db.VarChar(64)
+  search_query   String
   search_results Json
-  cached_at     DateTime? @default(now()) @db.Timestamptz(6)
-  expires_at    DateTime? @db.Timestamptz(6)
+  cached_at      DateTime? @default(now()) @db.Timestamptz(6)
+  expires_at     DateTime? @db.Timestamptz(6)
 }

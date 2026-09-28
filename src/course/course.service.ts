@@ -66,15 +66,27 @@ export class CourseService {
 
   async getLearningOutcomes(claims: BffClaims, courseId: string) {
     await this.getCourse(claims, courseId);
-    return this.prisma.learning_outcomes.findMany({
-      where: {
-        chapters: { course_id: courseId },
-        deleted_at: null,
-        is_current: true,
-      },
-      include: { chapters: true },
-      orderBy: [{ chapters: { sort_order: 'asc' } }, { code: 'asc' }],
+    const los = await this.prisma.learning_outcomes.findMany({
+      where: { course_id: courseId, deleted_at: null, is_current: true },
+      include: { chapter_los: { include: { chapters: true } } },
+      orderBy: { code: 'asc' },
     });
+
+    // Một LO có thể được dạy ở nhiều chương. `chapter_list` là đủ các chương;
+    // `chapters` giữ chương đầu tiên cho các màn hình cũ vốn giả định một chương.
+    return los
+      .map(({ chapter_los, ...lo }) => {
+        const chapterList = chapter_los
+          .map((link) => link.chapters)
+          .filter((chapter) => !chapter.deleted_at)
+          .sort((a, b) => a.sort_order - b.sort_order);
+        return { ...lo, chapters: chapterList[0] ?? null, chapter_list: chapterList };
+      })
+      .sort(
+        (a, b) =>
+          (a.chapters?.sort_order ?? Number.MAX_SAFE_INTEGER) -
+          (b.chapters?.sort_order ?? Number.MAX_SAFE_INTEGER),
+      );
   }
 
   async getAssessments(claims: BffClaims, courseId: string) {

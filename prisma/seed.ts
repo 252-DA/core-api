@@ -17,25 +17,29 @@ async function main() {
     },
   });
 
-  const chapter = await prisma.chapters.create({
-    data: {
+  const chapter = await prisma.chapters.upsert({
+    where: { course_id_code: { course_id: course.course_id, code: '1' } },
+    create: {
       course_id: course.course_id,
+      code: '1',
       title: 'Linear Data Structures',
       sort_order: 1,
     },
+    update: { title: 'Linear Data Structures', sort_order: 1 },
   });
 
+  // LO thuộc học phần; chương nào dạy LO nào nằm ở bảng nối chapter_los.
   const lo1 = await prisma.learning_outcomes.upsert({
     where: {
-      chapter_id_code_academic_year_version: {
-        chapter_id: chapter.chapter_id,
+      course_id_code_academic_year_version: {
+        course_id: course.course_id,
         code: 'LO.1.1',
         academic_year: '2025-2026',
         version: 1,
       },
     },
     create: {
-      chapter_id: chapter.chapter_id,
+      course_id: course.course_id,
       code: 'LO.1.1',
       statement_vi: 'Explain the concept and basic operations of linked lists.',
       statement_en: 'Explain the concept and basic operations of linked lists.',
@@ -54,15 +58,15 @@ async function main() {
 
   const lo2 = await prisma.learning_outcomes.upsert({
     where: {
-      chapter_id_code_academic_year_version: {
-        chapter_id: chapter.chapter_id,
+      course_id_code_academic_year_version: {
+        course_id: course.course_id,
         code: 'LO.1.2',
         academic_year: '2025-2026',
         version: 1,
       },
     },
     create: {
-      chapter_id: chapter.chapter_id,
+      course_id: course.course_id,
       code: 'LO.1.2',
       statement_vi: 'Apply stacks and queues to solve basic traversal problems.',
       statement_en: 'Apply stacks and queues to solve basic traversal problems.',
@@ -78,6 +82,14 @@ async function main() {
       is_current: true,
     },
   });
+
+  for (const lo of [lo1, lo2]) {
+    await prisma.chapter_los.upsert({
+      where: { chapter_id_lo_id: { chapter_id: chapter.chapter_id, lo_id: lo.lo_id } },
+      create: { chapter_id: chapter.chapter_id, lo_id: lo.lo_id },
+      update: {},
+    });
+  }
 
   const instructor = await prisma.lms_user_mappings.upsert({
     where: {

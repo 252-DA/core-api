@@ -5,27 +5,33 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { Client as MinioClient } from 'minio';
+import type { documents } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
-
-const DEFAULT_BUCKET = process.env.MINIO__BUCKET_NAME || 'documents';
+import { DocumentStorageService } from './document-storage.service';
 
 function safeFileName(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 160) || 'document';
 }
 
-function minioClient() {
-  const endpoint = process.env.MINIO__ENDPOINT || 'minio:9000';
-  const [host, rawPort] = endpoint.split(':');
-  return new MinioClient({
-    endPoint: host,
-    port: rawPort ? Number(rawPort) : 9000,
-    useSSL: process.env.MINIO__SECURE === 'true',
-    accessKey: process.env.MINIO__ACCESS_KEY || 'minioadmin',
-    secretKey: process.env.MINIO__SECRET_KEY || 'minioadmin',
-  });
+function fileNameFromStorageKey(storageKey: string, fallback: string) {
+  return storageKey.split('/').filter(Boolean).pop() || fallback;
+}
+
+/** Nguồn, vai trò và chương của tài liệu — cho màn hình tài liệu của giảng viên. */
+function placementFields(doc: documents) {
+  return {
+    source: doc.source,
+    lms_module: doc.lms_module,
+    lms_published: doc.lms_published,
+    role: doc.role,
+    role_provenance: doc.role_provenance,
+    chapter_code: doc.chapter_code,
+    chapter_provenance: doc.chapter_provenance,
+    chapter_confidence: doc.chapter_confidence === null ? null : Number(doc.chapter_confidence),
+    chapter_reason: doc.chapter_reason,
+  };
 }
 
 @Injectable()
@@ -34,9 +40,15 @@ export class DocumentService {
     private readonly prisma: PrismaService,
     private readonly authz: AuthzService,
     @InjectQueue('document_processing') private readonly processingQueue: Queue,
+    private readonly storage: DocumentStorageService,
   ) {}
 
-  async listDocuments(claims: BffClaims, courseId: string, limit = 50, offset = 0) {
+  async listDocuments(
+    claims: BffClaims,
+    courseId: string,
+    limit = 50,
+    offset = 0,
+  ) {
     await this.authz.assertCourseAccess(claims, courseId, [
       'instructor',
       'ta',
@@ -62,6 +74,7 @@ export class DocumentService {
       created_by: doc.created_by,
       created_at: doc.created_at,
       chunks_count: doc._count.chunks,
+      ...placementFields(doc),
     }));
   }
 
@@ -85,11 +98,12 @@ export class DocumentService {
       created_by: doc.created_by,
       created_at: doc.created_at,
       chunks_count: doc._count.chunks,
+      ...placementFields(doc),
     };
   }
 
   async getDocumentChunks(claims: BffClaims, documentId: string) {
-    const doc = await this.getDocument(claims, documentId);
+    await this.getDocument(claims, documentId);
     return this.prisma.chunks.findMany({
       where: { document_id: documentId, deleted_at: null },
       orderBy: { sort_order: 'asc' },
@@ -127,6 +141,7 @@ export class DocumentService {
     >`SELECT uuidv7()::text AS id`;
     const cleanName = safeFileName(data.fileName);
     const filePath = `documents/${data.courseId}/${documentId}/${cleanName}`;
+    const uploadUrl = await this.storage.createPresignedUploadUrl(filePath);
 
     const doc = await this.prisma.documents.create({
       data: {
@@ -140,12 +155,6 @@ export class DocumentService {
         created_by: claims.sub,
       },
     });
-
-    const uploadUrl = await minioClient().presignedPutObject(
-      DEFAULT_BUCKET,
-      filePath,
-      15 * 60,
-    );
 
     return {
       document_id: doc.document_id,
@@ -167,7 +176,9 @@ export class DocumentService {
       'ta',
     ]);
     if (doc.status !== 'UPLOADING' && doc.status !== 'UPLOADED') {
-      throw new BadRequestException(`Document in status ${doc.status} cannot be confirmed`);
+      throw new BadRequestException(
+        `Document in status ${doc.status} cannot be confirmed`,
+      );
     }
 
     const updated = await this.prisma.documents.update({
@@ -180,7 +191,7 @@ export class DocumentService {
       {
         document_id: updated.document_id,
         storage_key: updated.file_path,
-        file_name: updated.title,
+        file_name: fileNameFromStorageKey(updated.file_path, updated.title),
         language: 'vi',
         metadata: {
           course_id: updated.course_id,
@@ -231,7 +242,7 @@ export class DocumentService {
     const job = await this.processingQueue.add('process_document', {
       document_id: doc.document_id,
       storage_key: doc.file_path,
-      file_name: doc.title,
+      file_name: fileNameFromStorageKey(doc.file_path, doc.title),
       metadata: {
         course_id: doc.course_id,
         owner_id: doc.created_by,
@@ -258,6 +269,20 @@ export class DocumentService {
       'ta',
     ]);
 
+    return this.softDelete(doc);
+  }
+
+  /** Internal sync operation; restricted to a Canvas document in this course. */
+  async deleteCanvasDocument(courseId: string, documentId: string) {
+    const doc = await this.prisma.documents.findFirst({
+      where: { document_id: documentId, course_id: courseId, source: 'canvas', deleted_at: null },
+    });
+    if (!doc) throw new NotFoundException(`Canvas document not found: ${documentId}`);
+    return this.softDelete(doc);
+  }
+
+  private async softDelete(doc: documents) {
+    const documentId = doc.document_id;
     await this.prisma.$transaction(async (tx) => {
       await tx.outbox_events.deleteMany({
         where: {

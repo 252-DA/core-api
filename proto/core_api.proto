@@ -20,10 +20,16 @@ service CoreApiService {
   rpc ListChapters(JsonRequest) returns (JsonResponse);
   rpc ListLearningOutcomes(JsonRequest) returns (JsonResponse);
 
+  rpc SyncCurriculumFromCanvas(JsonRequest) returns (JsonResponse);
+  rpc ListCurriculumImports(JsonRequest) returns (JsonResponse);
+  rpc ApplyCurriculumImport(JsonRequest) returns (JsonResponse);
+
   rpc CreateUploadSession(JsonRequest) returns (JsonResponse);
   rpc ConfirmUpload(JsonRequest) returns (JsonResponse);
   rpc ListDocuments(JsonRequest) returns (JsonResponse);
   rpc DeleteDocument(JsonRequest) returns (JsonResponse);
+  rpc SyncDocumentsFromCanvas(JsonRequest) returns (JsonResponse);
+  rpc UpdateDocumentPlacement(JsonRequest) returns (JsonResponse);
 
   rpc ListLessons(JsonRequest) returns (JsonResponse);
   rpc GetLesson(JsonRequest) returns (JsonResponse);
@@ -40,7 +46,15 @@ service CoreApiService {
   rpc UpdateQuizItem(JsonRequest) returns (JsonResponse);
 
   rpc SubmitQuiz(JsonRequest) returns (JsonResponse);
+  rpc GetCanvasQuizContext(JsonRequest) returns (JsonResponse);
+  rpc CreateQuizSet(JsonRequest) returns (JsonResponse);
+  rpc GetQuizSet(JsonRequest) returns (JsonResponse);
+  rpc GetQuizBuilderContext(JsonRequest) returns (JsonResponse);
+  rpc StartQuizSet(JsonRequest) returns (JsonResponse);
+  rpc SubmitQuizSet(JsonRequest) returns (JsonResponse);
+  rpc GetQuizSetResults(JsonRequest) returns (JsonResponse);
   rpc ListQuizAttempts(JsonRequest) returns (JsonResponse);
 
   rpc CreateContentGenerationRequest(JsonRequest) returns (JsonResponse);
+  rpc ListContentGenerationRequests(JsonRequest) returns (JsonResponse);
 }

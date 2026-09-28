@@ -8,6 +8,7 @@ import { LessonModule } from '../lesson/lesson.module';
 import { ReviewModule } from '../review/review.module';
 import { QuizModule } from '../quiz/quiz.module';
 import { ContentGenerationModule } from '../content-generation/content-generation.module';
+import { CurriculumModule } from '../curriculum/curriculum.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { ContentGenerationModule } from '../content-generation/content-generatio
     ReviewModule,
     QuizModule,
     ContentGenerationModule,
+    CurriculumModule,
   ],
   providers: [GrpcServerService],
 })
