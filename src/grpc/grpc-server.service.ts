@@ -107,6 +107,15 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       ListDocuments: this.unary((claims, body) =>
         this.documents.listDocuments(claims, body.courseId, body.limit, body.offset),
       ),
+      GetDocument: this.unary((claims, body) =>
+        this.documents.getDocument(claims, body.documentId),
+      ),
+      GetDocumentChunks: this.unary((claims, body) =>
+        this.documents.getDocumentChunks(claims, body.documentId, body.page),
+      ),
+      GetDocumentFileUrl: this.unary((claims, body) =>
+        this.documents.getDocumentFileUrl(claims, body.documentId),
+      ),
       DeleteDocument: this.unary((claims, body) =>
         this.documents.deleteDocument(claims, body.documentId),
       ),

@@ -42,8 +42,21 @@ export class DocumentController {
   async getDocumentChunks(
     @CurrentBffClaims() claims: BffClaims,
     @Param('id') id: string,
+    @Query('page') page?: string,
   ) {
-    return this.documentService.getDocumentChunks(claims, id);
+    return this.documentService.getDocumentChunks(
+      claims,
+      id,
+      page === undefined || page === '' ? undefined : Number(page),
+    );
+  }
+
+  @Get(':id/file-url')
+  async getDocumentFileUrl(
+    @CurrentBffClaims() claims: BffClaims,
+    @Param('id') id: string,
+  ) {
+    return this.documentService.getDocumentFileUrl(claims, id);
   }
 
   @Post('upload-session')

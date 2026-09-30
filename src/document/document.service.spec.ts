@@ -20,6 +20,7 @@ describe('DocumentService', () => {
         findFirst: jest.fn(),
         update: jest.fn(),
       },
+      chunks: { findMany: jest.fn().mockResolvedValue([]) },
       outbox_events: { deleteMany: jest.fn(), create: jest.fn() },
       $transaction: jest.fn().mockImplementation(async (callback) => callback(prisma)),
     };
@@ -31,6 +32,9 @@ describe('DocumentService', () => {
       createPresignedUploadUrl: jest
         .fn()
         .mockResolvedValue('http://minio:9000/upload'),
+      createPresignedDownloadUrl: jest
+        .fn()
+        .mockResolvedValue('http://minio:9000/download'),
     };
     const service = new DocumentService(
       prisma as never,
@@ -111,5 +115,96 @@ describe('DocumentService', () => {
       }),
       expect.any(Object),
     );
+  });
+  const storedDocument = {
+    document_id: '00000000-0000-0000-0000-000000000003',
+    course_id: '00000000-0000-0000-0000-000000000001',
+    title: 'Chương 1',
+    file_path: 'documents/course-1/doc-1/ch1.pdf',
+    mime_type: 'application/pdf',
+    checksum: null,
+    status: 'DONE',
+    created_by: claims.sub,
+    created_at: new Date(0),
+    source: 'upload',
+    lms_module: null,
+    lms_published: null,
+    role: 'lecture',
+    role_provenance: 'inferred',
+    chapter_code: null,
+    chapter_provenance: null,
+    chapter_confidence: null,
+    chapter_reason: null,
+    _count: { chunks: 12 },
+  };
+
+  it('narrows chunks to one page when a page is requested', async () => {
+    const { service, prisma } = setup();
+    prisma.documents.findFirst.mockResolvedValue(storedDocument);
+
+    await service.getDocumentChunks(claims, storedDocument.document_id, 7);
+
+    expect(prisma.chunks.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          document_id: storedDocument.document_id,
+          deleted_at: null,
+          page_number: 7,
+        }),
+      }),
+    );
+  });
+
+  it('reads the whole document when no page is requested', async () => {
+    const { service, prisma } = setup();
+    prisma.documents.findFirst.mockResolvedValue(storedDocument);
+
+    await service.getDocumentChunks(claims, storedDocument.document_id);
+
+    const where = prisma.chunks.findMany.mock.calls[0][0].where;
+    expect(where).not.toHaveProperty('page_number');
+  });
+
+  it('rejects a page index that cannot exist', async () => {
+    const { service, prisma } = setup();
+    prisma.documents.findFirst.mockResolvedValue(storedDocument);
+
+    await expect(
+      service.getDocumentChunks(claims, storedDocument.document_id, 0),
+    ).rejects.toThrow('page');
+    expect(prisma.chunks.findMany).not.toHaveBeenCalled();
+  });
+
+  it('signs a read URL for the stored object, not for the title', async () => {
+    const { service, prisma, storage } = setup();
+    prisma.documents.findFirst.mockResolvedValue(storedDocument);
+
+    const result = await service.getDocumentFileUrl(
+      claims,
+      storedDocument.document_id,
+    );
+
+    expect(storage.createPresignedDownloadUrl).toHaveBeenCalledWith(
+      storedDocument.file_path,
+      expect.any(Number),
+    );
+    expect(result).toMatchObject({
+      url: 'http://minio:9000/download',
+      mime_type: 'application/pdf',
+      file_name: 'ch1.pdf',
+    });
+  });
+
+  it('does not sign a read URL while the object is still being uploaded', async () => {
+    const { service, prisma, storage } = setup();
+    prisma.documents.findFirst.mockResolvedValue({
+      ...storedDocument,
+      status: 'UPLOADING',
+    });
+
+    await expect(
+      service.getDocumentFileUrl(claims, storedDocument.document_id),
+    ).rejects.toThrow('chưa upload xong');
+    expect(storage.createPresignedDownloadUrl).not.toHaveBeenCalled();
   });
 });

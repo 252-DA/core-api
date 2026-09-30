@@ -33,6 +33,23 @@ export class DocumentStorageService {
     );
   }
 
+  /**
+   * URL đọc file, hạn ngắn. Người xem không gọi URL này trực tiếp: MinIO nằm
+   * trong mạng nội bộ, nên route của web fetch bằng URL này ở phía server rồi
+   * mới đẩy bytes về trình duyệt — đối xứng với đường upload.
+   */
+  async createPresignedDownloadUrl(
+    objectName: string,
+    expiresInSeconds = 5 * 60,
+  ) {
+    await this.ensureBucket();
+    return this.client.presignedGetObject(
+      DEFAULT_BUCKET,
+      objectName,
+      expiresInSeconds,
+    );
+  }
+
   /** Ghi file do chính core-api tải về (vd. đề cương lấy từ Canvas). */
   async putObject(objectName: string, content: Buffer, contentType: string) {
     await this.ensureBucket();

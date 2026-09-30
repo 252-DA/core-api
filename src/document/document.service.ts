@@ -102,10 +102,22 @@ export class DocumentService {
     };
   }
 
-  async getDocumentChunks(claims: BffClaims, documentId: string) {
+  /**
+   * Chunk của một tài liệu, theo thứ tự đọc. `page` giới hạn về đúng một trang
+   * — "giải thích trang này" là một phép tra cứu chính xác theo
+   * (document_id, page_number), không phải similarity search.
+   */
+  async getDocumentChunks(claims: BffClaims, documentId: string, page?: number) {
     await this.getDocument(claims, documentId);
+    if (page !== undefined && (!Number.isInteger(page) || page < 1)) {
+      throw new BadRequestException('page phải là số nguyên >= 1.');
+    }
     return this.prisma.chunks.findMany({
-      where: { document_id: documentId, deleted_at: null },
+      where: {
+        document_id: documentId,
+        deleted_at: null,
+        ...(page === undefined ? {} : { page_number: page }),
+      },
       orderBy: { sort_order: 'asc' },
       select: {
         chunk_id: true,
@@ -119,6 +131,29 @@ export class DocumentService {
         created_at: true,
       },
     });
+  }
+
+  /**
+   * URL đọc file của tài liệu, hạn ngắn, chỉ dành cho phía server của web gọi
+   * lại. Trả kèm mime_type để route biết đặt Content-Type nào cho trình duyệt.
+   */
+  async getDocumentFileUrl(claims: BffClaims, documentId: string) {
+    const doc = await this.getDocument(claims, documentId);
+    if (doc.status === 'UPLOADING') {
+      throw new BadRequestException('Tài liệu chưa upload xong.');
+    }
+    const expiresInSeconds = 5 * 60;
+    const url = await this.storage.createPresignedDownloadUrl(
+      doc.file_path,
+      expiresInSeconds,
+    );
+    return {
+      document_id: doc.document_id,
+      url,
+      mime_type: doc.mime_type || 'application/octet-stream',
+      file_name: fileNameFromStorageKey(doc.file_path, doc.title),
+      expires_in: expiresInSeconds,
+    };
   }
 
   async createUploadSession(
