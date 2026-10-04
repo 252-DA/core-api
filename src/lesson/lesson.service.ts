@@ -58,7 +58,7 @@ export class LessonService {
         deleted_at: null,
         ...(status ? { status } : {}),
       },
-      orderBy: { created_at: 'asc' },
+      orderBy: [{ position: 'asc' }, { created_at: 'asc' }],
     });
   }
 

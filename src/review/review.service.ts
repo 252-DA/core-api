@@ -34,7 +34,9 @@ export class ReviewService {
               deleted_at: null,
             },
             include: { lessons: true, learning_outcomes: true },
-            orderBy: { created_at: 'asc' },
+            // Cả mẻ card lưu trong một transaction nên trùng created_at;
+            // position giữ thứ tự người viết đặt trong mẻ đó.
+            orderBy: [{ created_at: 'asc' }, { position: 'asc' }],
           }),
       kind === 'card'
         ? Promise.resolve([])
