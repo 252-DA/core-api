@@ -88,3 +88,4 @@ CREATE TABLE "micro_content_answers" (
 
 CREATE INDEX "micro_content_answers_attempt_id_idx"
   ON "micro_content_answers" ("attempt_id");
+

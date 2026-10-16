@@ -18,6 +18,7 @@ import { CanvasDocumentSyncService } from '../document/canvas-document-sync.serv
 import { ModelSettingsService } from '../model-settings/model-settings.service';
 import { EssayProcessorService } from '../essay-processor/essay-processor.service';
 import { MicroContentService } from '../micro-content/micro-content.service';
+import { MicroContentVideoService } from '../micro-content/micro-content-video.service';
 
 type JsonRequest = { json?: string };
 type JsonResponse = { json: string };
@@ -45,6 +46,7 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
     private readonly modelSettings: ModelSettingsService,
     private readonly essayProcessors: EssayProcessorService,
     private readonly microContent: MicroContentService,
+    private readonly microContentVideo: MicroContentVideoService,
   ) {}
 
   async onModuleInit() {
@@ -230,13 +232,13 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
         this.microContent.saveQuestions(claims, body),
       ),
       CreateMicroContentUpload: this.unary((claims, body) =>
-        this.microContent.createUpload(claims, body),
+        this.microContentVideo.createUpload(claims, body),
       ),
       ConfirmMicroContentUpload: this.unary((claims, body) =>
-        this.microContent.confirmUpload(claims, body),
+        this.microContentVideo.confirmUpload(claims, body),
       ),
       GetMicroContentVideoUrl: this.unary((claims, body) =>
-        this.microContent.getVideoUrl(claims, body),
+        this.microContentVideo.getVideoUrl(claims, body),
       ),
       RequestMicroContentScript: this.unary((claims, body) =>
         this.microContent.requestScript(claims, body),

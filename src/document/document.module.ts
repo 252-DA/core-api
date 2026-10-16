@@ -24,6 +24,6 @@ import { CANVAS_SYNC_CONFIG, canvasSyncConfig } from './canvas-sync.config';
   providers: [DocumentService, DocumentStorageService, CanvasDocumentSyncService,
     CanvasSyncJobsService, CanvasSyncProcessor,
     { provide: CANVAS_SYNC_CONFIG, useFactory: canvasSyncConfig }],
-  exports: [DocumentService, CanvasDocumentSyncService, CanvasSyncJobsService],
+  exports: [DocumentService, CanvasDocumentSyncService, CanvasSyncJobsService, DocumentStorageService],
 })
 export class DocumentModule {}
