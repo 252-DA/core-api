@@ -80,6 +80,7 @@ function setup() {
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     review_audit_logs: { create: jest.fn() },
+    outbox_events: { create: jest.fn() },
     $transaction: jest.fn(),
   };
   prisma.$transaction.mockImplementation((fn: (tx: typeof prisma) => unknown) =>
@@ -210,6 +211,53 @@ describe('Canvas quiz sets', () => {
         (r: { resource_link_id: string }) => r.resource_link_id === LINK,
       ),
     ).toBe(true);
+    expect(prisma.outbox_events.create).not.toHaveBeenCalled();
+  });
+
+  it('tự luận: giao worker chấm, giữ cả lượt khỏi AGS tới khi chấm xong', async () => {
+    const { service, prisma, snapshot } = setup();
+    snapshot.items[1] = {
+      ...snapshot.items[1],
+      type: 'SHORT_ANSWER',
+      options: null as never,
+      correct_answer: { model_answer: 'M', rubric: ['A', 'B'] } as never,
+    };
+    const result = await service.submit(claims, {
+      quizSetId: SET,
+      resourceLinkId: LINK,
+      answers: [
+        { quizId: Q1, chosenAnswer: 'yes' },
+        { quizId: Q2, chosenAnswer: 'Bài làm của em' },
+      ],
+    });
+    expect(result.pendingCount).toBe(1);
+    expect(result.agsStatus).toBe('AWAITING_GRADE');
+    const rows = prisma.quiz_attempts.createMany.mock.calls[0][0].data;
+    expect(rows.map((r: { ags_status: string }) => r.ags_status)).toEqual([
+      'AWAITING_GRADE',
+      'AWAITING_GRADE',
+    ]);
+    expect(rows.map((r: { grading_status: string }) => r.grading_status)).toEqual([
+      'GRADED',
+      'PENDING',
+    ]);
+    // Đề chấm lấy từ snapshot của quiz set, ghi cùng bài làm: sửa câu trong
+    // ngân hàng sau đó không đổi cách worker chấm bài này.
+    expect(rows[0].grading_input).toBeUndefined();
+    expect(rows[1].grading_input).toEqual({
+      type: 'SHORT_ANSWER',
+      question: 'Q',
+      correct_answer: { model_answer: 'M', rubric: ['A', 'B'] },
+    });
+    expect(prisma.quiz_items.findMany).not.toHaveBeenCalled();
+    const event = prisma.outbox_events.create.mock.calls[0][0].data;
+    expect(event.event_type).toBe('ANSWER_GRADING_REQUESTED');
+    expect(event.payload).toEqual({
+      submission_id: rows[0].submission_id,
+      course_id: COURSE,
+      attempt_ids: rows.map((r: { attempt_id: string }) => r.attempt_id),
+      essay_attempt_ids: [rows[1].attempt_id],
+    });
   });
 
   describe('results', () => {
@@ -250,6 +298,28 @@ describe('Canvas quiz sets', () => {
         sync: 'SENDING',
       });
       expect(JSON.stringify(result)).not.toContain('correct_answer');
+    });
+
+    it('tự luận AI không chấm được: lượt nộp chờ giảng viên, câu đó không vào thống kê', async () => {
+      const { service, prisma } = setup();
+      prisma.course_memberships.count.mockResolvedValue(1);
+      prisma.quiz_attempts.findMany.mockResolvedValue([
+        row('s1', Q1, true, '2026-09-27T07:00:00Z', 'AWAITING_GRADE'),
+        {
+          ...row('s1', Q2, false, '2026-09-27T07:00:00Z', 'AWAITING_GRADE'),
+          grading_status: 'NEEDS_REVIEW',
+        },
+      ]);
+      const result = await service.results(
+        { ...claims, roles: ['instructor'] },
+        { quizSetId: SET },
+      );
+      expect(result).toMatchObject({
+        students: [expect.objectContaining({ sync: 'NEEDS_REVIEW' })],
+        summary: { needsReview: 1 },
+      });
+      const items = (result as { items: Array<{ quiz_id: string; answered: number }> }).items;
+      expect(items.find((i) => i.quiz_id === Q2)).toMatchObject({ answered: 0 });
     });
 
     it('báo chờ publish khi poller AGS đang bị Canvas từ chối vì bài tập chưa publish', async () => {

@@ -136,6 +136,7 @@ describe('khung giờ và mở đáp án', () => {
 describe('itemOrder', () => {
   const items = ['a', 'b', 'c'].map((id) => ({
     quiz_id: id,
+    type: 'MCQ_SINGLE',
     options: [`${id}1`, `${id}2`, `${id}3`],
   })) as unknown as QuizSnapshotItem[];
 
@@ -155,6 +156,16 @@ describe('itemOrder', () => {
         [...(source.options as string[])].sort(),
       );
       expect(o.options).not.toEqual(source.options);
+    }
+  });
+
+  it('không xáo Đúng/Sai, và câu không có phương án giữ nguyên null', () => {
+    const mixed = [
+      { quiz_id: 'tf', type: 'TRUE_FALSE', options: ['Đúng', 'Sai'] },
+      { quiz_id: 'fill', type: 'FILL_BLANK', options: null },
+    ] as unknown as QuizSnapshotItem[];
+    for (const o of itemOrder(mixed, true, () => 0)) {
+      expect(o.options).toEqual(mixed.find((i) => i.quiz_id === o.quiz_id)!.options);
     }
   });
 });

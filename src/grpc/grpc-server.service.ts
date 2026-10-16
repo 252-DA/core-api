@@ -11,9 +11,12 @@ import { LessonService } from '../lesson/lesson.service';
 import { ReviewService } from '../review/review.service';
 import { QuizService } from '../quiz/quiz.service';
 import { QuizSetService } from '../quiz/quiz-set.service';
+import { EssayGradingService } from '../quiz/essay-grading.service';
 import { ContentGenerationService } from '../content-generation/content-generation.service';
 import { CurriculumImportService } from '../curriculum/curriculum-import.service';
 import { CanvasDocumentSyncService } from '../document/canvas-document-sync.service';
+import { ModelSettingsService } from '../model-settings/model-settings.service';
+import { EssayProcessorService } from '../essay-processor/essay-processor.service';
 
 type JsonRequest = { json?: string };
 type JsonResponse = { json: string };
@@ -34,9 +37,12 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
     private readonly review: ReviewService,
     private readonly quiz: QuizService,
     private readonly quizSets: QuizSetService,
+    private readonly essayGrading: EssayGradingService,
     private readonly contentGeneration: ContentGenerationService,
     private readonly curriculumImports: CurriculumImportService,
     private readonly canvasDocuments: CanvasDocumentSyncService,
+    private readonly modelSettings: ModelSettingsService,
+    private readonly essayProcessors: EssayProcessorService,
   ) {}
 
   async onModuleInit() {
@@ -171,6 +177,9 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       ListQuizAttempts: this.unary((claims, body) =>
         this.quiz.attempts(claims, body.lessonId),
       ),
+      ListEssaysForReview: this.unary((claims, body) => this.essayGrading.list(claims, body)),
+      GradeEssayAnswer: this.unary((claims, body) => this.essayGrading.grade(claims, body)),
+      RetryEssayGrading: this.unary((claims, body) => this.essayGrading.retry(claims, body)),
       CreateContentGenerationRequest: this.unary((claims, body) =>
         this.contentGeneration.createRequest(claims, body),
       ),
@@ -182,6 +191,21 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
           body.type,
         ),
       ),
+      ListModelBindings: this.unary((claims) => this.modelSettings.list(claims)),
+      SetModelBinding: this.unary((claims, body) => this.modelSettings.set(claims, body)),
+      CreateEssayProcessor: this.unary((claims, body) =>
+        this.essayProcessors.createProcessor(claims, body),
+      ),
+      UpdateEssayProcessor: this.unary((claims, body) =>
+        this.essayProcessors.updateProcessor(claims, body),
+      ),
+      GetEssayProcessor: this.unary((claims, body) =>
+        this.essayProcessors.getProcessor(claims, body.processorId),
+      ),
+      ReceiveAssetNotices: this.unary((claims, body) =>
+        this.essayProcessors.receiveNotices(claims, body),
+      ),
+      GetEssayReport: this.unary((claims, body) => this.essayProcessors.getReport(claims, body)),
     };
   }
 

@@ -25,6 +25,9 @@ model lms_user_mappings {
   llm_usage_logs     llm_usage_logs[]
   quiz_set_sessions  quiz_set_sessions[]
   user_llm_quota     user_llm_quota?
+  llm_model_bindings llm_model_bindings[]
+  essay_processors   essay_processors[]
+  essay_submissions  essay_submissions[]
 
   @@unique([lms_type, lms_sub], map: "uq_lms_user")
   @@index([lms_type, lms_sub], map: "idx_lms_mapping")
@@ -61,6 +64,7 @@ model courses {
   course_sessions              course_sessions[]
   curriculum_extraction_issues curriculum_extraction_issues[]
   curriculum_imports           curriculum_imports[]
+  essay_processors             essay_processors[]
 
   @@index([lms_id], map: "idx_course_lms")
 }
@@ -627,6 +631,8 @@ model quiz_attempts {
   response_time_ms   Int?
   feedback           String?
   ags_status         String              @default("PENDING") @db.VarChar(20)
+  grading_status     String              @default("GRADED") @db.VarChar(20)
+  grading_input      Json?
   ags_posted_at      DateTime?           @db.Timestamptz(6)
   attempted_at       DateTime?           @default(now()) @db.Timestamptz(6)
   deleted_at         DateTime?           @db.Timestamptz(6)
@@ -701,6 +707,63 @@ model llm_usage_logs {
   called_at         DateTime?          @default(now()) @db.Timestamptz(6)
   lms_user_mappings lms_user_mappings? @relation(fields: [user_id], references: [internal_user_id], onDelete: SetNull, onUpdate: NoAction)
   courses           courses?           @relation(fields: [course_id], references: [course_id], onDelete: SetNull, onUpdate: NoAction)
+}
+
+/// Admin chọn model cho từng task trên web; worker đọc lại mỗi 30 giây.
+/// Không có dòng = task dùng env/mặc định của catalog trong ai-sdk.
+model llm_model_bindings {
+  task              String            @id @db.VarChar(50)
+  profile           String            @db.VarChar(50)
+  updated_by        String            @db.Uuid
+  updated_at        DateTime          @default(now()) @db.Timestamptz(6)
+  lms_user_mappings lms_user_mappings @relation(fields: [updated_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+}
+
+/// Bộ chấm bài luận gắn vào một Assignment Canvas (LTI Asset Processor).
+/// rubric: [{criterion, description, points}]. Xem migration 20261014160000.
+model essay_processors {
+  processor_id      String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id         String              @db.Uuid
+  lti_client_id     String              @db.VarChar(64)
+  lms_activity_id   String?             @db.VarChar(255)
+  title             String              @db.VarChar(255)
+  instructions      String              @default("")
+  rubric            Json
+  max_score         Decimal             @db.Decimal(7, 2)
+  visible_to_owner  Boolean             @default(false)
+  created_by        String              @db.Uuid
+  created_at        DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime            @default(now()) @db.Timestamptz(6)
+  courses           courses             @relation(fields: [course_id], references: [course_id], onDelete: Cascade, onUpdate: NoAction)
+  lms_user_mappings lms_user_mappings   @relation(fields: [created_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+  essay_submissions essay_submissions[]
+}
+
+/// Một thông báo bài nộp từ Canvas (một lần nộp × một processor).
+/// status: RECEIVED → QUEUED → GRADED → REPORTED, hoặc FAILED.
+model essay_submissions {
+  essay_submission_id String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  processor_id        String             @db.Uuid
+  notice_id           String             @unique @db.VarChar(255)
+  lms_submission_id   String             @db.VarChar(255)
+  lms_user_sub        String             @db.VarChar(255)
+  user_id             String?            @db.Uuid
+  report_url          String
+  assets              Json
+  status              String             @default("RECEIVED") @db.VarChar(20)
+  error_code          String?            @db.VarChar(50)
+  error               String?
+  attempts            Int                @default(0)
+  next_attempt_at     DateTime?          @db.Timestamptz(6)
+  result              Json?
+  received_at         DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime           @default(now()) @db.Timestamptz(6)
+  reported_at         DateTime?          @db.Timestamptz(6)
+  essay_processors    essay_processors   @relation(fields: [processor_id], references: [processor_id], onDelete: Cascade, onUpdate: NoAction)
+  lms_user_mappings   lms_user_mappings? @relation(fields: [user_id], references: [internal_user_id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([status, next_attempt_at])
+  @@index([lms_submission_id])
 }
 
 model user_llm_quota {

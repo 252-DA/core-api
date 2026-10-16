@@ -13,6 +13,8 @@ import { AgsPublisherService } from './ags-publisher.service';
     AgsClientService,
     AgsPublisherService,
   ],
-  exports: [AgsPublisherService],
+  // Token LTI Advantage dùng chung cho mọi dịch vụ của platform (AGS, Asset
+  // Processor), không riêng chấm điểm.
+  exports: [AgsPublisherService, AgsTokenService, AGS_CONFIG],
 })
 export class AgsModule {}

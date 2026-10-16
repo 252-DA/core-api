@@ -1,9 +1,12 @@
 import type { Prisma } from '@prisma/client';
 import { AGS_STATUS } from '../ags/ags-status';
+import { GRADING_STATUS } from './answer-grading';
 import type { QuizSnapshotItem } from './quiz-set.service';
 
 /** Trạng thái điểm của một lượt nộp so với sổ điểm Canvas, theo góc nhìn người dùng. */
 export type GradeSyncState =
+  | 'GRADING'
+  | 'NEEDS_REVIEW'
   | 'POSTED'
   | 'SENDING'
   | 'WAITING_PUBLISH'
@@ -20,6 +23,8 @@ export interface ResultAttemptRow {
   ags_status: string | null;
   resource_link_id: string | null;
   chosen_answer?: Prisma.JsonValue;
+  grading_status?: string | null;
+  feedback?: string | null;
 }
 
 export interface SubmissionSummary {
@@ -32,6 +37,8 @@ export interface SubmissionSummary {
 
 interface Submission extends SubmissionSummary {
   correctByQuiz: Map<string, boolean>;
+  /** Điểm 0–100 từng câu; câu tự luận chưa chấm xong không có mặt. */
+  scoreByQuiz: Map<string, number>;
 }
 
 /**
@@ -53,6 +60,8 @@ export function groupSubmissions(
       statuses: Set<string>;
       links: Set<string>;
       correctByQuiz: Map<string, boolean>;
+      scoreByQuiz: Map<string, number>;
+      needsReview: boolean;
     }
   >();
   for (const row of rows) {
@@ -65,12 +74,20 @@ export function groupSubmissions(
       statuses: new Set<string>(),
       links: new Set<string>(),
       correctByQuiz: new Map<string, boolean>(),
+      scoreByQuiz: new Map<string, number>(),
+      needsReview: false,
     };
     entry.total += Number(row.score);
     entry.count += 1;
     entry.statuses.add(row.ags_status ?? AGS_STATUS.pending);
     if (row.resource_link_id) entry.links.add(row.resource_link_id);
-    entry.correctByQuiz.set(row.quiz_id, Boolean(row.is_correct));
+    // Tự luận chưa chấm xong (AI đang chấm, hoặc chờ giảng viên) chưa có
+    // điểm thật: không đưa vào thống kê câu.
+    if (row.grading_status === GRADING_STATUS.needsReview) entry.needsReview = true;
+    else if (row.grading_status !== GRADING_STATUS.pending) {
+      entry.correctByQuiz.set(row.quiz_id, Boolean(row.is_correct));
+      entry.scoreByQuiz.set(row.quiz_id, Number(row.score));
+    }
     bySubmission.set(row.submission_id, entry);
   }
   return [...bySubmission.entries()]
@@ -79,14 +96,21 @@ export function groupSubmissions(
       userId: e.userId,
       attemptedAt: e.at.toISOString(),
       score: Math.round(e.total / e.count),
-      sync: syncState(e.statuses, [...e.links].some(waiting)),
+      sync: syncState(e.statuses, [...e.links].some(waiting), e.needsReview),
       correctByQuiz: e.correctByQuiz,
+      scoreByQuiz: e.scoreByQuiz,
     }))
     .sort((a, b) => a.attemptedAt.localeCompare(b.attemptedAt));
 }
 
-function syncState(statuses: Set<string>, waiting: boolean): GradeSyncState {
+function syncState(
+  statuses: Set<string>,
+  waiting: boolean,
+  needsReview: boolean,
+): GradeSyncState {
   if (statuses.has(AGS_STATUS.failed)) return 'FAILED';
+  if (statuses.has(AGS_STATUS.awaitingGrade))
+    return needsReview ? 'NEEDS_REVIEW' : 'GRADING';
   if (statuses.has(AGS_STATUS.pending) || statuses.has(AGS_STATUS.posting))
     return waiting ? 'WAITING_PUBLISH' : 'SENDING';
   if (statuses.has(AGS_STATUS.notRequired)) return 'NOT_REQUIRED';
@@ -140,8 +164,10 @@ export function staffResults(input: {
   const items = input.items.map((item) => {
     const answered = latest.filter((s) => s.correctByQuiz.has(item.quiz_id));
     const correct = answered.filter((s) => s.correctByQuiz.get(item.quiz_id));
+    const scores = answered.map((s) => s.scoreByQuiz.get(item.quiz_id) ?? 0);
     return {
       quiz_id: item.quiz_id,
+      type: item.type,
       question: item.question,
       options: item.options,
       correct_answer: item.correct_answer,
@@ -150,6 +176,10 @@ export function staffResults(input: {
       lo_code: item.lo_id ? (input.los.get(item.lo_id)?.code ?? null) : null,
       answered: answered.length,
       correct: correct.length,
+      /** Tự luận có điểm từng phần nên tỉ lệ đúng/sai không đủ. */
+      averageScore: scores.length
+        ? Math.round(scores.reduce((sum, v) => sum + v, 0) / scores.length)
+        : null,
     };
   });
 
@@ -186,11 +216,18 @@ export function staffResults(input: {
         : null,
       waitingForPublish: students.filter((s) => s.sync === 'WAITING_PUBLISH').length,
       failed: students.filter((s) => s.sync === 'FAILED').length,
+      // Theo lượt nộp, không theo sinh viên: lượt cũ chờ chấm tay vẫn giữ điểm
+      // khỏi sổ điểm dù lượt mới nhất đã xong.
+      needsReview: input.submissions.filter((s) => s.sync === 'NEEDS_REVIEW').length,
     },
   };
 }
 
-function stripCorrect({ correctByQuiz: _omit, ...rest }: Submission): SubmissionSummary {
+function stripCorrect({
+  correctByQuiz: _correct,
+  scoreByQuiz: _scores,
+  ...rest
+}: Submission): SubmissionSummary {
   return rest;
 }
 
@@ -212,11 +249,16 @@ export function reviewOf(
     const row = mine.get(item.quiz_id);
     return {
       quiz_id: item.quiz_id,
+      type: item.type,
       question: item.question,
       options: item.options,
       chosen: row?.chosen_answer ?? null,
       correct_answer: item.correct_answer,
       is_correct: Boolean(row?.is_correct),
+      score: row ? Number(row.score) : 0,
+      grading_status: row?.grading_status ?? GRADING_STATUS.graded,
+      // Tự luận: nhận xét của AI chấm; kiểu khác: trùng giải thích của câu.
+      feedback: row?.feedback ?? null,
       explanation: item.explanation,
     };
   });
