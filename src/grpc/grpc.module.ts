@@ -11,6 +11,7 @@ import { ContentGenerationModule } from '../content-generation/content-generatio
 import { CurriculumModule } from '../curriculum/curriculum.module';
 import { ModelSettingsModule } from '../model-settings/model-settings.module';
 import { EssayProcessorModule } from '../essay-processor/essay-processor.module';
+import { MicroContentModule } from '../micro-content/micro-content.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { EssayProcessorModule } from '../essay-processor/essay-processor.module'
     CurriculumModule,
     ModelSettingsModule,
     EssayProcessorModule,
+    MicroContentModule,
   ],
   providers: [GrpcServerService],
 })

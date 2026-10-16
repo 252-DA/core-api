@@ -17,6 +17,7 @@ import { QuizModule } from './quiz/quiz.module';
 import { ContentGenerationModule } from './content-generation/content-generation.module';
 import { GrpcModule } from './grpc/grpc.module';
 import { AgsModule } from './ags/ags.module';
+import { MicroContentModule } from './micro-content/micro-content.module';
 
 // Parse Redis URL for BullMQ connection
 const getRedisConnection = () => {
@@ -60,6 +61,7 @@ const getRedisConnection = () => {
     ContentGenerationModule,
     GrpcModule,
     AgsModule,
+    MicroContentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

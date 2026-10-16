@@ -17,6 +17,7 @@ import { CurriculumImportService } from '../curriculum/curriculum-import.service
 import { CanvasDocumentSyncService } from '../document/canvas-document-sync.service';
 import { ModelSettingsService } from '../model-settings/model-settings.service';
 import { EssayProcessorService } from '../essay-processor/essay-processor.service';
+import { MicroContentService } from '../micro-content/micro-content.service';
 
 type JsonRequest = { json?: string };
 type JsonResponse = { json: string };
@@ -43,6 +44,7 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
     private readonly canvasDocuments: CanvasDocumentSyncService,
     private readonly modelSettings: ModelSettingsService,
     private readonly essayProcessors: EssayProcessorService,
+    private readonly microContent: MicroContentService,
   ) {}
 
   async onModuleInit() {
@@ -206,6 +208,57 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
         this.essayProcessors.receiveNotices(claims, body),
       ),
       GetEssayReport: this.unary((claims, body) => this.essayProcessors.getReport(claims, body)),
+      ListMicroContents: this.unary((claims, body) =>
+        this.microContent.list(claims, body.courseId),
+      ),
+      GetMicroContent: this.unary((claims, body) =>
+        this.microContent.get(claims, body.microContentId),
+      ),
+      CreateMicroContent: this.unary((claims, body) =>
+        this.microContent.create(claims, body),
+      ),
+      UpdateMicroContent: this.unary((claims, body) =>
+        this.microContent.update(claims, body),
+      ),
+      DeleteMicroContent: this.unary((claims, body) =>
+        this.microContent.delete(claims, body.microContentId),
+      ),
+      PublishMicroContent: this.unary((claims, body) =>
+        this.microContent.publish(claims, body.microContentId, body.status),
+      ),
+      SaveMicroContentQuestions: this.unary((claims, body) =>
+        this.microContent.saveQuestions(claims, body),
+      ),
+      CreateMicroContentUpload: this.unary((claims, body) =>
+        this.microContent.createUpload(claims, body),
+      ),
+      ConfirmMicroContentUpload: this.unary((claims, body) =>
+        this.microContent.confirmUpload(claims, body),
+      ),
+      GetMicroContentVideoUrl: this.unary((claims, body) =>
+        this.microContent.getVideoUrl(claims, body),
+      ),
+      RequestMicroContentScript: this.unary((claims, body) =>
+        this.microContent.requestScript(claims, body),
+      ),
+      SaveMicroContentScript: this.unary((claims, body) =>
+        this.microContent.saveScript(claims, body),
+      ),
+      RequestMicroContentRender: this.unary((claims, body) =>
+        this.microContent.requestRender(claims, body),
+      ),
+      ReportMicroContentProgress: this.unary((claims, body) =>
+        this.microContent.reportProgress(claims, body),
+      ),
+      SubmitMicroContent: this.unary((claims, body) =>
+        this.microContent.submit(claims, body),
+      ),
+      GetMicroContentResult: this.unary((claims, body) =>
+        this.microContent.getResult(claims, body),
+      ),
+      ListMicroContentAttempts: this.unary((claims, body) =>
+        this.microContent.listAttempts(claims, body),
+      ),
     };
   }
 
