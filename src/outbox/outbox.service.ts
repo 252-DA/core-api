@@ -85,7 +85,8 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
         const queue =
           event.event_type === 'CONTENT_GENERATION_REQUESTED'
             ? this.contentGenerationQueue
-            : event.event_type === ANSWER_GRADING_REQUESTED
+            : event.event_type === ANSWER_GRADING_REQUESTED ||
+              event.event_type === 'MICRO_CONTENT_GRADING_REQUESTED'
               ? this.answerGradingQueue
               : event.event_type === ESSAY_GRADING_REQUESTED
                 ? this.essayGradingQueue

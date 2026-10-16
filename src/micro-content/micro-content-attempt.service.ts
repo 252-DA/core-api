@@ -226,8 +226,9 @@ export class MicroContentAttemptService {
         },
       });
 
+      const createdPendingAnswerIds: string[] = [];
       for (const g of gradedList) {
-        await tx.micro_content_answers.create({
+        const createdAns = await tx.micro_content_answers.create({
           data: {
             attempt_id: createdAttempt.attempt_id,
             question_id: g.questionId,
@@ -236,6 +237,25 @@ export class MicroContentAttemptService {
             is_correct: g.isCorrect,
             grading_status: g.gradingStatus,
             grading_input: g.gradingInput as Prisma.InputJsonValue,
+          },
+        });
+        if (g.pending) {
+          createdPendingAnswerIds.push(createdAns.answer_id);
+        }
+      }
+
+      if (hasPending && createdPendingAnswerIds.length > 0) {
+        await tx.outbox_events.create({
+          data: {
+            event_type: 'MICRO_CONTENT_GRADING_REQUESTED',
+            aggregate_type: 'micro_content_attempt',
+            aggregate_id: createdAttempt.attempt_id,
+            payload: {
+              attempt_id: createdAttempt.attempt_id,
+              course_id: item.course_id,
+              micro_content_id: item.micro_content_id,
+              answer_ids: createdPendingAnswerIds,
+            },
           },
         });
       }
