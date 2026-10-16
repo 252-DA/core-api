@@ -4,11 +4,12 @@ import { AuthModule } from '../auth/auth.module';
 import { DocumentModule } from '../document/document.module';
 import { MicroContentService } from './micro-content.service';
 import { MicroContentVideoService } from './micro-content-video.service';
+import { MicroContentAttemptService } from './micro-content-attempt.service';
 
 @Module({
   imports: [PrismaModule, AuthModule, DocumentModule],
-  providers: [MicroContentService, MicroContentVideoService],
-  exports: [MicroContentService, MicroContentVideoService],
+  providers: [MicroContentService, MicroContentVideoService, MicroContentAttemptService],
+  exports: [MicroContentService, MicroContentVideoService, MicroContentAttemptService],
 })
 export class MicroContentModule {}
 

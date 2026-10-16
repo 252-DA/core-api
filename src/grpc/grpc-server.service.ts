@@ -19,6 +19,7 @@ import { ModelSettingsService } from '../model-settings/model-settings.service';
 import { EssayProcessorService } from '../essay-processor/essay-processor.service';
 import { MicroContentService } from '../micro-content/micro-content.service';
 import { MicroContentVideoService } from '../micro-content/micro-content-video.service';
+import { MicroContentAttemptService } from '../micro-content/micro-content-attempt.service';
 
 type JsonRequest = { json?: string };
 type JsonResponse = { json: string };
@@ -47,6 +48,7 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
     private readonly essayProcessors: EssayProcessorService,
     private readonly microContent: MicroContentService,
     private readonly microContentVideo: MicroContentVideoService,
+    private readonly microContentAttempt: MicroContentAttemptService,
   ) {}
 
   async onModuleInit() {
@@ -250,16 +252,16 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
         this.microContent.requestRender(claims, body),
       ),
       ReportMicroContentProgress: this.unary((claims, body) =>
-        this.microContent.reportProgress(claims, body),
+        this.microContentAttempt.reportProgress(claims, body),
       ),
       SubmitMicroContent: this.unary((claims, body) =>
-        this.microContent.submit(claims, body),
+        this.microContentAttempt.submit(claims, body),
       ),
       GetMicroContentResult: this.unary((claims, body) =>
-        this.microContent.getResult(claims, body),
+        this.microContentAttempt.getResult(claims, body),
       ),
       ListMicroContentAttempts: this.unary((claims, body) =>
-        this.microContent.listAttempts(claims, body),
+        this.microContentAttempt.listAttempts(claims, body),
       ),
     };
   }
