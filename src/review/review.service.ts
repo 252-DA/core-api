@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
+import { normalizeAnswerKey } from '../quiz/question-types';
 
 const DRAFT_STATUSES = [
   'GENERATED_DRAFT',
@@ -34,7 +35,9 @@ export class ReviewService {
               deleted_at: null,
             },
             include: { lessons: true, learning_outcomes: true },
-            orderBy: { created_at: 'asc' },
+            // Cả mẻ card lưu trong một transaction nên trùng created_at;
+            // position giữ thứ tự người viết đặt trong mẻ đó.
+            orderBy: [{ created_at: 'asc' }, { position: 'asc' }],
           }),
       kind === 'card'
         ? Promise.resolve([])
@@ -161,13 +164,31 @@ export class ReviewService {
     data: { question?: string; options?: unknown; correct_answer?: unknown; explanation?: string },
   ) {
     const quiz = await this.getQuizForReview(claims, quizId);
+    const question = (data.question ?? quiz.question).trim();
+    if (!question) throw new BadRequestException('Câu hỏi không được để trống.');
+    // Kiểu câu không đổi khi sửa; đáp án phải đúng dạng của kiểu đó.
+    // Câu điền khuyết đổi lời cũng phải giữ chỗ trống, nên sửa câu hỏi cũng kiểm tra.
+    const key =
+      data.question !== undefined ||
+      data.options !== undefined ||
+      data.correct_answer !== undefined
+        ? normalizeAnswerKey(quiz.type, question, {
+            options: data.options !== undefined ? data.options : quiz.options,
+            correct_answer:
+              data.correct_answer !== undefined ? data.correct_answer : quiz.correct_answer,
+          })
+        : null;
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.quiz_items.update({
         where: { quiz_id: quizId },
         data: {
-          question: data.question,
-          options: data.options as any,
-          correct_answer: data.correct_answer as any,
+          question,
+          ...(key
+            ? {
+                options: (key.options ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+                correct_answer: key.correct_answer as Prisma.InputJsonValue,
+              }
+            : {}),
           explanation: data.explanation,
           status: 'REVIEWING',
           updated_at: new Date(),

@@ -35,6 +35,14 @@ import {
   type ItemOrder,
 } from './quiz-set-exam';
 import { parseBlueprint } from './quiz-blueprint';
+import { gradeAnswer } from './question-types';
+import {
+  answerGradingEvent,
+  GRADING_STATUS,
+  gradingInput,
+  rowAgsStatus,
+  submissionScore,
+} from './answer-grading';
 
 export type QuizSnapshotItem = {
   quiz_id: string;
@@ -599,6 +607,8 @@ export class QuizSetService {
             ags_status: true,
             resource_link_id: true,
             chosen_answer: true,
+            grading_status: true,
+            feedback: true,
           },
           orderBy: { attempted_at: 'asc' },
         })
@@ -736,34 +746,45 @@ export class QuizSetService {
     }
     const perItem = set.items.map((q) => {
       const answer = body.answers.find((a) => a.quizId === q.quiz_id);
+      // Câu bỏ trống (bài kiểm tra hết giờ) tính sai, kể cả tự luận.
+      const grade = answer
+        ? gradeAnswer(q, answer.chosenAnswer)
+        : { score: 0, isCorrect: false, pending: false };
       return {
         quizId: q.quiz_id,
+        type: q.type,
         chosenAnswer: answer?.chosenAnswer,
-        isCorrect:
-          answer !== undefined &&
-          JSON.stringify(answer.chosenAnswer) ===
-            JSON.stringify(q.correct_answer),
+        isCorrect: grade.isCorrect,
+        score: grade.score,
+        pending: grade.pending,
         feedback: q.explanation,
         correctAnswer: q.correct_answer,
       };
     });
     const submissionId = randomUUID();
-    const rows = perItem.map((result) => ({
+    const pendingCount = perItem.filter((r) => r.pending).length;
+    const agsStatus = rowAgsStatus(AGS_STATUS.pending, pendingCount > 0);
+    const rows = perItem.map((result, index) => ({
+      attempt_id: randomUUID(),
       submission_id: submissionId,
       user_id: claims.sub,
       quiz_id: result.quizId,
       course_id: set.course_id,
       resource_link_id: link.resource_link_id,
-      score: result.isCorrect ? 100 : 0,
+      score: result.score,
       chosen_answer: result.chosenAnswer ?? Prisma.JsonNull,
       is_correct: result.isCorrect,
+      grading_status: result.pending ? GRADING_STATUS.pending : GRADING_STATUS.graded,
+      // Tự luận chấm theo snapshot của đề, không theo quiz_items lúc worker chạy.
+      ...(result.pending ? { grading_input: gradingInput(set.items[index]) } : {}),
       feedback: result.feedback,
       attempted_at: attemptedAt,
-      ags_status: AGS_STATUS.pending,
+      ags_status: agsStatus,
     }));
-    if (session) {
-      const sessionId = session.session_id;
-      await this.prisma.$transaction(async (tx) => {
+    const essays = rows.filter((row) => row.grading_status === GRADING_STATUS.pending);
+    const sessionId = session?.session_id;
+    await this.prisma.$transaction(async (tx) => {
+      if (sessionId) {
         // Khoá phiên trước khi ghi bài: hai lần bấm nộp chỉ một lần được nhận.
         const { count } = await tx.quiz_set_sessions.updateMany({
           where: { session_id: sessionId, ended_at: null },
@@ -771,13 +792,21 @@ export class QuizSetService {
         });
         if (count !== 1)
           throw new ForbiddenException('Lượt làm bài này đã được nộp.');
-        await tx.quiz_attempts.createMany({ data: rows });
-      });
-    } else {
-      await this.prisma.quiz_attempts.createMany({ data: rows });
-    }
+      }
+      await tx.quiz_attempts.createMany({ data: rows });
+      if (essays.length) {
+        await tx.outbox_events.create({
+          data: answerGradingEvent({
+            submissionId,
+            courseId: set.course_id,
+            attemptIds: rows.map((row) => row.attempt_id),
+            essayAttemptIds: essays.map((row) => row.attempt_id),
+          }),
+        });
+      }
+    });
     const totalCorrect = perItem.filter((r) => r.isCorrect).length;
-    const score = Math.round((100 * totalCorrect) / perItem.length);
+    const score = submissionScore(perItem.map((r) => r.score));
     // AgsPublisherService gửi lượt nộp tốt nhất, không phải lượt cuối — báo
     // cho người học điểm sẽ nằm trong sổ điểm để làm lại không gây hoang mang.
     const previous = await this.prisma.quiz_attempts.groupBy({
@@ -801,6 +830,7 @@ export class QuizSetService {
       attemptCount: Math.max(previous.length, 1),
       totalCorrect,
       total: perItem.length,
+      pendingCount,
       // Bài kiểm tra chưa đóng: chỉ báo điểm, không lộ câu nào đúng/sai.
       perItem: revealed
         ? perItem.map(({ chosenAnswer: _chosen, ...item }) => item)
@@ -808,7 +838,7 @@ export class QuizSetService {
       revealed,
       revealAt: exam ? (closesAt(set)?.toISOString() ?? null) : null,
       agsPublished: false,
-      agsStatus: AGS_STATUS.pending,
+      agsStatus,
     };
   }
 }

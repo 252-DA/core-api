@@ -103,10 +103,24 @@ describe('ContentGenerationService', () => {
           request_id: request.request_id,
           course_id: courseId,
           type: 'quiz',
-          scope: request.scope,
+          // Thiếu kiểu câu thì core-api ghi rõ mặc định cho worker.
+          scope: { ...request.scope, question_type: 'MCQ_SINGLE' },
         }),
       }),
     });
+  });
+
+  it('rejects an unknown question type before writing anything', async () => {
+    const { service, tx } = setup();
+
+    await expect(
+      service.createRequest(claims, {
+        courseId,
+        type: 'quiz',
+        scope: { target_kind: 'lo', target_code: 'L.O.1.1', question_type: 'ESSAY' },
+      }),
+    ).rejects.toThrow('Kiểu câu hỏi không hợp lệ.');
+    expect(tx.content_generation_requests.create).not.toHaveBeenCalled();
   });
 
   it('lists the newest course requests with an upper-clamped limit', async () => {

@@ -52,7 +52,7 @@ describe('LessonService content access', () => {
         deleted_at: null,
         status: 'PUBLISHED',
       },
-      orderBy: { created_at: 'asc' },
+      orderBy: [{ position: 'asc' }, { created_at: 'asc' }],
     });
   });
 

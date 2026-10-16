@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import type { QuizSnapshotItem } from './quiz-set.service';
+import { shufflesOptions } from './question-types';
 
 export type QuizSetMode = 'practice' | 'exam';
 
@@ -157,7 +158,7 @@ export function itemOrder(
   return order.map((item) => ({
     quiz_id: item.quiz_id,
     options:
-      shuffle && Array.isArray(item.options)
+      shuffle && shufflesOptions(item.type) && Array.isArray(item.options)
         ? shuffled(item.options, rand)
         : item.options,
   }));

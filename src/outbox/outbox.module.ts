@@ -10,6 +10,12 @@ import { OutboxService } from './outbox.service';
     BullModule.registerQueue({
       name: 'content_generation',
     }),
+    BullModule.registerQueue({
+      name: 'answer_grading',
+    }),
+    BullModule.registerQueue({
+      name: 'essay_grading',
+    }),
   ],
   providers: [OutboxService],
   exports: [OutboxService],

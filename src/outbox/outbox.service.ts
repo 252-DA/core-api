@@ -2,6 +2,14 @@ import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  ANSWER_GRADING_QUEUE,
+  ANSWER_GRADING_REQUESTED,
+} from '../quiz/answer-grading';
+import {
+  ESSAY_GRADING_QUEUE,
+  ESSAY_GRADING_REQUESTED,
+} from '../essay-processor/essay-grading';
 
 @Injectable()
 export class OutboxService implements OnModuleInit, OnModuleDestroy {
@@ -13,6 +21,10 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     @InjectQueue('outbox_relay') private readonly outboxRelayQueue: Queue,
     @InjectQueue('content_generation')
     private readonly contentGenerationQueue: Queue,
+    @InjectQueue(ANSWER_GRADING_QUEUE)
+    private readonly answerGradingQueue: Queue,
+    @InjectQueue(ESSAY_GRADING_QUEUE)
+    private readonly essayGradingQueue: Queue,
   ) {}
 
   onModuleInit() {
@@ -68,10 +80,16 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
           payload: event.payload,
         };
 
+        // Hàng đợi riêng cho chấm tự luận: sinh nội dung chạy lâu, người học
+        // không phải chờ sau các yêu cầu sinh quiz của giảng viên.
         const queue =
           event.event_type === 'CONTENT_GENERATION_REQUESTED'
             ? this.contentGenerationQueue
-            : this.outboxRelayQueue;
+            : event.event_type === ANSWER_GRADING_REQUESTED
+              ? this.answerGradingQueue
+              : event.event_type === ESSAY_GRADING_REQUESTED
+                ? this.essayGradingQueue
+                : this.outboxRelayQueue;
 
         await queue.add(event.event_type, payload, {
           attempts: 5,

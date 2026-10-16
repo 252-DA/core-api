@@ -23,13 +23,28 @@ describe('OutboxService', () => {
     const contentGenerationQueue = {
       add: jest.fn().mockResolvedValue({ id: 'generation-job' }),
     };
+    const answerGradingQueue = {
+      add: jest.fn().mockResolvedValue({ id: 'grading-job' }),
+    };
+    const essayGradingQueue = {
+      add: jest.fn().mockResolvedValue({ id: 'essay-job' }),
+    };
     const service = new OutboxService(
       prisma as never,
       relayQueue as never,
       contentGenerationQueue as never,
+      answerGradingQueue as never,
+      essayGradingQueue as never,
     );
 
-    return { service, outboxEvents, relayQueue, contentGenerationQueue };
+    return {
+      service,
+      outboxEvents,
+      relayQueue,
+      contentGenerationQueue,
+      answerGradingQueue,
+      essayGradingQueue,
+    };
   }
 
   it('routes content-generation requests to the content_generation queue', async () => {
@@ -95,5 +110,50 @@ describe('OutboxService', () => {
       expect.any(Object),
     );
     expect(contentGenerationQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('routes answer grading to its own queue', async () => {
+    const event = {
+      event_id: '00000000-0000-0000-0000-000000000006',
+      event_type: 'ANSWER_GRADING_REQUESTED',
+      aggregate_type: 'quiz_submission',
+      aggregate_id: '00000000-0000-0000-0000-000000000007',
+      payload: { attempt_ids: [], essay_attempt_ids: [] },
+      retry_count: 0,
+    };
+    const { service, relayQueue, contentGenerationQueue, answerGradingQueue } =
+      setup([event]);
+
+    await service.pollAndRelay();
+
+    expect(answerGradingQueue.add).toHaveBeenCalledWith(
+      'ANSWER_GRADING_REQUESTED',
+      expect.objectContaining({ event_id: event.event_id }),
+      expect.any(Object),
+    );
+    expect(relayQueue.add).not.toHaveBeenCalled();
+    expect(contentGenerationQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('routes essay grading (Asset Processor) to the essay_grading queue', async () => {
+    const event = {
+      event_id: '00000000-0000-0000-0000-000000000008',
+      event_type: 'ESSAY_GRADING_REQUESTED',
+      aggregate_type: 'essay_submission',
+      aggregate_id: '00000000-0000-0000-0000-000000000009',
+      payload: { essay_submission_id: '00000000-0000-0000-0000-000000000009' },
+      retry_count: 0,
+    };
+    const { service, relayQueue, answerGradingQueue, essayGradingQueue } = setup([event]);
+
+    await service.pollAndRelay();
+
+    expect(essayGradingQueue.add).toHaveBeenCalledWith(
+      'ESSAY_GRADING_REQUESTED',
+      expect.objectContaining({ event_id: event.event_id }),
+      expect.any(Object),
+    );
+    expect(answerGradingQueue.add).not.toHaveBeenCalled();
+    expect(relayQueue.add).not.toHaveBeenCalled();
   });
 });

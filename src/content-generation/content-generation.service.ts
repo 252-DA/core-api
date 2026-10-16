@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
+import { isQuestionType } from '../quiz/question-types';
 
 const DEFAULT_RECENT_LIMIT = 20;
 const MAX_RECENT_LIMIT = 100;
@@ -64,6 +65,14 @@ export class ContentGenerationService {
       'instructor',
       'ta',
     ]);
+
+    if (body.type === 'quiz') {
+      // Mỗi yêu cầu sinh một kiểu câu; thiếu thì là trắc nghiệm một đáp án như trước.
+      const questionType = body.scope.question_type ?? 'MCQ_SINGLE';
+      if (!isQuestionType(questionType))
+        throw new BadRequestException('Kiểu câu hỏi không hợp lệ.');
+      body = { ...body, scope: { ...body.scope, question_type: questionType } };
+    }
 
     if (body.scope.chapter_id) {
       const chapter = await this.prisma.chapters.findFirst({

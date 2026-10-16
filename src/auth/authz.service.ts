@@ -27,4 +27,21 @@ export class AuthzService {
       throw new ForbiddenException('No membership for this course');
     }
   }
+
+  /**
+   * Việc ảnh hưởng mọi khoá học (vd. chọn model AI) chỉ dành cho admin của
+   * LMS. Role đọc từ DB, nơi mỗi lần launch LTI ghi lại, không từ claims.
+   */
+  async assertPlatformAdmin(claims: BffClaims) {
+    if (claims.scope === 'admin') {
+      return;
+    }
+    const user = await this.prisma.lms_user_mappings.findFirst({
+      where: { internal_user_id: claims.sub, deleted_at: null },
+      select: { role: true },
+    });
+    if (user?.role !== 'administrator') {
+      throw new ForbiddenException('Chỉ admin của LMS được làm việc này.');
+    }
+  }
 }

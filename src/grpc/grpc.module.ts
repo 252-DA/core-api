@@ -9,6 +9,8 @@ import { ReviewModule } from '../review/review.module';
 import { QuizModule } from '../quiz/quiz.module';
 import { ContentGenerationModule } from '../content-generation/content-generation.module';
 import { CurriculumModule } from '../curriculum/curriculum.module';
+import { ModelSettingsModule } from '../model-settings/model-settings.module';
+import { EssayProcessorModule } from '../essay-processor/essay-processor.module';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { CurriculumModule } from '../curriculum/curriculum.module';
     QuizModule,
     ContentGenerationModule,
     CurriculumModule,
+    ModelSettingsModule,
+    EssayProcessorModule,
   ],
   providers: [GrpcServerService],
 })
