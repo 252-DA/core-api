@@ -218,6 +218,41 @@ describe('ContentGenerationService', () => {
       ]);
       await expect(create()).rejects.toThrow('slide bài giảng');
     });
+
+    it('tạo nhiều yêu cầu trong một transaction duy nhất và hủy toàn bộ nếu một ô lỗi', async () => {
+      const { service, prisma, tx } = setup();
+      tx.content_generation_requests.create
+        .mockResolvedValueOnce({ request_id: 'r1' })
+        .mockResolvedValueOnce({ request_id: 'r2' });
+
+      const result = await service.createRequest(claims, {
+        courseId,
+        type: 'quiz',
+        scopes: [
+          blueprintScope({ bloom_level: 'remember', count: 2 }),
+          blueprintScope({ bloom_level: 'apply', count: 3 }),
+        ],
+      });
+
+      expect(result).toEqual([{ request_id: 'r1' }, { request_id: 'r2' }]);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(tx.content_generation_requests.create).toHaveBeenCalledTimes(2);
+      expect(tx.outbox_events.create).toHaveBeenCalledTimes(2);
+
+      tx.content_generation_requests.create.mockClear();
+      tx.outbox_events.create.mockClear();
+      await expect(
+        service.createRequest(claims, {
+          courseId,
+          type: 'quiz',
+          scopes: [
+            blueprintScope({ bloom_level: 'remember', count: 2 }),
+            blueprintScope({ bloom_level: 'invalid_bloom', count: 3 }),
+          ],
+        }),
+      ).rejects.toThrow('Bloom');
+      expect(tx.content_generation_requests.create).not.toHaveBeenCalled();
+    });
   });
   describe('dựng đồ thị quan hệ (type = relations)', () => {
     it('lấy mọi tài liệu đã xử lý của chương làm nguồn', async () => {

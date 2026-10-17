@@ -36,9 +36,11 @@ describe('MicroContentService', () => {
         updateMany: jest.fn(),
         create: jest.fn(),
       },
-      $transaction: jest.fn(async (cb) => {
-        return cb(prisma);
-      }),
+      $transaction: jest.fn(
+        async (cb: (tx: unknown) => Promise<unknown>): Promise<unknown> => {
+          return cb(prisma);
+        },
+      ),
     };
 
     const authz = {
@@ -116,8 +118,10 @@ describe('MicroContentService', () => {
 
       const result = await service.get(instructorClaims, microContentId);
 
-      expect(result.questions[0].correctAnswer).toBe('2');
-      expect(result.questions[0].explanation).toBe('Vì 1+1=2');
+      expect(result.questions[0]).toMatchObject({
+        correctAnswer: '2',
+        explanation: 'Vì 1+1=2',
+      });
     });
 
     it('hides correct_answer and explanation for learner', async () => {

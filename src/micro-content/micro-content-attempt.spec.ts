@@ -38,9 +38,11 @@ describe('MicroContentAttemptService', () => {
       outbox_events: {
         create: jest.fn().mockResolvedValue({ id: 'evt-1' }),
       },
-      $transaction: jest.fn(async (cb) => {
-        return cb(prisma);
-      }),
+      $transaction: jest.fn(
+        async (cb: (tx: unknown) => Promise<unknown>): Promise<unknown> => {
+          return cb(prisma);
+        },
+      ),
     };
 
     const authz = {
@@ -75,7 +77,9 @@ describe('MicroContentAttemptService', () => {
         updated_at: fiveSecondsAgo,
       });
 
-      prisma.micro_content_progress.upsert.mockImplementation((args) => args.create);
+      prisma.micro_content_progress.upsert.mockImplementation(
+        (args: { create: unknown }) => args.create,
+      );
 
       // Client tua thẳng tới 90s (sau 5s thực tế)
       const res = await service.reportProgress(learnerClaims, {

@@ -364,4 +364,35 @@ describe('AgsPublisherService', () => {
       scoreGiven: 0,
     });
   });
+
+  it('recoverStuckClaims chỉ thu hồi các dòng POSTING đã quá ngưỡng lease, không phá ngang replica khác', async () => {
+    const { service, updateMany } = setup({ attempts: [] });
+    const now = new Date('2026-08-25T10:05:00.000Z').getTime();
+
+    await service.recoverStuckClaims(now);
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        ags_status: AGS_STATUS.posting,
+        deleted_at: null,
+        OR: [
+          { ags_posted_at: null },
+          { ags_posted_at: { lt: new Date('2026-08-25T10:03:00.000Z') } },
+        ],
+      },
+      data: { ags_status: AGS_STATUS.pending, ags_posted_at: null },
+    });
+  });
+
+  it('bỏ qua vòng đẩy điểm nếu replica khác đã giành batch trước (updateMany count === 0)', async () => {
+    const { service, updateMany, postScore } = setup({
+      attempts: [attempt('a1', 100, '2026-08-25T10:00:00.000Z')],
+    });
+    updateMany.mockResolvedValueOnce({ count: 0 });
+
+    const published = await service.publishPending();
+
+    expect(published).toBe(0);
+    expect(postScore).not.toHaveBeenCalled();
+  });
 });

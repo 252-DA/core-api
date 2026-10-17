@@ -1,4 +1,4 @@
-import { HttpException, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { resolve } from 'path';
@@ -166,7 +166,9 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
         this.review.updateCard(claims, body.cardId, body.content),
       ),
       ApproveQuizItem: this.unary((claims, body) =>
-        this.review.approveQuizItem(claims, body.quizId),
+        Array.isArray(body.quizIds)
+          ? this.review.approveQuizItems(claims, body.quizIds)
+          : this.review.approveQuizItem(claims, body.quizId),
       ),
       RejectQuizItem: this.unary((claims, body) =>
         this.review.rejectQuizItem(claims, body.quizId, body.reason),
@@ -301,7 +303,11 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
     if (!request?.json) {
       return {} as TBody;
     }
-    return JSON.parse(request.json) as TBody;
+    try {
+      return JSON.parse(request.json) as TBody;
+    } catch {
+      throw new BadRequestException('Invalid JSON payload');
+    }
   }
 
   private async claimsFromMetadata(metadata: grpc.Metadata) {

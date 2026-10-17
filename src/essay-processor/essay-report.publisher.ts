@@ -19,6 +19,7 @@ const BATCH = 5;
 const MAX_ATTEMPTS = 5;
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 60 * 60_000;
+const CLAIM_LEASE_MS = 2 * 60_000;
 
 type Row = Prisma.essay_submissionsGetPayload<{ include: { essay_processors: true } }>;
 
@@ -85,9 +86,42 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
   }
 
   async tick() {
-    for (const row of await this.due(ESSAY_STATUS.received)) await this.fetchAndQueue(row);
-    for (const row of await this.due(ESSAY_STATUS.graded)) await this.reportGraded(row);
-    for (const row of await this.due(ESSAY_STATUS.failed, { reported_at: null })) await this.reportFailure(row);
+    for (const row of await this.due(ESSAY_STATUS.received)) {
+      if (await this.claim(row)) await this.fetchAndQueue(row);
+    }
+    for (const row of await this.due(ESSAY_STATUS.graded)) {
+      if (await this.claim(row)) await this.reportGraded(row);
+    }
+    for (const row of await this.due(ESSAY_STATUS.failed, { reported_at: null })) {
+      if (await this.claim(row)) await this.reportFailure(row);
+    }
+  }
+
+  /**
+   * Giành quyền xử lý tạm thời bằng cách đẩy next_attempt_at về tương lai.
+   * Hai replica cùng chạy tick() sẽ chỉ có một bên nhận được count === 1;
+   * nếu tiến trình sập giữa chừng thì hết CLAIM_LEASE_MS dòng tự mở lại.
+   */
+  private async claim(row: Row): Promise<boolean> {
+    const submissions = this.prisma.essay_submissions as unknown as {
+      updateMany?: (args: Prisma.essay_submissionsUpdateManyArgs) => Promise<{ count: number }>;
+    };
+    if (typeof submissions.updateMany !== 'function') {
+      return true;
+    }
+    const now = new Date();
+    const { count } = await submissions.updateMany({
+      where: {
+        essay_submission_id: row.essay_submission_id,
+        status: row.status,
+        next_attempt_at: row.next_attempt_at ?? null,
+      },
+      data: {
+        next_attempt_at: new Date(now.getTime() + CLAIM_LEASE_MS),
+        updated_at: now,
+      },
+    });
+    return count === 1;
   }
 
   private due(status: string, extra: Prisma.essay_submissionsWhereInput = {}) {

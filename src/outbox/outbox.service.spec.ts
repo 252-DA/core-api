@@ -77,6 +77,7 @@ describe('OutboxService', () => {
         payload: event.payload,
       },
       {
+        jobId: event.event_id,
         attempts: 5,
         backoff: { type: 'exponential', delay: 2000 },
       },
@@ -107,7 +108,7 @@ describe('OutboxService', () => {
     expect(relayQueue.add).toHaveBeenCalledWith(
       'LESSON_PUBLISHED',
       expect.objectContaining({ event_id: event.event_id }),
-      expect.any(Object),
+      expect.objectContaining({ jobId: event.event_id }),
     );
     expect(contentGenerationQueue.add).not.toHaveBeenCalled();
   });
@@ -129,7 +130,7 @@ describe('OutboxService', () => {
     expect(answerGradingQueue.add).toHaveBeenCalledWith(
       'ANSWER_GRADING_REQUESTED',
       expect.objectContaining({ event_id: event.event_id }),
-      expect.any(Object),
+      expect.objectContaining({ jobId: event.event_id }),
     );
     expect(relayQueue.add).not.toHaveBeenCalled();
     expect(contentGenerationQueue.add).not.toHaveBeenCalled();
@@ -151,9 +152,69 @@ describe('OutboxService', () => {
     expect(essayGradingQueue.add).toHaveBeenCalledWith(
       'ESSAY_GRADING_REQUESTED',
       expect.objectContaining({ event_id: event.event_id }),
-      expect.any(Object),
+      expect.objectContaining({ jobId: event.event_id }),
     );
     expect(answerGradingQueue.add).not.toHaveBeenCalled();
     expect(relayQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('skips enqueueing when another replica already claimed the batch (count === 0)', async () => {
+    const event = {
+      event_id: '00000000-0000-0000-0000-000000000010',
+      event_type: 'LESSON_PUBLISHED',
+      aggregate_type: 'lesson',
+      aggregate_id: '00000000-0000-0000-0000-000000000011',
+      payload: {},
+      retry_count: 0,
+    };
+    const { service, outboxEvents, relayQueue } = setup([event]);
+    outboxEvents.updateMany.mockResolvedValueOnce({ count: 0 });
+
+    await service.pollAndRelay();
+
+    expect(outboxEvents.updateMany).toHaveBeenCalledWith({
+      where: {
+        event_id: { in: [event.event_id] },
+        status: 'PENDING',
+      },
+      data: { status: 'PROCESSING' },
+    });
+    expect(relayQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('uses FOR UPDATE SKIP LOCKED when $queryRaw is available on the transaction client', async () => {
+    const event = {
+      event_id: '00000000-0000-0000-0000-000000000012',
+      event_type: 'LESSON_PUBLISHED',
+      aggregate_type: 'lesson',
+      aggregate_id: '00000000-0000-0000-0000-000000000013',
+      payload: {},
+      retry_count: 0,
+    };
+    const $queryRaw = jest.fn().mockResolvedValue([{ event_id: event.event_id }]);
+    const outboxEvents = {
+      findMany: jest.fn().mockResolvedValue([event]),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      update: jest.fn().mockResolvedValue({}),
+    };
+    const prisma = {
+      outbox_events: outboxEvents,
+      $transaction: jest.fn(async (cb: (tx: unknown) => Promise<unknown>) =>
+        cb({ outbox_events: outboxEvents, $queryRaw }),
+      ),
+    };
+    const relayQueue = { add: jest.fn().mockResolvedValue({ id: 'job' }) };
+    const service = new OutboxService(
+      prisma as never,
+      relayQueue as never,
+      { add: jest.fn() } as never,
+      { add: jest.fn() } as never,
+      { add: jest.fn() } as never,
+    );
+
+    await service.pollAndRelay();
+
+    expect($queryRaw).toHaveBeenCalledTimes(1);
+    expect(relayQueue.add).toHaveBeenCalledTimes(1);
   });
 });

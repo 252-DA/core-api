@@ -57,6 +57,8 @@ interface BackoffState {
  * Không đi qua `outbox_events`: outbox relay đẩy sang BullMQ cho worker Python,
  * mà worker đó không giữ LTI private key và projector sẽ Err trên event lạ.
  */
+const STUCK_CLAIM_MS = 2 * 60_000;
+
 @Injectable()
 export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AgsPublisherService.name);
@@ -87,13 +89,19 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Tiến trình chết giữa lúc đang đẩy sẽ để lại các dòng kẹt ở POSTING mà
-   * không ai nhặt nữa. Khởi động lại là thời điểm an toàn để thả chúng về hàng đợi.
+   * không ai nhặt nữa. Chỉ thu hồi các dòng đã giữ trạng thái POSTING quá
+   * ngưỡng STUCK_CLAIM_MS để không phá ngang replica khác đang đẩy điểm.
    */
-  private async recoverStuckClaims() {
+  async recoverStuckClaims(now = Date.now()) {
+    const staleBefore = new Date(now - STUCK_CLAIM_MS);
     try {
       const { count } = await this.prisma.quiz_attempts.updateMany({
-        where: { ags_status: AGS_STATUS.posting, deleted_at: null },
-        data: { ags_status: AGS_STATUS.pending },
+        where: {
+          ags_status: AGS_STATUS.posting,
+          deleted_at: null,
+          OR: [{ ags_posted_at: null }, { ags_posted_at: { lt: staleBefore } }],
+        },
+        data: { ags_status: AGS_STATUS.pending, ags_posted_at: null },
       });
       if (count > 0) {
         this.logger.warn(`Thả ${count} attempt kẹt ở POSTING về PENDING`);
@@ -308,10 +316,20 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
         attempts = [...new Map([...attempts, ...complete].map((a) => [a.attempt_id, a])).values()];
       }
 
-      await tx.quiz_attempts.updateMany({
-        where: { attempt_id: { in: attempts.map((a) => a.attempt_id) } },
-        data: { ags_status: AGS_STATUS.posting },
+      const { count } = await tx.quiz_attempts.updateMany({
+        where: {
+          attempt_id: { in: attempts.map((a) => a.attempt_id) },
+          ags_status: AGS_STATUS.pending,
+        },
+        data: {
+          ags_status: AGS_STATUS.posting,
+          ags_posted_at: new Date(now),
+        },
       });
+
+      if (count === 0) {
+        return [];
+      }
 
       return attempts;
     });
@@ -344,7 +362,11 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
       where: { attempt_id: { in: attemptIds } },
       data: {
         ags_status: status,
-        ...(postedAt ? { ags_posted_at: postedAt } : {}),
+        ...(postedAt
+          ? { ags_posted_at: postedAt }
+          : status === AGS_STATUS.pending
+            ? { ags_posted_at: null }
+            : {}),
       },
     });
   }

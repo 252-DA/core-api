@@ -11,6 +11,8 @@ import {
   ESSAY_GRADING_REQUESTED,
 } from '../essay-processor/essay-grading';
 
+const STUCK_PROCESSING_MS = 10 * 60_000;
+
 @Injectable()
 export class OutboxService implements OnModuleInit, OnModuleDestroy {
   private running = true;
@@ -26,7 +28,7 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     @InjectQueue(ESSAY_GRADING_QUEUE)
     private readonly essayGradingQueue: Queue,
     @InjectQueue('micro_content_video')
-    private readonly microContentVideoQueue: Queue,
+    private readonly microContentVideoQueue?: Queue,
   ) {}
 
   onModuleInit() {
@@ -54,6 +56,39 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
 
   async pollAndRelay() {
     const events = await this.prisma.$transaction(async (tx) => {
+      const staleBefore = new Date(Date.now() - STUCK_PROCESSING_MS);
+      const rawClient = tx as unknown as {
+        $queryRaw?: (
+          strings: TemplateStringsArray,
+          ...values: unknown[]
+        ) => Promise<Array<{ event_id: string }>>;
+      };
+
+      if (typeof rawClient.$queryRaw === 'function') {
+        const locked = await rawClient.$queryRaw`
+          SELECT event_id
+          FROM outbox_events
+          WHERE status = 'PENDING'
+             OR (status = 'PROCESSING' AND occurred_at < ${staleBefore})
+          ORDER BY occurred_at ASC
+          LIMIT 10
+          FOR UPDATE SKIP LOCKED
+        `;
+        if (locked.length === 0) {
+          return [];
+        }
+        const ids = locked.map((row) => row.event_id);
+        const pendingEvents = await tx.outbox_events.findMany({
+          where: { event_id: { in: ids } },
+          orderBy: { occurred_at: 'asc' },
+        });
+        const { count } = await tx.outbox_events.updateMany({
+          where: { event_id: { in: ids } },
+          data: { status: 'PROCESSING' },
+        });
+        return count > 0 ? pendingEvents : [];
+      }
+
       const pendingEvents = await tx.outbox_events.findMany({
         where: { status: 'PENDING' },
         orderBy: { occurred_at: 'asc' },
@@ -64,10 +99,17 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
         return [];
       }
 
-      await tx.outbox_events.updateMany({
-        where: { event_id: { in: pendingEvents.map((event) => event.event_id) } },
+      const { count } = await tx.outbox_events.updateMany({
+        where: {
+          event_id: { in: pendingEvents.map((event) => event.event_id) },
+          status: 'PENDING',
+        },
         data: { status: 'PROCESSING' },
       });
+
+      if (count === 0) {
+        return [];
+      }
 
       return pendingEvents;
     });
@@ -92,12 +134,14 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
               ? this.answerGradingQueue
               : event.event_type === ESSAY_GRADING_REQUESTED
                 ? this.essayGradingQueue
-                : event.event_type === 'MICRO_CONTENT_SCRIPT_REQUESTED' ||
-                  event.event_type === 'MICRO_CONTENT_RENDER_REQUESTED'
+                : (event.event_type === 'MICRO_CONTENT_SCRIPT_REQUESTED' ||
+                    event.event_type === 'MICRO_CONTENT_RENDER_REQUESTED') &&
+                  this.microContentVideoQueue
                   ? this.microContentVideoQueue
                   : this.outboxRelayQueue;
 
         await queue.add(event.event_type, payload, {
+          jobId: event.event_id,
           attempts: 5,
           backoff: { type: 'exponential', delay: 2000 },
         });

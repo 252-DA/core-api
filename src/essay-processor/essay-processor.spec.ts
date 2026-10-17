@@ -277,4 +277,32 @@ describe('EssayReportPublisherService', () => {
     );
     expect(prisma.essay_submissions.update.mock.calls[0][0].data).toMatchObject({ reported_at: expect.any(Date) });
   });
+
+  it('tick bỏ qua bài nộp nếu replica khác đã giành lease trước (updateMany count === 0)', async () => {
+    const { publisher, prisma, storage, client } = setup();
+    const dueRow = row({ status: 'RECEIVED', next_attempt_at: null });
+    prisma.essay_submissions.findMany
+      .mockResolvedValueOnce([dueRow])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    (prisma.essay_submissions as Record<string, unknown>).updateMany = jest
+      .fn()
+      .mockResolvedValue({ count: 0 });
+
+    await publisher.tick();
+
+    expect((prisma.essay_submissions as Record<string, jest.Mock>).updateMany).toHaveBeenCalledWith({
+      where: {
+        essay_submission_id: ESSAY,
+        status: 'RECEIVED',
+        next_attempt_at: null,
+      },
+      data: {
+        next_attempt_at: expect.any(Date),
+        updated_at: expect.any(Date),
+      },
+    });
+    expect(client.downloadAsset).not.toHaveBeenCalled();
+    expect(storage.putObject).not.toHaveBeenCalled();
+  });
 });

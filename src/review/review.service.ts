@@ -120,6 +120,10 @@ export class ReviewService {
 
   async approveQuizItem(claims: BffClaims, quizId: string) {
     const quiz = await this.getQuizForReview(claims, quizId);
+    normalizeAnswerKey(quiz.type, quiz.question, {
+      options: quiz.options,
+      correct_answer: quiz.correct_answer,
+    });
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.quiz_items.update({
         where: { quiz_id: quizId },
@@ -135,6 +139,56 @@ export class ReviewService {
         },
       });
       return updated;
+    });
+  }
+
+  async approveQuizItems(claims: BffClaims, quizIds: string[]) {
+    if (
+      !Array.isArray(quizIds) ||
+      !quizIds.length ||
+      quizIds.length > 100 ||
+      !quizIds.every((id) => typeof id === 'string' && id.trim().length > 0)
+    ) {
+      throw new BadRequestException('Danh sách câu hỏi không hợp lệ.');
+    }
+    const uniqueIds = [...new Set(quizIds)];
+    const quizzes = await this.prisma.quiz_items.findMany({
+      where: { quiz_id: { in: uniqueIds }, deleted_at: null },
+    });
+    if (quizzes.length !== uniqueIds.length) {
+      throw new NotFoundException('Có câu hỏi không tồn tại.');
+    }
+    const courseIds = [...new Set(quizzes.map((q) => q.course_id))];
+    for (const courseId of courseIds) {
+      await this.authz.assertCourseAccess(claims, courseId, [
+        'instructor',
+        'ta',
+      ]);
+    }
+    for (const quiz of quizzes) {
+      normalizeAnswerKey(quiz.type, quiz.question, {
+        options: quiz.options,
+        correct_answer: quiz.correct_answer,
+      });
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      for (const quiz of quizzes) {
+        await tx.quiz_items.update({
+          where: { quiz_id: quiz.quiz_id },
+          data: { status: 'APPROVED', updated_at: now },
+        });
+        await tx.review_audit_logs.create({
+          data: {
+            action: 'APPROVE_QUIZ',
+            entity_type: 'quiz_item',
+            entity_id: quiz.quiz_id,
+            performed_by: claims.sub,
+            raw_changes: { before: quiz.status, after: 'APPROVED' },
+          },
+        });
+      }
+      return { approved: quizzes.length };
     });
   }
 

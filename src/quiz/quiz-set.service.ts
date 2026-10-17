@@ -12,9 +12,9 @@ import type { BffClaims } from '../auth/bff-claims';
 import { CanvasApiClient } from '../canvas/canvas-api.client';
 import { CanvasCourseService } from '../canvas/canvas-course.service';
 import {
-  classifyModule,
-  resolveChapterCode,
-} from '../document/canvas-placement';
+  loadCanvasQuizContext,
+  loadQuizBuilderContext,
+} from './quiz-set-context';
 import { AGS_STATUS } from '../ags/ags-status';
 import { AgsPublisherService } from '../ags/ags-publisher.service';
 import {
@@ -88,111 +88,14 @@ export class QuizSetService {
     body: { courseId: string; moduleId: string; chapterId?: string },
   ) {
     await this.access(claims, body.courseId, ['instructor', 'ta']);
-    if (!/^\d+$/.test(body.moduleId || ''))
-      throw new BadRequestException('Thiếu module Canvas.');
-    const [modules, chapters, sessions] = await Promise.all([
-      this.canvas.listModules(
-        await this.canvasCourses.contextId(body.courseId),
-      ),
-      this.prisma.chapters.findMany({
-        where: { course_id: body.courseId, deleted_at: null },
-        orderBy: { sort_order: 'asc' },
-        include: { chapter_los: { include: { learning_outcomes: true } } },
-      }),
-      this.prisma.course_sessions.findMany({
-        where: { course_id: body.courseId },
-        include: { chapters: true },
-      }),
-    ]);
-    const module = modules.find((item) => String(item.id) === body.moduleId);
-    if (!module)
-      throw new NotFoundException('Module không thuộc khóa Canvas hiện tại.');
-    const ref = classifyModule(module.name).chapterRef;
-    const code =
-      ref &&
-      resolveChapterCode(
-        ref,
-        sessions.map((s) => ({
-          session_no: s.session_no,
-          chapter_code: s.chapters?.code ?? null,
-        })),
-        new Set(chapters.map((c) => c.code)),
-      );
-    const chapter = body.chapterId
-      ? chapters.find((c) => c.chapter_id === body.chapterId)
-      : chapters.find((c) => c.code === code);
-    if (body.chapterId && !chapter)
-      throw new BadRequestException('Chương không thuộc khóa học.');
-    const learningOutcomes = (chapter?.chapter_los ?? [])
-      .map((l) => l.learning_outcomes)
-      .filter((l) => !l.deleted_at)
-      .sort((a, b) =>
-        a.code.localeCompare(b.code, undefined, { numeric: true }),
-      );
-    const [quizItems, documents] = chapter
-      ? await Promise.all([
-          this.prisma.quiz_items.findMany({
-            where: {
-              course_id: body.courseId,
-              lo_id: { in: learningOutcomes.map((l) => l.lo_id) },
-              deleted_at: null,
-            },
-            include: { learning_outcomes: { select: { code: true } } },
-            orderBy: { created_at: 'desc' },
-            take: 200,
-          }),
-          this.prisma.documents.findMany({
-            where: {
-              course_id: body.courseId,
-              chapter_code: chapter.code,
-              role: 'lecture',
-              deleted_at: null,
-            },
-            select: { document_id: true, title: true, status: true },
-          }),
-        ])
-      : [[], []];
-    // Dùng lại được mọi đề của khóa: đề giữa kỳ nhiều chương thường được thêm
-    // vào một module riêng, không khớp chương nào. Đề của chương đang mở lên đầu.
-    const sets = await this.prisma.quiz_sets.findMany({
-      where: { course_id: body.courseId, deleted_at: null },
-      orderBy: { created_at: 'desc' },
-      take: 50,
-    });
-    const chapterCode = new Map(chapters.map((c) => [c.chapter_id, c.code]));
-    const covers = (set: { chapter_ids: string[] }) =>
-      Boolean(chapter && set.chapter_ids.includes(chapter.chapter_id));
-    return {
-      module: { id: String(module.id), name: module.name },
-      chapters: chapters.map(({ chapter_id, code, title }) => ({
-        chapter_id,
-        code,
-        title,
-      })),
-      chapter: chapter
-        ? {
-            chapter_id: chapter.chapter_id,
-            code: chapter.code,
-            title: chapter.title,
-          }
-        : null,
-      learningOutcomes,
-      quizItems,
-      documents,
-      quizSets: [...sets.filter(covers), ...sets.filter((s) => !covers(s))].map(
-        (set) => ({
-          quiz_set_id: set.quiz_set_id,
-          title: set.title,
-          created_at: set.created_at,
-          questionCount: (set.items as unknown as QuizSnapshotItem[]).length,
-          settings: settingsView(set),
-          chapterCodes: set.chapter_ids.flatMap((id) => {
-            const code = chapterCode.get(id);
-            return code ? [code] : [];
-          }),
-        }),
-      ),
-    };
+    return loadCanvasQuizContext(
+      {
+        prisma: this.prisma,
+        canvas: this.canvas,
+        canvasCourses: this.canvasCourses,
+      },
+      body,
+    );
   }
 
   /**
@@ -204,73 +107,7 @@ export class QuizSetService {
     body: { courseId: string; loIds?: string[] },
   ) {
     await this.access(claims, body.courseId, ['instructor', 'ta']);
-    const loIds = Array.isArray(body.loIds) ? body.loIds.filter(uuid).slice(0, 200) : [];
-    const [chapters, documents, sets, quizItems] = await Promise.all([
-      this.prisma.chapters.findMany({
-        where: { course_id: body.courseId, deleted_at: null },
-        orderBy: { sort_order: 'asc' },
-        include: { chapter_los: { include: { learning_outcomes: true } } },
-      }),
-      this.prisma.documents.findMany({
-        where: { course_id: body.courseId, deleted_at: null },
-        select: {
-          document_id: true,
-          title: true,
-          role: true,
-          chapter_code: true,
-          status: true,
-          _count: { select: { chunks: { where: { deleted_at: null } } } },
-        },
-        orderBy: [{ chapter_code: 'asc' }, { title: 'asc' }],
-      }),
-      this.prisma.quiz_sets.findMany({
-        where: { course_id: body.courseId, deleted_at: null },
-        orderBy: { created_at: 'desc' },
-        take: 50,
-      }),
-      loIds.length
-        ? this.prisma.quiz_items.findMany({
-            where: { course_id: body.courseId, lo_id: { in: loIds }, deleted_at: null },
-            include: { learning_outcomes: { select: { code: true } } },
-            orderBy: { created_at: 'desc' },
-            take: 500,
-          })
-        : Promise.resolve([]),
-    ]);
-    const chapterCode = new Map(chapters.map((c) => [c.chapter_id, c.code]));
-    return {
-      chapters: chapters.map((c) => ({
-        chapter_id: c.chapter_id,
-        code: c.code,
-        title: c.title,
-        learningOutcomes: c.chapter_los
-          .map((l) => l.learning_outcomes)
-          .filter((lo) => !lo.deleted_at)
-          .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
-          .map((lo) => ({
-            lo_id: lo.lo_id,
-            code: lo.code,
-            statement_vi: lo.statement_vi,
-            bloom_level: lo.bloom_level,
-          })),
-      })),
-      documents: documents.map(({ _count, ...doc }) => ({
-        ...doc,
-        ready: _count.chunks > 0,
-      })),
-      quizItems,
-      quizSets: sets.map((set) => ({
-        quiz_set_id: set.quiz_set_id,
-        title: set.title,
-        created_at: set.created_at,
-        questionCount: (set.items as unknown as QuizSnapshotItem[]).length,
-        settings: settingsView(set),
-        chapterCodes: set.chapter_ids.flatMap((id) => {
-          const code = chapterCode.get(id);
-          return code ? [code] : [];
-        }),
-      })),
-    };
+    return loadQuizBuilderContext(this.prisma, body);
   }
 
   async create(
