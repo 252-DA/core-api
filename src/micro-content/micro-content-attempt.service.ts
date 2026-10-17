@@ -239,7 +239,7 @@ export class MicroContentAttemptService {
             grading_input: g.gradingInput as Prisma.InputJsonValue,
           },
         });
-        if (g.pending) {
+        if (g.pending && createdAns?.answer_id) {
           createdPendingAnswerIds.push(createdAns.answer_id);
         }
       }

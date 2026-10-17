@@ -33,7 +33,10 @@ describe('MicroContentAttemptService', () => {
         findUnique: jest.fn(),
       },
       micro_content_answers: {
-        create: jest.fn(),
+        create: jest.fn().mockImplementation((args) => Promise.resolve({ answer_id: 'ans-1', ...args?.data })),
+      },
+      outbox_events: {
+        create: jest.fn().mockResolvedValue({ id: 'evt-1' }),
       },
       $transaction: jest.fn(async (cb) => {
         return cb(prisma);
