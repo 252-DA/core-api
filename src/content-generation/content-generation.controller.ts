@@ -25,7 +25,7 @@ export class ContentGenerationController {
     @Body()
     body: {
       courseId: string;
-      type: 'card' | 'quiz';
+      type: 'card' | 'quiz' | 'relations';
       scope: Record<string, unknown>;
     },
   ) {

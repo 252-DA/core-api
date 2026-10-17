@@ -20,6 +20,7 @@ import { EssayProcessorService } from '../essay-processor/essay-processor.servic
 import { MicroContentService } from '../micro-content/micro-content.service';
 import { MicroContentVideoService } from '../micro-content/micro-content-video.service';
 import { MicroContentAttemptService } from '../micro-content/micro-content-attempt.service';
+import { ChatService } from '../chat/chat.service';
 
 type JsonRequest = { json?: string };
 type JsonResponse = { json: string };
@@ -49,6 +50,7 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
     private readonly microContent: MicroContentService,
     private readonly microContentVideo: MicroContentVideoService,
     private readonly microContentAttempt: MicroContentAttemptService,
+    private readonly chat: ChatService,
   ) {}
 
   async onModuleInit() {
@@ -263,6 +265,11 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       ListMicroContentAttempts: this.unary((claims, body) =>
         this.microContentAttempt.listAttempts(claims, body),
       ),
+      GetChatSettings: this.unary((claims) => this.chat.getSettings(claims)),
+      SetChatMode: this.unary((claims, body) => this.chat.setMode(claims, body)),
+      RecordChatRun: this.unary((claims, body) => this.chat.recordRun(claims, body)),
+      RateChatRun: this.unary((claims, body) => this.chat.rateRun(claims, body)),
+      GetChatStats: this.unary((claims, body) => this.chat.stats(claims, body)),
     };
   }
 

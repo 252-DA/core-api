@@ -34,6 +34,8 @@ model lms_user_mappings {
 
   @@unique([lms_type, lms_sub], map: "uq_lms_user")
   @@index([lms_type, lms_sub], map: "idx_lms_mapping")
+  chat_runs         chat_runs[]
+  chat_settings     chat_settings[]
 }
 
 model courses {
@@ -71,6 +73,8 @@ model courses {
   micro_contents               micro_contents[]
 
   @@index([lms_id], map: "idx_course_lms")
+  chat_runs         chat_runs[]
+  knowledge_relations knowledge_relations[]
 }
 
 model lms_course_ref {
@@ -364,6 +368,7 @@ model documents {
   chunks            chunks[]
 
   @@index([course_id, status], map: "idx_documents_course_status")
+  knowledge_relations knowledge_relations[]
 }
 
 model chunks {
@@ -384,6 +389,7 @@ model chunks {
 
   @@index([document_id, sort_order], map: "idx_chunks_document")
   @@index([course_id], map: "idx_chunks_course")
+  knowledge_relations knowledge_relations[]
 }
 
 model chunk_lo_mappings {
@@ -924,3 +930,68 @@ model micro_content_answers {
   @@index([attempt_id])
 }
 
+/// Cài đặt chatbot toàn hệ thống (khóa 'retrieval_mode': vector | tools | graph).
+/// Xem migration 20261017120000.
+model chat_settings {
+  key               String            @id @db.VarChar(50)
+  value             String            @db.VarChar(50)
+  updated_by        String            @db.Uuid
+  updated_at        DateTime          @default(now()) @db.Timestamptz(6)
+  lms_user_mappings lms_user_mappings @relation(fields: [updated_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+}
+
+/// Mỗi lượt hỏi đáp của chatbot; nguồn số liệu so sánh ba chế độ.
+model chat_runs {
+  run_id            String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id         String?            @db.Uuid
+  user_id           String?            @db.Uuid
+  mode              String             @db.VarChar(10)
+  source            String             @default("web") @db.VarChar(10)
+  question_type     String?            @db.VarChar(20)
+  question          String
+  answer            String?
+  citations         Json               @default("[]")
+  tool_calls        Json               @default("[]")
+  model             String?            @db.VarChar(100)
+  steps             Int                @default(0)
+  input_tokens      Int?
+  output_tokens     Int?
+  latency_ms        Int?
+  status            String             @default("OK") @db.VarChar(10)
+  error             String?
+  rating            Int?               @db.SmallInt
+  created_at        DateTime           @default(now()) @db.Timestamptz(6)
+  courses           courses?           @relation(fields: [course_id], references: [course_id], onDelete: SetNull, onUpdate: NoAction)
+  lms_user_mappings lms_user_mappings? @relation(fields: [user_id], references: [internal_user_id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([mode, created_at])
+  @@index([course_id, created_at])
+}
+
+/// Cạnh của đồ thị quan hệ giữa các ý, trích từ chunk và kiểm bằng trích dẫn
+/// nguyên văn. *_key là nhãn đã bỏ dấu, hạ chữ thường.
+model knowledge_relations {
+  relation_id        String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id          String    @db.Uuid
+  document_id        String    @db.Uuid
+  chunk_id           String    @db.Uuid
+  source_label       String    @db.VarChar(255)
+  source_key         String    @db.VarChar(255)
+  relation_type      String    @db.VarChar(20)
+  target_label       String    @db.VarChar(255)
+  target_key         String    @db.VarChar(255)
+  evidence_quote     String
+  page_number        Int?
+  extraction_version String    @db.VarChar(30)
+  model              String?   @db.VarChar(100)
+  created_at         DateTime  @default(now()) @db.Timestamptz(6)
+  courses            courses   @relation(fields: [course_id], references: [course_id], onDelete: Cascade, onUpdate: NoAction)
+  documents          documents @relation(fields: [document_id], references: [document_id], onDelete: Cascade, onUpdate: NoAction)
+  chunks             chunks    @relation(fields: [chunk_id], references: [chunk_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([chunk_id, source_key, relation_type, target_key, extraction_version])
+  @@index([course_id, source_key])
+  @@index([course_id, target_key])
+  @@index([chunk_id])
+  @@index([document_id])
+}

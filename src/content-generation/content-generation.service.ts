@@ -33,8 +33,8 @@ export class ContentGenerationService {
   ) {
     await this.authz.assertCourseAccess(claims, courseId, ['instructor', 'ta']);
 
-    if (type !== undefined && type !== 'card' && type !== 'quiz') {
-      throw new BadRequestException('type must be one of: card, quiz');
+    if (type !== undefined && type !== 'card' && type !== 'quiz' && type !== 'relations') {
+      throw new BadRequestException('type must be one of: card, quiz, relations');
     }
 
     const parsedLimit =
@@ -57,7 +57,7 @@ export class ContentGenerationService {
     claims: BffClaims,
     body: {
       courseId: string;
-      type: 'card' | 'quiz';
+      type: 'card' | 'quiz' | 'relations';
       scope: Record<string, unknown>;
     },
   ) {
@@ -65,6 +65,14 @@ export class ContentGenerationService {
       'instructor',
       'ta',
     ]);
+
+    if (body.type === 'relations') {
+      // Dựng đồ thị quan hệ cho chatbot: không có LO/Bloom, chỉ có tài liệu nguồn.
+      return this.enqueue(claims, {
+        ...body,
+        scope: await this.relationsScope(body.courseId, body.scope),
+      });
+    }
 
     if (body.type === 'quiz') {
       // Mỗi yêu cầu sinh một kiểu câu; thiếu thì là trắc nghiệm một đáp án như trước.
@@ -91,6 +99,18 @@ export class ContentGenerationService {
       body = { ...body, scope: await this.explicitSourceScope(body.courseId, body.type, body.scope) };
     }
 
+    return this.enqueue(claims, body);
+  }
+
+  /** Ghi yêu cầu và sự kiện outbox trong một giao dịch; worker nhận qua hàng đợi content_generation. */
+  private async enqueue(
+    claims: BffClaims,
+    body: {
+      courseId: string;
+      type: 'card' | 'quiz' | 'relations';
+      scope: Record<string, unknown>;
+    },
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const request = await tx.content_generation_requests.create({
         data: {
@@ -118,6 +138,59 @@ export class ContentGenerationService {
 
       return request;
     });
+  }
+
+  /**
+   * Phạm vi dựng đồ thị quan hệ: một chương (lấy mọi tài liệu đã xử lý của
+   * chương) hoặc một danh sách tài liệu. Cả hai đều phải thuộc khóa học và đã
+   * có chunk, vì quan hệ được trích từ chunk.
+   */
+  private async relationsScope(courseId: string, scope: Record<string, unknown>) {
+    let documentIds: string[];
+    let chapterId: string | undefined;
+    if (scope.chapter_id) {
+      const chapter = await this.prisma.chapters.findFirst({
+        where: { chapter_id: String(scope.chapter_id), course_id: courseId, deleted_at: null },
+        select: { chapter_id: true, code: true },
+      });
+      if (!chapter) throw new BadRequestException('Chương không thuộc khóa học.');
+      chapterId = chapter.chapter_id;
+      const documents = await this.prisma.documents.findMany({
+        where: {
+          course_id: courseId,
+          chapter_code: chapter.code,
+          deleted_at: null,
+          chunks: { some: { deleted_at: null } },
+        },
+        select: { document_id: true },
+      });
+      documentIds = documents.map((d) => d.document_id);
+      if (!documentIds.length)
+        throw new BadRequestException('Chương chưa có tài liệu đã xử lý. Hãy đồng bộ tài liệu và gắn đúng chương trước.');
+    } else {
+      const raw = scope.source_document_ids;
+      const ids = Array.isArray(raw) ? [...new Set(raw)] : [];
+      if (!ids.length || !ids.every(uuid))
+        throw new BadRequestException('Chọn một chương hoặc ít nhất một tài liệu.');
+      const documents = await this.prisma.documents.findMany({
+        where: {
+          document_id: { in: ids },
+          course_id: courseId,
+          deleted_at: null,
+          chunks: { some: { deleted_at: null } },
+        },
+        select: { document_id: true },
+      });
+      if (documents.length !== ids.length)
+        throw new BadRequestException('Có tài liệu chưa xử lý xong hoặc không thuộc khóa học.');
+      documentIds = ids as string[];
+    }
+    if (documentIds.length > MAX_SOURCE_DOCUMENTS)
+      throw new BadRequestException(`Tối đa ${MAX_SOURCE_DOCUMENTS} tài liệu mỗi lần dựng.`);
+    return {
+      ...(chapterId ? { chapter_id: chapterId } : {}),
+      source_document_ids: documentIds,
+    };
   }
 
   /**
