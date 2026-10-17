@@ -25,6 +25,8 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
     private readonly answerGradingQueue: Queue,
     @InjectQueue(ESSAY_GRADING_QUEUE)
     private readonly essayGradingQueue: Queue,
+    @InjectQueue('micro_content_video')
+    private readonly microContentVideoQueue: Queue,
   ) {}
 
   onModuleInit() {
@@ -90,7 +92,10 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
               ? this.answerGradingQueue
               : event.event_type === ESSAY_GRADING_REQUESTED
                 ? this.essayGradingQueue
-                : this.outboxRelayQueue;
+                : event.event_type === 'MICRO_CONTENT_SCRIPT_REQUESTED' ||
+                  event.event_type === 'MICRO_CONTENT_RENDER_REQUESTED'
+                  ? this.microContentVideoQueue
+                  : this.outboxRelayQueue;
 
         await queue.add(event.event_type, payload, {
           attempts: 5,

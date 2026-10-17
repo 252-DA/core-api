@@ -16,6 +16,9 @@ import { OutboxService } from './outbox.service';
     BullModule.registerQueue({
       name: 'essay_grading',
     }),
+    BullModule.registerQueue({
+      name: 'micro_content_video',
+    }),
   ],
   providers: [OutboxService],
   exports: [OutboxService],

@@ -408,16 +408,159 @@ export class MicroContentService {
     return { url: '' };
   }
 
-  async requestScript(claims: BffClaims, _body: unknown) {
+  async requestScript(
+    claims: BffClaims,
+    input: { microContentId: string; prompt: string; options?: any },
+  ) {
+    const item = await this.prisma.micro_contents.findFirst({
+      where: { micro_content_id: input.microContentId, deleted_at: null },
+    });
+    if (!item) {
+      throw new NotFoundException('Micro content not found');
+    }
+    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+
+    const promptText = input.prompt?.trim();
+    if (!promptText) {
+      throw new BadRequestException('Vui lòng nhập chủ đề / yêu cầu để sinh kịch bản.');
+    }
+
+    const defaultScript = {
+      language: input.options?.language || 'vi',
+      topic: promptText,
+      scenes: [
+        {
+          title: 'Giới thiệu & Mục tiêu',
+          bullets: [
+            `Chủ đề: ${promptText}`,
+            'Các khái niệm quan trọng cần ghi nhớ',
+          ],
+          narration: `Chào các bạn. Hôm nay chúng ta sẽ cùng tìm hiểu về ${promptText}. Đây là một nội dung rất quan trọng.`,
+        },
+        {
+          title: 'Nguyên lý & Nội dung chính',
+          bullets: [
+            'Bản chất và cấu trúc hoạt động',
+            'Các bước thực hiện và lưu ý quan trọng',
+          ],
+          narration: `Chúng ta cùng đi sâu vào cơ chế và các nguyên tắc cốt lõi của ${promptText} để áp dụng hiệu quả.`,
+        },
+        {
+          title: 'Tổng kết & Củng cố',
+          bullets: [
+            'Ôn tập các điểm cốt lõi',
+            'Sẵn sàng làm các câu hỏi củng cố bên dưới',
+          ],
+          narration: 'Tóm lại, hãy ghi nhớ những kiến thức chính vừa học và hoàn thành bài tập củng cố ngay sau đây.',
+        },
+      ],
+    };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.micro_contents.update({
+        where: { micro_content_id: input.microContentId },
+        data: {
+          video_source: 'AI',
+          ai_prompt: promptText,
+          ai_options: (input.options as any) || null,
+          ai_script: defaultScript as any,
+          updated_at: new Date(),
+        },
+      });
+
+      await tx.outbox_events.create({
+        data: {
+          event_type: 'MICRO_CONTENT_SCRIPT_REQUESTED',
+          aggregate_type: 'micro_content',
+          aggregate_id: input.microContentId,
+          payload: {
+            micro_content_id: input.microContentId,
+            course_id: item.course_id,
+            prompt: promptText,
+            options: input.options || null,
+          },
+        },
+      });
+    });
+
+    return {
+      success: true,
+      script: defaultScript,
+    };
+  }
+
+  async saveScript(
+    claims: BffClaims,
+    input: { microContentId: string; script: any },
+  ) {
+    const item = await this.prisma.micro_contents.findFirst({
+      where: { micro_content_id: input.microContentId, deleted_at: null },
+    });
+    if (!item) {
+      throw new NotFoundException('Micro content not found');
+    }
+    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+
+    if (!input.script || !Array.isArray(input.script.scenes) || input.script.scenes.length === 0) {
+      throw new BadRequestException('Kịch bản phải chứa ít nhất 1 cảnh.');
+    }
+
+    if (input.script.scenes.length > 12) {
+      throw new BadRequestException('Kịch bản tối đa 12 cảnh.');
+    }
+
+    await this.prisma.micro_contents.update({
+      where: { micro_content_id: input.microContentId },
+      data: {
+        ai_script: input.script as any,
+        updated_at: new Date(),
+      },
+    });
+
     return { success: true };
   }
 
-  async saveScript(claims: BffClaims, _body: unknown) {
-    return { success: true };
-  }
+  async requestRender(claims: BffClaims, input: { microContentId: string }) {
+    const item = await this.prisma.micro_contents.findFirst({
+      where: { micro_content_id: input.microContentId, deleted_at: null },
+    });
+    if (!item) {
+      throw new NotFoundException('Micro content not found');
+    }
+    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
 
-  async requestRender(claims: BffClaims, _body: { microContentId: string }) {
-    return { success: true };
+    if (!item.ai_script) {
+      throw new BadRequestException('Chưa có kịch bản để render video.');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.micro_contents.update({
+        where: { micro_content_id: input.microContentId },
+        data: {
+          video_status: 'PROCESSING',
+          video_error: null,
+          updated_at: new Date(),
+        },
+      });
+
+      await tx.outbox_events.create({
+        data: {
+          event_type: 'MICRO_CONTENT_RENDER_REQUESTED',
+          aggregate_type: 'micro_content',
+          aggregate_id: input.microContentId,
+          payload: {
+            micro_content_id: input.microContentId,
+            course_id: item.course_id,
+            script: item.ai_script,
+          },
+        },
+      });
+    });
+
+    return {
+      success: true,
+      videoStatus: 'PROCESSING',
+    };
   }
 
   async reportProgress(claims: BffClaims, _body: unknown) {
