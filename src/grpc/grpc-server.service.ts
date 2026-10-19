@@ -272,6 +272,15 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       RecordChatRun: this.unary((claims, body) => this.chat.recordRun(claims, body)),
       RateChatRun: this.unary((claims, body) => this.chat.rateRun(claims, body)),
       GetChatStats: this.unary((claims, body) => this.chat.stats(claims, body)),
+      ListChatConversations: this.unary((claims, body) =>
+        this.chat.listConversations(claims, body),
+      ),
+      GetChatConversation: this.unary((claims, body) =>
+        this.chat.getConversation(claims, body),
+      ),
+      DeleteChatConversation: this.unary((claims, body) =>
+        this.chat.deleteConversation(claims, body),
+      ),
     };
   }
 

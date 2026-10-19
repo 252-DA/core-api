@@ -34,8 +34,9 @@ model lms_user_mappings {
 
   @@unique([lms_type, lms_sub], map: "uq_lms_user")
   @@index([lms_type, lms_sub], map: "idx_lms_mapping")
-  chat_runs         chat_runs[]
-  chat_settings     chat_settings[]
+  chat_runs          chat_runs[]
+  chat_settings      chat_settings[]
+  chat_conversations chat_conversations[]
 }
 
 model courses {
@@ -73,7 +74,8 @@ model courses {
   micro_contents               micro_contents[]
 
   @@index([lms_id], map: "idx_course_lms")
-  chat_runs         chat_runs[]
+  chat_runs           chat_runs[]
+  chat_conversations  chat_conversations[]
   knowledge_relations knowledge_relations[]
 }
 
@@ -940,32 +942,51 @@ model chat_settings {
   lms_user_mappings lms_user_mappings @relation(fields: [updated_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
 }
 
+/// Một cuộc trò chuyện nhiều lượt của người học trong một khóa học.
+model chat_conversations {
+  conversation_id   String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id         String            @db.Uuid
+  user_id           String            @db.Uuid
+  title             String            @db.VarChar(200)
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime          @default(now()) @db.Timestamptz(6)
+  deleted_at        DateTime?         @db.Timestamptz(6)
+  courses           courses           @relation(fields: [course_id], references: [course_id], onDelete: Cascade, onUpdate: NoAction)
+  lms_user_mappings lms_user_mappings @relation(fields: [user_id], references: [internal_user_id], onDelete: Cascade, onUpdate: NoAction)
+  chat_runs         chat_runs[]
+
+  @@index([user_id, course_id, updated_at(sort: Desc)], map: "chat_conversations_user_course_updated_idx")
+}
+
 /// Mỗi lượt hỏi đáp của chatbot; nguồn số liệu so sánh ba chế độ.
 model chat_runs {
-  run_id            String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  course_id         String?            @db.Uuid
-  user_id           String?            @db.Uuid
-  mode              String             @db.VarChar(10)
-  source            String             @default("web") @db.VarChar(10)
-  question_type     String?            @db.VarChar(20)
-  question          String
-  answer            String?
-  citations         Json               @default("[]")
-  tool_calls        Json               @default("[]")
-  model             String?            @db.VarChar(100)
-  steps             Int                @default(0)
-  input_tokens      Int?
-  output_tokens     Int?
-  latency_ms        Int?
-  status            String             @default("OK") @db.VarChar(10)
-  error             String?
-  rating            Int?               @db.SmallInt
-  created_at        DateTime           @default(now()) @db.Timestamptz(6)
-  courses           courses?           @relation(fields: [course_id], references: [course_id], onDelete: SetNull, onUpdate: NoAction)
-  lms_user_mappings lms_user_mappings? @relation(fields: [user_id], references: [internal_user_id], onDelete: SetNull, onUpdate: NoAction)
+  run_id             String              @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  conversation_id    String?             @db.Uuid
+  course_id          String?             @db.Uuid
+  user_id            String?             @db.Uuid
+  mode               String              @db.VarChar(10)
+  source             String              @default("web") @db.VarChar(10)
+  question_type      String?             @db.VarChar(20)
+  question           String
+  answer             String?
+  citations          Json                @default("[]")
+  tool_calls         Json                @default("[]")
+  model              String?             @db.VarChar(100)
+  steps              Int                 @default(0)
+  input_tokens       Int?
+  output_tokens      Int?
+  latency_ms         Int?
+  status             String              @default("OK") @db.VarChar(10)
+  error              String?
+  rating             Int?                @db.SmallInt
+  created_at         DateTime            @default(now()) @db.Timestamptz(6)
+  chat_conversations chat_conversations? @relation(fields: [conversation_id], references: [conversation_id], onDelete: SetNull, onUpdate: NoAction)
+  courses            courses?            @relation(fields: [course_id], references: [course_id], onDelete: SetNull, onUpdate: NoAction)
+  lms_user_mappings  lms_user_mappings?  @relation(fields: [user_id], references: [internal_user_id], onDelete: SetNull, onUpdate: NoAction)
 
   @@index([mode, created_at])
   @@index([course_id, created_at])
+  @@index([conversation_id, created_at], map: "chat_runs_conversation_created_at_idx")
 }
 
 /// Cạnh của đồ thị quan hệ giữa các ý, trích từ chunk và kiểm bằng trích dẫn

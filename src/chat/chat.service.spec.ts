@@ -20,6 +20,13 @@ function setup() {
   };
   const prisma = {
     chat_settings: { findUnique: jest.fn().mockResolvedValue(null) },
+    chat_conversations: {
+      create: jest.fn().mockResolvedValue({ conversation_id: 'conv-1' }),
+      findUnique: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      update: jest.fn().mockResolvedValue({}),
+    },
     chat_runs: {
       create: jest.fn().mockResolvedValue({ run_id: 'run-1' }),
       findUnique: jest.fn(),
@@ -102,14 +109,39 @@ describe('ChatService', () => {
       model: 'gemini', steps: 2, inputTokens: 100.4, outputTokens: 30, latencyMs: 1200,
     };
 
-    it('lưu đủ trường, làm tròn số, gắn người hỏi và nguồn web', async () => {
+    it('tự tạo hội thoại mới khi chưa có conversationId và lưu đủ trường', async () => {
       const { service, prisma, authz } = setup();
-      await expect(service.recordRun(claims, body)).resolves.toEqual({ run_id: 'run-1' });
+      await expect(service.recordRun(claims, body)).resolves.toEqual({
+        run_id: 'run-1',
+        conversation_id: 'conv-1',
+      });
       expect(authz.assertCourseAccess).toHaveBeenCalledWith(claims, COURSE);
+      expect(prisma.chat_conversations.create).toHaveBeenCalledWith({
+        data: { course_id: COURSE, user_id: claims.sub, title: 'Deadlock là gì?' },
+        select: { conversation_id: true },
+      });
       expect(prisma.chat_runs.create.mock.calls[0][0].data).toMatchObject({
+        conversation_id: 'conv-1',
         course_id: COURSE, user_id: claims.sub, mode: 'tools', source: 'web',
         steps: 2, input_tokens: 100, output_tokens: 30, latency_ms: 1200, status: 'OK',
       });
+    });
+
+    it('kiểm quyền sở hữu khi ghi vào hội thoại có sẵn', async () => {
+      const { service, prisma } = setup();
+      prisma.chat_conversations.findUnique.mockResolvedValue({
+        conversation_id: 'conv-other',
+        course_id: COURSE,
+        user_id: 'other-user',
+        title: 'Khác',
+        created_at: new Date(),
+        updated_at: new Date(),
+        deleted_at: null,
+      });
+      await expect(
+        service.recordRun(claims, { ...body, conversationId: 'conv-other' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.chat_runs.create).not.toHaveBeenCalled();
     });
 
     it('ghi lượt lỗi với trạng thái ERROR', async () => {
@@ -135,6 +167,59 @@ describe('ChatService', () => {
       authz.assertCourseAccess.mockRejectedValue(new ForbiddenException());
       await expect(service.recordRun(claims, body)).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.chat_runs.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('hội thoại nhiều lượt', () => {
+    it('đọc hội thoại gần nhất và cắt lịch sử tối đa 3 cặp OK (6 tin nhắn)', async () => {
+      const { service, prisma } = setup();
+      prisma.chat_conversations.findFirst.mockResolvedValue({
+        conversation_id: 'conv-1',
+        course_id: COURSE,
+        user_id: claims.sub,
+        title: 'Hỏi về deadlock',
+        created_at: new Date(),
+        updated_at: new Date(),
+        deleted_at: null,
+      });
+      prisma.chat_runs.findMany.mockResolvedValue([
+        { run_id: 'r1', question: 'Q1', answer: 'A1', status: 'OK' },
+        { run_id: 'r2', question: 'Q2', answer: null, status: 'ERROR' },
+        { run_id: 'r3', question: 'Q3', answer: 'A3', status: 'OK' },
+        { run_id: 'r4', question: 'Q4', answer: 'A4', status: 'OK' },
+        { run_id: 'r5', question: 'Q5', answer: 'A5', status: 'OK' },
+      ]);
+      const res = await service.getConversation(claims, { courseId: COURSE });
+      expect(res.conversation?.conversation_id).toBe('conv-1');
+      expect(res.turns).toHaveLength(5);
+      expect(res.history).toEqual([
+        { role: 'user', content: 'Q3' },
+        { role: 'assistant', content: 'A3' },
+        { role: 'user', content: 'Q4' },
+        { role: 'assistant', content: 'A4' },
+        { role: 'user', content: 'Q5' },
+        { role: 'assistant', content: 'A5' },
+      ]);
+    });
+
+    it('chặn đọc hoặc xóa hội thoại của người khác hoặc khóa khác', async () => {
+      const { service, prisma } = setup();
+      prisma.chat_conversations.findUnique.mockResolvedValue({
+        conversation_id: 'conv-2',
+        course_id: COURSE,
+        user_id: 'someone-else',
+        title: 'Bí mật',
+        created_at: new Date(),
+        updated_at: new Date(),
+        deleted_at: null,
+      });
+      await expect(
+        service.getConversation(claims, { courseId: COURSE, conversationId: 'conv-2' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.deleteConversation(claims, { courseId: COURSE, conversationId: 'conv-2' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.chat_conversations.update).not.toHaveBeenCalled();
     });
   });
 

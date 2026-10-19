@@ -18,6 +18,11 @@ const MODE_KEY = 'retrieval_mode';
 const RECENT_RUNS = 20;
 const ANSWER_PREVIEW_CHARS = 600;
 const MAX_TEXT_CHARS = 20_000;
+const MAX_CONVERSATIONS = 30;
+const MAX_CONVERSATION_TURNS = 100;
+/** TutorRequest.history ở ai-tutor nhận tối đa 10 tin nhắn; giữ 3 cặp (6 tin nhắn) như BFF. */
+const MAX_HISTORY_RUNS = 3;
+const TITLE_CHARS = 80;
 
 export function isChatMode(value: unknown): value is ChatMode {
   return typeof value === 'string' && (CHAT_MODES as readonly string[]).includes(value);
@@ -38,6 +43,11 @@ const asText = (value: unknown, max = MAX_TEXT_CHARS): string | null =>
   typeof value === 'string' && value.length ? value.slice(0, max) : null;
 const asJsonArray = (value: unknown): Prisma.InputJsonValue =>
   (Array.isArray(value) ? value : []) as Prisma.InputJsonValue;
+
+function conversationTitle(question: string): string {
+  const clean = question.replace(/\s+/g, ' ').trim();
+  return clean.length > TITLE_CHARS ? `${clean.slice(0, TITLE_CHARS)}…` : clean || 'Cuộc trò chuyện';
+}
 
 @Injectable()
 export class ChatService {
@@ -88,6 +98,28 @@ export class ChatService {
     return this.getSettings(claims);
   }
 
+  private async assertOwnConversation(claims: BffClaims, courseId: string, conversationId: string) {
+    const conv = await this.prisma.chat_conversations.findUnique({
+      where: { conversation_id: conversationId },
+      select: {
+        conversation_id: true,
+        course_id: true,
+        user_id: true,
+        title: true,
+        created_at: true,
+        updated_at: true,
+        deleted_at: true,
+      },
+    });
+    if (!conv || conv.deleted_at !== null) {
+      throw new NotFoundException('Không tìm thấy cuộc trò chuyện.');
+    }
+    if (conv.user_id !== claims.sub || conv.course_id !== courseId) {
+      throw new ForbiddenException('Không có quyền truy cập cuộc trò chuyện này.');
+    }
+    return conv;
+  }
+
   /** BFF ghi một dòng sau mỗi lượt hỏi đáp (kể cả lượt lỗi), để so sánh ba chế độ bằng số đo. */
   async recordRun(claims: BffClaims, body: Record<string, unknown>) {
     const courseId = asText(body.courseId, 64);
@@ -97,8 +129,28 @@ export class ChatService {
     const question = asText(body.question);
     if (!question) throw new BadRequestException('Thiếu câu hỏi.');
 
+    let conversationId = asText(body.conversationId, 64);
+    if (conversationId) {
+      await this.assertOwnConversation(claims, courseId, conversationId);
+      await this.prisma.chat_conversations.update({
+        where: { conversation_id: conversationId },
+        data: { updated_at: new Date() },
+      });
+    } else {
+      const created = await this.prisma.chat_conversations.create({
+        data: {
+          course_id: courseId,
+          user_id: claims.sub,
+          title: conversationTitle(question),
+        },
+        select: { conversation_id: true },
+      });
+      conversationId = created.conversation_id;
+    }
+
     const run = await this.prisma.chat_runs.create({
       data: {
+        conversation_id: conversationId,
         course_id: courseId,
         user_id: claims.sub,
         mode: body.mode,
@@ -117,7 +169,123 @@ export class ChatService {
       },
       select: { run_id: true },
     });
-    return { run_id: run.run_id };
+    return { run_id: run.run_id, conversation_id: conversationId };
+  }
+
+  /** Danh sách hội thoại gần nhất của chính người học trong một khóa học. */
+  async listConversations(claims: BffClaims, body: { courseId?: unknown }) {
+    const courseId = asText(body.courseId, 64);
+    if (!courseId) throw new BadRequestException('Thiếu courseId.');
+    await this.authz.assertCourseAccess(claims, courseId);
+
+    const conversations = await this.prisma.chat_conversations.findMany({
+      where: { course_id: courseId, user_id: claims.sub, deleted_at: null },
+      orderBy: { updated_at: 'desc' },
+      take: MAX_CONVERSATIONS,
+      select: {
+        conversation_id: true,
+        title: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+    return { conversations };
+  }
+
+  /**
+   * Đọc một hội thoại cụ thể (nếu truyền conversationId) hoặc hội thoại gần nhất
+   * của chính người học trong khóa học, kèm lịch sử tối đa 3 cặp hỏi/đáp gần nhất.
+   */
+  async getConversation(
+    claims: BffClaims,
+    body: { courseId?: unknown; conversationId?: unknown },
+  ) {
+    const courseId = asText(body.courseId, 64);
+    if (!courseId) throw new BadRequestException('Thiếu courseId.');
+    await this.authz.assertCourseAccess(claims, courseId);
+
+    const requestedId = asText(body.conversationId, 64);
+    const conv = requestedId
+      ? await this.assertOwnConversation(claims, courseId, requestedId)
+      : await this.prisma.chat_conversations.findFirst({
+          where: { course_id: courseId, user_id: claims.sub, deleted_at: null },
+          orderBy: { updated_at: 'desc' },
+          select: {
+            conversation_id: true,
+            course_id: true,
+            user_id: true,
+            title: true,
+            created_at: true,
+            updated_at: true,
+            deleted_at: true,
+          },
+        });
+
+    if (!conv) {
+      return { conversation: null, turns: [], history: [] };
+    }
+
+    const runs = await this.prisma.chat_runs.findMany({
+      where: {
+        conversation_id: conv.conversation_id,
+        user_id: claims.sub,
+        course_id: courseId,
+      },
+      orderBy: { created_at: 'asc' },
+      take: MAX_CONVERSATION_TURNS,
+      select: {
+        run_id: true,
+        created_at: true,
+        mode: true,
+        question: true,
+        answer: true,
+        citations: true,
+        tool_calls: true,
+        steps: true,
+        latency_ms: true,
+        status: true,
+        error: true,
+        rating: true,
+      },
+    });
+
+    const history = runs
+      .filter((r) => r.status === 'OK' && typeof r.answer === 'string' && r.answer.trim().length > 0)
+      .slice(-MAX_HISTORY_RUNS)
+      .flatMap((r) => [
+        { role: 'user' as const, content: r.question },
+        { role: 'assistant' as const, content: r.answer as string },
+      ]);
+
+    return {
+      conversation: {
+        conversation_id: conv.conversation_id,
+        title: conv.title,
+        created_at: conv.created_at,
+        updated_at: conv.updated_at,
+      },
+      turns: runs,
+      history,
+    };
+  }
+
+  /** Xóa mềm hội thoại của chính người học; giữ nguyên các dòng chat_runs cho thống kê. */
+  async deleteConversation(
+    claims: BffClaims,
+    body: { courseId?: unknown; conversationId?: unknown },
+  ) {
+    const courseId = asText(body.courseId, 64);
+    if (!courseId) throw new BadRequestException('Thiếu courseId.');
+    const conversationId = asText(body.conversationId, 64);
+    if (!conversationId) throw new BadRequestException('Thiếu conversationId.');
+    await this.authz.assertCourseAccess(claims, courseId);
+    await this.assertOwnConversation(claims, courseId, conversationId);
+
+    await this.prisma.chat_conversations.update({
+      where: { conversation_id: conversationId },
+      data: { deleted_at: new Date() },
+    });
+    return { conversation_id: conversationId, deleted: true };
   }
 
   /** Người dùng chấm 👍 (1) / 👎 (-1) cho câu trả lời của chính mình; 0 để bỏ chấm. */
