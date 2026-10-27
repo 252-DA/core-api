@@ -12,6 +12,7 @@ import { CurriculumModule } from '../curriculum/curriculum.module';
 import { ModelSettingsModule } from '../model-settings/model-settings.module';
 import { EssayProcessorModule } from '../essay-processor/essay-processor.module';
 import { MicroContentModule } from '../micro-content/micro-content.module';
+import { VideoAssetModule } from '../video-asset/video-asset.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { MicroContentModule } from '../micro-content/micro-content.module';
     ModelSettingsModule,
     EssayProcessorModule,
     MicroContentModule,
+    VideoAssetModule,
   ],
   providers: [GrpcServerService],
 })

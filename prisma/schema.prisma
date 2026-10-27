@@ -31,6 +31,7 @@ model lms_user_mappings {
   micro_contents             micro_contents[]
   micro_content_progress     micro_content_progress[]
   micro_content_attempts     micro_content_attempts[]
+  video_assets               video_assets[]
 
   @@unique([lms_type, lms_sub], map: "uq_lms_user")
   @@index([lms_type, lms_sub], map: "idx_lms_mapping")
@@ -69,6 +70,7 @@ model courses {
   curriculum_imports           curriculum_imports[]
   essay_processors             essay_processors[]
   micro_contents               micro_contents[]
+  video_assets                 video_assets[]
 
   @@index([lms_id], map: "idx_course_lms")
 }
@@ -853,13 +855,16 @@ model micro_contents {
   created_at             DateTime?                 @default(now()) @db.Timestamptz(6)
   updated_at             DateTime?                 @default(now()) @db.Timestamptz(6)
   deleted_at             DateTime?                 @db.Timestamptz(6)
+  video_asset_id         String?                   @db.Uuid
   courses                courses                   @relation(fields: [course_id], references: [course_id], onDelete: Cascade, onUpdate: NoAction)
   creator                lms_user_mappings         @relation(fields: [created_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+  video_asset            video_assets?             @relation(fields: [video_asset_id], references: [asset_id], onDelete: SetNull, onUpdate: NoAction)
   questions              micro_content_questions[]
   progress               micro_content_progress[]
   attempts               micro_content_attempts[]
 
   @@index([course_id, deleted_at])
+  @@index([video_asset_id])
 }
 
 model micro_content_questions {
@@ -924,3 +929,45 @@ model micro_content_answers {
   @@index([attempt_id])
 }
 
+
+model video_assets {
+  asset_id          String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  title             String            @db.VarChar(255)
+  description       String?           @db.Text
+  tags              String[]          @default([])
+  source_type       String            @default("USER_UPLOAD") @db.VarChar(20)
+  status            String            @default("PROCESSING") @db.VarChar(20)
+  transcript_status String            @default("PENDING") @db.VarChar(20)
+  error_message     String?           @db.Text
+  object_key        String?           @db.VarChar(512)
+  thumbnail_key     String?           @db.VarChar(512)
+  vtt_subtitles_key String?           @db.VarChar(512)
+  file_hash         String?           @db.VarChar(64)
+  duration_ms       Int?
+  size_bytes        BigInt?
+  mime_type         String            @default("video/mp4") @db.VarChar(100)
+  visibility        String            @default("COURSE") @db.VarChar(20)
+  share_slug        String?           @unique @db.VarChar(64)
+  allow_fork        Boolean           @default(true)
+  ai_prompt         String?           @db.Text
+  ai_options        Json?
+  ai_script         Json?
+  transcript_text   String?           @db.Text
+  owner_id          String            @db.Uuid
+  course_id         String?           @db.Uuid
+  forked_from_id    String?           @db.Uuid
+  usage_count       Int               @default(0)
+  created_at        DateTime?         @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?         @default(now()) @db.Timestamptz(6)
+  deleted_at        DateTime?         @db.Timestamptz(6)
+
+  creator        lms_user_mappings @relation(fields: [owner_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+  courses        courses?          @relation(fields: [course_id], references: [course_id], onDelete: SetNull, onUpdate: NoAction)
+  forked_from    video_assets?     @relation("VideoAssetForks", fields: [forked_from_id], references: [asset_id], onDelete: SetNull, onUpdate: NoAction)
+  forks          video_assets[]    @relation("VideoAssetForks")
+  micro_contents micro_contents[]
+
+  @@index([owner_id, visibility, status])
+  @@index([course_id, visibility, status])
+  @@index([file_hash])
+}

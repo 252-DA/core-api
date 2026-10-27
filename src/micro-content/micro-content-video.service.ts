@@ -40,9 +40,25 @@ export class MicroContentVideoService {
     const objectKey = `micro-content/${item.course_id}/${item.micro_content_id}/video${ext}`;
     const uploadUrl = await this.storage.createPresignedUploadUrl(objectKey, 15 * 60);
 
+    const asset = await this.prisma.video_assets.create({
+      data: {
+        title: input.filename || item.title,
+        course_id: item.course_id,
+        owner_id: claims.sub,
+        object_key: objectKey,
+        visibility: 'COURSE',
+        source_type: 'USER_UPLOAD',
+        status: 'UPLOADING',
+        transcript_status: 'PENDING',
+        mime_type: input.mimeType || (ext === '.webm' ? 'video/webm' : 'video/mp4'),
+        usage_count: 1,
+      },
+    });
+
     await this.prisma.micro_contents.update({
       where: { micro_content_id: item.micro_content_id },
       data: {
+        video_asset_id: asset.asset_id,
         video_source: 'UPLOAD',
         video_status: 'UPLOADING',
         video_object_key: objectKey,
@@ -84,6 +100,19 @@ export class MicroContentVideoService {
         updated_at: new Date(),
       },
     });
+
+    if (item.video_asset_id) {
+      await this.prisma.video_assets.update({
+        where: { asset_id: item.video_asset_id },
+        data: {
+          status: 'READY',
+          size_bytes: input.sizeBytes ? BigInt(input.sizeBytes) : undefined,
+          duration_ms: input.durationMs && input.durationMs > 0 ? input.durationMs : 60000,
+          error_message: null,
+          updated_at: new Date(),
+        },
+      });
+    }
 
     return {
       id: updated.micro_content_id,
