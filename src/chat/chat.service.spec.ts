@@ -35,6 +35,7 @@ function setup() {
       findMany: jest.fn().mockResolvedValue([]),
     },
     documents: { findMany: jest.fn().mockResolvedValue([]) },
+    chunks: { findMany: jest.fn().mockResolvedValue([]) },
     chapters: { findMany: jest.fn().mockResolvedValue([]) },
     content_generation_requests: { findMany: jest.fn().mockResolvedValue([]) },
     $queryRaw: jest.fn().mockResolvedValue([]),
@@ -291,6 +292,48 @@ describe('ChatService', () => {
       ]);
       expect(out.graph?.total_relations).toBe(12);
       expect(out.recent[0].answer?.length).toBe(601);
+    });
+  });
+
+  describe('phạm vi tài liệu cho màn hình chat', () => {
+    it('liệt kê tài liệu đã có chunk với tiêu đề mục không trùng, theo thứ tự đọc', async () => {
+      const { service, prisma, authz } = setup();
+      prisma.documents.findMany.mockResolvedValue([
+        { document_id: 'd1', title: 'Ch2_LSH_lecture.pdf', mime_type: 'application/pdf' },
+        { document_id: 'd2', title: 'Chua_index.pdf', mime_type: 'application/pdf' },
+      ]);
+      prisma.chunks.findMany.mockResolvedValue([
+        { document_id: 'd1', heading_path: ['Finding Similar Items'] },
+        { document_id: 'd1', heading_path: ['Finding Similar Items', 'Min-Hashing'] },
+        { document_id: 'd1', heading_path: ['Finding Similar Items', 'Min-Hashing'] },
+        { document_id: 'd1', heading_path: [] },
+      ]);
+
+      const out = await service.catalog(claims, { courseId: COURSE });
+
+      // Học viên của khóa đọc được: không giới hạn vai trò.
+      expect(authz.assertCourseAccess).toHaveBeenCalledWith(claims, COURSE);
+      expect(prisma.documents.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            course_id: COURSE,
+            OR: [{ lms_published: null }, { lms_published: true }],
+          }),
+        }),
+      );
+      expect(out.documents).toEqual([
+        {
+          document_id: 'd1',
+          title: 'Ch2_LSH_lecture.pdf',
+          mime_type: 'application/pdf',
+          headings: ['Finding Similar Items', 'Min-Hashing'],
+        },
+      ]);
+    });
+
+    it('thiếu courseId thì báo lỗi', async () => {
+      const { service } = setup();
+      await expect(service.catalog(claims, {})).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });

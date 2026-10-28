@@ -23,6 +23,7 @@ const MAX_CONVERSATION_TURNS = 100;
 /** TutorRequest.history ở ai-tutor nhận tối đa 10 tin nhắn; giữ 3 cặp (6 tin nhắn) như BFF. */
 const MAX_HISTORY_RUNS = 3;
 const TITLE_CHARS = 80;
+const MAX_CATALOG_HEADINGS = 30;
 
 export function isChatMode(value: unknown): value is ChatMode {
   return typeof value === 'string' && (CHAT_MODES as readonly string[]).includes(value);
@@ -286,6 +287,49 @@ export class ChatService {
       data: { deleted_at: new Date() },
     });
     return { conversation_id: conversationId, deleted: true };
+  }
+
+  /**
+   * Phạm vi tài liệu của trợ giảng AI trong một khóa: tài liệu đã có chunk và tiêu
+   * đề mục theo thứ tự đọc, để màn hình chat gợi ý câu hỏi trả lời được từ tài liệu.
+   * Thành viên nào của khóa cũng đọc được: tên tài liệu vốn đã hiện trong trích dẫn.
+   * Tài liệu bị ẩn trên LMS (lms_published = false) không được liệt kê.
+   */
+  async catalog(claims: BffClaims, body: { courseId?: unknown }) {
+    const courseId = asText(body.courseId, 64);
+    if (!courseId) throw new BadRequestException('Thiếu courseId.');
+    await this.authz.assertCourseAccess(claims, courseId);
+
+    const documents = await this.prisma.documents.findMany({
+      where: {
+        course_id: courseId,
+        deleted_at: null,
+        OR: [{ lms_published: null }, { lms_published: true }],
+      },
+      orderBy: { created_at: 'asc' },
+      select: { document_id: true, title: true, mime_type: true },
+    });
+    const ids = documents.map((d) => d.document_id);
+    const chunks = ids.length
+      ? await this.prisma.chunks.findMany({
+          where: { document_id: { in: ids }, deleted_at: null },
+          orderBy: [{ document_id: 'asc' }, { sort_order: 'asc' }],
+          select: { document_id: true, heading_path: true },
+        })
+      : [];
+
+    const headings = new Map<string, string[]>();
+    for (const chunk of chunks) {
+      const list = headings.get(chunk.document_id) ?? [];
+      const title = chunk.heading_path[chunk.heading_path.length - 1]?.trim();
+      if (title && !list.includes(title) && list.length < MAX_CATALOG_HEADINGS) list.push(title);
+      headings.set(chunk.document_id, list);
+    }
+    return {
+      documents: documents
+        .filter((d) => headings.has(d.document_id))
+        .map((d) => ({ ...d, headings: headings.get(d.document_id) ?? [] })),
+    };
   }
 
   /** Người dùng chấm 👍 (1) / 👎 (-1) cho câu trả lời của chính mình; 0 để bỏ chấm. */

@@ -281,6 +281,7 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       DeleteChatConversation: this.unary((claims, body) =>
         this.chat.deleteConversation(claims, body),
       ),
+      GetChatCatalog: this.unary((claims, body) => this.chat.catalog(claims, body)),
     };
   }
 
