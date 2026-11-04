@@ -55,8 +55,15 @@ export class DocumentService {
       'observer',
     ]);
 
+    // Observer cũng vào được đây nhưng không phải nhân sự: tài liệu đã ẩn trên LMS
+    // (lms_published = false) chỉ giảng viên/trợ giảng/admin được liệt kê.
+    const staff = await this.authz.isCourseStaff(claims, courseId);
     const docs = await this.prisma.documents.findMany({
-      where: { course_id: courseId, deleted_at: null },
+      where: {
+        course_id: courseId,
+        deleted_at: null,
+        ...(staff ? {} : { OR: [{ lms_published: null }, { lms_published: true }] }),
+      },
       take: limit,
       skip: offset,
       orderBy: { created_at: 'desc' },
@@ -78,12 +85,25 @@ export class DocumentService {
     }));
   }
 
+  /**
+   * Mọi đường đọc nội dung/file một tài liệu (chunks, file-url) đều qua đây.
+   * Tài liệu bị ẩn trên LMS (lms_published = false; null = không đến từ Canvas
+   * nên vẫn hiện) chỉ nhân sự của khoá đọc được; người khác nhận 404 như thể
+   * tài liệu không tồn tại. Kiểm tra trước assertCourseAccess để người ngoài
+   * khoá cũng không phân biệt được tài liệu ẩn với tài liệu không có.
+   */
   async getDocument(claims: BffClaims, documentId: string) {
     const doc = await this.prisma.documents.findFirst({
       where: { document_id: documentId, deleted_at: null },
       include: { _count: { select: { chunks: true } } },
     });
     if (!doc) {
+      throw new NotFoundException(`Document not found: ${documentId}`);
+    }
+    if (
+      doc.lms_published === false &&
+      !(await this.authz.isCourseStaff(claims, doc.course_id))
+    ) {
       throw new NotFoundException(`Document not found: ${documentId}`);
     }
     await this.authz.assertCourseAccess(claims, doc.course_id);
