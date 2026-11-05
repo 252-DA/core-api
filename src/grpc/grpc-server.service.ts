@@ -22,6 +22,7 @@ import { MicroContentVideoService } from '../micro-content/micro-content-video.s
 import { MicroContentAttemptService } from '../micro-content/micro-content-attempt.service';
 import { ChatService } from '../chat/chat.service';
 import { LearnerModelService } from '../learning-agent/learner-model.service';
+import { VideoAssetService } from '../video-asset/video-asset.service';
 
 type JsonRequest = { json?: string };
 type JsonResponse = { json: string };
@@ -53,6 +54,7 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
     private readonly microContentAttempt: MicroContentAttemptService,
     private readonly chat: ChatService,
     private readonly learnerModel: LearnerModelService,
+    private readonly videoAsset: VideoAssetService,
   ) {}
 
   async onModuleInit() {
@@ -267,6 +269,36 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       ),
       GetMicroContentResult: this.unary((claims, body) =>
         this.microContentAttempt.getResult(claims, body),
+      ),
+      ListVideoAssets: this.unary((claims, body) =>
+        this.videoAsset.listAssets(claims, body),
+      ),
+      GetVideoAsset: this.unary((claims, body) =>
+        this.videoAsset.getAsset(claims, body),
+      ),
+      CreateVideoAssetUpload: this.unary((claims, body) =>
+        this.videoAsset.createUpload(claims, body),
+      ),
+      ConfirmVideoAssetUpload: this.unary((claims, body) =>
+        this.videoAsset.confirmUpload(claims, body),
+      ),
+      GetVideoAssetUrl: this.unary((claims, body) =>
+        this.videoAsset.getStreamUrl(claims, body),
+      ),
+      UpdateVideoAsset: this.unary((claims, body) =>
+        this.videoAsset.updateAsset(claims, body),
+      ),
+      DeleteVideoAsset: this.unary((claims, body) =>
+        this.videoAsset.deleteAsset(claims, body),
+      ),
+      ForkVideoAsset: this.unary((claims, body) =>
+        this.videoAsset.forkAsset(claims, body),
+      ),
+      CheckVideoAssetHash: this.unary((claims, body) =>
+        this.videoAsset.checkHash(claims, body),
+      ),
+      AttachVideoAssetToMicroContent: this.unary((claims, body) =>
+        this.videoAsset.attachToMicroContent(claims, body),
       ),
       ListMicroContentAttempts: this.unary((claims, body) =>
         this.microContentAttempt.listAttempts(claims, body),

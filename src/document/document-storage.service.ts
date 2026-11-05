@@ -9,7 +9,7 @@ function createClient() {
 
   return new MinioClient({
     endPoint: host,
-    port: rawPort ? Number(rawPort) : 9000,
+    port: rawPort ? Number(rawPort) : (process.env.MINIO__SECURE === 'true' ? 443 : 9000),
     useSSL: process.env.MINIO__SECURE === 'true',
     accessKey: process.env.MINIO__ACCESS_KEY || 'minioadmin',
     secretKey: process.env.MINIO__SECRET_KEY || 'minioadmin',
@@ -76,7 +76,7 @@ export class DocumentStorageService {
     } catch (error: unknown) {
       // Another request may have created the bucket between the check and create.
       if (!(await this.client.bucketExists(DEFAULT_BUCKET))) {
-        throw error;
+        console.warn('[storage] bucket check notice:', (error as Error)?.message || error);
       }
     }
   }

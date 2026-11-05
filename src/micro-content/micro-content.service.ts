@@ -76,6 +76,7 @@ export class MicroContentService {
       courseId: item.course_id,
       title: item.title,
       description: item.description,
+      videoAssetId: item.video_asset_id,
       videoSource: item.video_source,
       videoStatus: item.video_status,
       videoDurationMs: item.video_duration_ms,
@@ -137,7 +138,8 @@ export class MicroContentService {
         courseId: item.course_id,
         title: item.title,
         description: item.description,
-        videoSource: item.video_source,
+        videoAssetId: item.video_asset_id,
+      videoSource: item.video_source,
         videoStatus: item.video_status,
         videoDurationMs: item.video_duration_ms,
         passingScore: item.passing_score,
@@ -155,6 +157,7 @@ export class MicroContentService {
       courseId: item.course_id,
       title: item.title,
       description: item.description,
+      videoAssetId: item.video_asset_id,
       videoSource: item.video_source,
       videoStatus: item.video_status,
       videoDurationMs: item.video_duration_ms,
@@ -534,9 +537,52 @@ export class MicroContentService {
     }
 
     await this.prisma.$transaction(async (tx) => {
+      let assetId = item.video_asset_id;
+      if (assetId) {
+        const existing = await tx.video_assets.findUnique({
+          where: { asset_id: assetId },
+        });
+        if (existing && existing.source_type === 'AI_STUDIO') {
+          await tx.video_assets.update({
+            where: { asset_id: assetId },
+            data: {
+              title: item.title,
+              status: 'PROCESSING',
+              error_message: null,
+              ai_prompt: item.ai_prompt,
+              ai_script: item.ai_script as any,
+              updated_at: new Date(),
+            },
+          });
+        } else {
+          assetId = null;
+        }
+      }
+
+      if (!assetId) {
+        const createdAsset = await tx.video_assets.create({
+          data: {
+            title: item.title,
+            description: item.description,
+            course_id: item.course_id,
+            owner_id: claims.sub,
+            visibility: 'COURSE',
+            source_type: 'AI_STUDIO',
+            status: 'PROCESSING',
+            transcript_status: 'PENDING',
+            ai_prompt: item.ai_prompt,
+            ai_script: item.ai_script as any,
+            usage_count: 1,
+          },
+        });
+        assetId = createdAsset.asset_id;
+      }
+
       await tx.micro_contents.update({
         where: { micro_content_id: input.microContentId },
         data: {
+          video_asset_id: assetId,
+          video_source: 'AI',
           video_status: 'PROCESSING',
           video_error: null,
           updated_at: new Date(),
@@ -551,6 +597,7 @@ export class MicroContentService {
           payload: {
             micro_content_id: input.microContentId,
             course_id: item.course_id,
+            asset_id: assetId,
             script: item.ai_script,
           },
         },

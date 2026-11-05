@@ -14,6 +14,7 @@ import { EssayProcessorModule } from '../essay-processor/essay-processor.module'
 import { MicroContentModule } from '../micro-content/micro-content.module';
 import { ChatModule } from '../chat/chat.module';
 import { LearningAgentModule } from '../learning-agent/learning-agent.module';
+import { VideoAssetModule } from '../video-asset/video-asset.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { LearningAgentModule } from '../learning-agent/learning-agent.module';
     MicroContentModule,
     ChatModule,
     LearningAgentModule,
+    VideoAssetModule,
   ],
   providers: [GrpcServerService],
 })
