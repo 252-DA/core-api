@@ -21,6 +21,7 @@ import { MicroContentService } from '../micro-content/micro-content.service';
 import { MicroContentVideoService } from '../micro-content/micro-content-video.service';
 import { MicroContentAttemptService } from '../micro-content/micro-content-attempt.service';
 import { ChatService } from '../chat/chat.service';
+import { LearnerModelService } from '../learning-agent/learner-model.service';
 
 type JsonRequest = { json?: string };
 type JsonResponse = { json: string };
@@ -51,6 +52,7 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
     private readonly microContentVideo: MicroContentVideoService,
     private readonly microContentAttempt: MicroContentAttemptService,
     private readonly chat: ChatService,
+    private readonly learnerModel: LearnerModelService,
   ) {}
 
   async onModuleInit() {
@@ -190,6 +192,8 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       ListEssaysForReview: this.unary((claims, body) => this.essayGrading.list(claims, body)),
       GradeEssayAnswer: this.unary((claims, body) => this.essayGrading.grade(claims, body)),
       RetryEssayGrading: this.unary((claims, body) => this.essayGrading.retry(claims, body)),
+      GetLearnerSummary: this.unary((claims, body) => this.learnerModel.summary(claims, body)),
+      GetCourseMastery: this.unary((claims, body) => this.learnerModel.courseMastery(claims, body)),
       CreateContentGenerationRequest: this.unary((claims, body) =>
         this.contentGeneration.createRequest(claims, body),
       ),

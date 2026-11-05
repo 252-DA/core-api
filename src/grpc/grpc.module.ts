@@ -13,6 +13,7 @@ import { ModelSettingsModule } from '../model-settings/model-settings.module';
 import { EssayProcessorModule } from '../essay-processor/essay-processor.module';
 import { MicroContentModule } from '../micro-content/micro-content.module';
 import { ChatModule } from '../chat/chat.module';
+import { LearningAgentModule } from '../learning-agent/learning-agent.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ChatModule } from '../chat/chat.module';
     EssayProcessorModule,
     MicroContentModule,
     ChatModule,
+    LearningAgentModule,
   ],
   providers: [GrpcServerService],
 })
