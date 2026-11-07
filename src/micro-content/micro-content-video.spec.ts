@@ -30,6 +30,10 @@ describe('MicroContentVideoService', () => {
         findFirst: jest.fn(),
         update: jest.fn(),
       },
+      video_assets: {
+        create: jest.fn().mockResolvedValue({ asset_id: 'asset-1' }),
+        update: jest.fn(),
+      },
     };
 
     const authz = {
@@ -84,8 +88,19 @@ describe('MicroContentVideoService', () => {
       expect(prisma.micro_contents.update).toHaveBeenCalledWith({
         where: { micro_content_id: microContentId },
         data: expect.objectContaining({
+          video_asset_id: 'asset-1',
           video_status: 'UPLOADING',
           video_object_key: `micro-content/${courseId}/${microContentId}/video.mp4`,
+        }),
+      });
+      // Video tải lên cho bài cũng vào kho video của khoá học.
+      expect(prisma.video_assets.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          course_id: courseId,
+          owner_id: instructorClaims.sub,
+          visibility: 'COURSE',
+          status: 'UPLOADING',
+          usage_count: 1,
         }),
       });
     });

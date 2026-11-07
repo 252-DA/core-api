@@ -18,6 +18,9 @@ export function serializeVideoAsset(asset: video_assets) {
   };
 }
 
+const VISIBILITIES = ['PRIVATE', 'COURSE', 'PUBLIC'];
+const STAFF_ROLES = ['instructor', 'ta', 'admin'];
+
 @Injectable()
 export class VideoAssetService {
   constructor(
@@ -25,6 +28,34 @@ export class VideoAssetService {
     private readonly authz: AuthzService,
     private readonly storage: DocumentStorageService,
   ) {}
+
+  /**
+   * Ai được xem một video: video công khai, chủ sở hữu, admin nền tảng, hoặc
+   * thành viên khoá học khi video để COURSE. Fork và gắn vào bài học dùng chung
+   * điều kiện này vì cả hai đều cho người gọi phát được file gốc.
+   */
+  private async canView(claims: BffClaims, asset: video_assets): Promise<boolean> {
+    if (asset.visibility === 'PUBLIC' || asset.owner_id === claims.sub || claims.scope === 'admin') {
+      return true;
+    }
+    if (asset.visibility === 'COURSE' && asset.course_id) {
+      try {
+        await this.authz.assertCourseAccess(claims, asset.course_id);
+        return true;
+      } catch (error) {
+        if (error instanceof ForbiddenException) return false;
+        throw error;
+      }
+    }
+    return false;
+  }
+
+  /** Sửa, xoá, xác nhận upload: chủ sở hữu hoặc admin nền tảng. */
+  private assertOwner(claims: BffClaims, asset: video_assets) {
+    if (asset.owner_id !== claims.sub && claims.scope !== 'admin') {
+      throw new ForbiddenException('Chỉ người tạo video mới được thay đổi video này.');
+    }
+  }
 
   /**
    * Kiểm tra mã băm SHA-256 để chống upload trùng lặp file.
@@ -131,9 +162,7 @@ export class VideoAssetService {
     if (!asset) {
       throw new NotFoundException('Video asset not found');
     }
-    if (asset.owner_id !== claims.sub) {
-      await this.authz.assertCourseAccess(claims, asset.course_id || '', ['admin']);
-    }
+    this.assertOwner(claims, asset);
 
     const updated = await this.prisma.video_assets.update({
       where: { asset_id: asset.asset_id },
@@ -241,7 +270,7 @@ export class VideoAssetService {
         courses: { select: { code: true, name: true } },
       },
     });
-    if (!asset || asset.deleted_at) {
+    if (!asset || asset.deleted_at || !(await this.canView(claims, asset))) {
       throw new NotFoundException('Video asset not found');
     }
 
@@ -264,27 +293,10 @@ export class VideoAssetService {
       throw new NotFoundException('Video asset not found');
     }
 
-    let authorized = false;
+    // Công khai, chủ sở hữu, hoặc thành viên khoá học khi để COURSE.
+    let authorized = await this.canView(claims, asset);
 
-    // 1. Công khai toàn hệ thống
-    if (asset.visibility === 'PUBLIC') {
-      authorized = true;
-    }
-
-    // 2. Tác giả sở hữu video
-    if (asset.owner_id === claims.sub) {
-      authorized = true;
-    }
-
-    // 3. Trong cùng khoá học và có quyền COURSE
-    if (!authorized && asset.visibility === 'COURSE' && asset.course_id) {
-      try {
-        await this.authz.assertCourseAccess(claims, asset.course_id);
-        authorized = true;
-      } catch {}
-    }
-
-    // 4. Quyền truy cập bắc cầu (Transitive Permission qua microContentId)
+    // Quyền bắc cầu: thành viên khoá học của bài micro-content đang dùng video này.
     if (!authorized && input.microContentId) {
       const mc = await this.prisma.micro_contents.findFirst({
         where: { micro_content_id: input.microContentId, video_asset_id: asset.asset_id },
@@ -293,7 +305,9 @@ export class VideoAssetService {
         try {
           await this.authz.assertCourseAccess(claims, mc.course_id);
           authorized = true;
-        } catch {}
+        } catch (error) {
+          if (!(error instanceof ForbiddenException)) throw error;
+        }
       }
     }
 
@@ -335,8 +349,12 @@ export class VideoAssetService {
     if (!asset) {
       throw new NotFoundException('Video asset not found');
     }
-    if (asset.owner_id !== claims.sub) {
-      await this.authz.assertCourseAccess(claims, asset.course_id || '', ['admin']);
+    this.assertOwner(claims, asset);
+    if (input.visibility !== undefined && !VISIBILITIES.includes(input.visibility)) {
+      throw new BadRequestException('visibility phải là PRIVATE, COURSE hoặc PUBLIC.');
+    }
+    if (input.visibility === 'COURSE' && !asset.course_id) {
+      throw new BadRequestException('Video chưa thuộc khoá học nào nên không thể để COURSE.');
     }
 
     const updated = await this.prisma.video_assets.update({
@@ -364,9 +382,7 @@ export class VideoAssetService {
     if (!asset) {
       throw new NotFoundException('Video asset not found');
     }
-    if (asset.owner_id !== claims.sub) {
-      await this.authz.assertCourseAccess(claims, asset.course_id || '', ['admin']);
-    }
+    this.assertOwner(claims, asset);
 
     // Luôn Soft Delete để bảo toàn liên kết của các bài học cũ
     await this.prisma.video_assets.update({
@@ -398,11 +414,16 @@ export class VideoAssetService {
     const source = await this.prisma.video_assets.findFirst({
       where: { asset_id: input.assetId, deleted_at: null },
     });
-    if (!source) {
+    // Bản fork dùng chung file gốc và người fork thành chủ sở hữu, nên chỉ fork
+    // được video mà chính người gọi đang xem được.
+    if (!source || !(await this.canView(claims, source))) {
       throw new NotFoundException('Video asset not found');
     }
     if (!source.allow_fork && source.owner_id !== claims.sub) {
       throw new BadRequestException('Video này không cho phép nhân bản kịch bản.');
+    }
+    if (input.targetCourseId) {
+      await this.authz.assertCourseAccess(claims, input.targetCourseId, STAFF_ROLES);
     }
 
     const forked = await this.prisma.video_assets.create({
@@ -424,7 +445,8 @@ export class VideoAssetService {
         ai_script: source.ai_script as any,
         transcript_text: source.transcript_text,
         owner_id: claims.sub,
-        course_id: input.targetCourseId || source.course_id,
+        // Không kế thừa khoá học nguồn: người fork chưa chắc là nhân sự của khoá đó.
+        course_id: input.targetCourseId || null,
         forked_from_id: source.asset_id,
         usage_count: 0,
       },
@@ -438,8 +460,13 @@ export class VideoAssetService {
    */
   async attachToMicroContent(
     claims: BffClaims,
-    input: { microContentId: string; newVideoAssetId?: string | null },
+    input: { microContentId: string; assetId?: string | null },
   ) {
+    // Web gửi assetId: null để gỡ video. Thiếu hẳn trường thì không đoán là gỡ.
+    if (input.assetId === undefined) {
+      throw new BadRequestException('Thiếu assetId (gửi null để gỡ video khỏi bài).');
+    }
+    const assetId = input.assetId;
     return this.prisma.$transaction(async (tx) => {
       const currentLesson = await tx.micro_contents.findFirst({
         where: { micro_content_id: input.microContentId, deleted_at: null },
@@ -448,9 +475,9 @@ export class VideoAssetService {
       if (!currentLesson) {
         throw new NotFoundException('Micro content not found');
       }
-      await this.authz.assertCourseAccess(claims, currentLesson.course_id, ['instructor', 'ta', 'admin']);
+      await this.authz.assertCourseAccess(claims, currentLesson.course_id, STAFF_ROLES);
 
-      if (currentLesson.video_asset_id === input.newVideoAssetId) {
+      if (currentLesson.video_asset_id === assetId) {
         return { success: true, unchanged: true };
       }
 
@@ -464,16 +491,17 @@ export class VideoAssetService {
 
       let assetRecord = null;
       // Tăng usage_count của video mới
-      if (input.newVideoAssetId) {
+      if (assetId) {
         assetRecord = await tx.video_assets.findFirst({
-          where: { asset_id: input.newVideoAssetId, deleted_at: null },
+          where: { asset_id: assetId, deleted_at: null },
         });
-        if (!assetRecord) {
+        // Gắn vào bài là cho cả khoá học phát được video, nên phải là video người gọi xem được.
+        if (!assetRecord || !(await this.canView(claims, assetRecord))) {
           throw new NotFoundException('Video asset not found');
         }
 
         await tx.video_assets.update({
-          where: { asset_id: input.newVideoAssetId },
+          where: { asset_id: assetId },
           data: { usage_count: { increment: 1 } },
         });
       }
@@ -482,7 +510,7 @@ export class VideoAssetService {
       await tx.micro_contents.update({
         where: { micro_content_id: input.microContentId },
         data: {
-          video_asset_id: input.newVideoAssetId || null,
+          video_asset_id: assetId || null,
           video_object_key: assetRecord?.object_key || null,
           video_duration_ms: assetRecord?.duration_ms || null,
           video_size_bytes: assetRecord?.size_bytes || null,
@@ -494,7 +522,7 @@ export class VideoAssetService {
 
       return {
         success: true,
-        videoAssetId: input.newVideoAssetId,
+        videoAssetId: assetId,
         videoStatus: assetRecord?.status || 'NONE',
       };
     });
