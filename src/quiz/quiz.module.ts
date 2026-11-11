@@ -7,11 +7,17 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { CanvasModule } from '../canvas/canvas.module';
 import { QuizSetService } from './quiz-set.service';
 import { EssayGradingService } from './essay-grading.service';
+import { QuizGradingResultHandler } from './quiz-grading-result.handler';
 
 @Module({
   imports: [AuthModule, PrismaModule, CanvasModule, AgsModule],
   controllers: [QuizController],
-  providers: [QuizService, QuizSetService, EssayGradingService],
+  providers: [
+    QuizService,
+    QuizSetService,
+    EssayGradingService,
+    QuizGradingResultHandler,
+  ],
   exports: [QuizService, QuizSetService, EssayGradingService],
 })
 export class QuizModule {}

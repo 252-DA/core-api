@@ -12,6 +12,36 @@ const DRAFT_STATUSES = [
   'APPROVED',
 ];
 
+/**
+ * Hồ sơ kiểm chứng sau khi giảng viên sửa nội dung. verification_status/evidence
+ * (do judge ghi lúc sinh) mô tả bản AI chứ không phải bản đã sửa, nên để nguyên
+ * VERIFIED thì người học và giảng viên khác tin một kết luận không còn đúng:
+ *   - verification_status → UNVERIFIED (như câu giảng viên tự soạn);
+ *   - evidence giữ lại để xem lại bản AI gốc, thêm `superseded_by_edit_at` (lần sửa
+ *     đầu tiên, các lần sau không đổi) để biết nó không còn áp dụng cho nội dung hiện
+ *     tại. Câu chưa có evidence (giảng viên tự soạn, dòng cũ) thì không có gì để đánh dấu.
+ */
+function unverifiedAfterEdit(evidence: unknown, at: Date) {
+  const record =
+    typeof evidence === 'object' && evidence !== null && !Array.isArray(evidence)
+      ? (evidence as Record<string, unknown>)
+      : null;
+  return {
+    verification_status: 'UNVERIFIED',
+    ...(record
+      ? {
+          verification_evidence: {
+            ...record,
+            superseded_by_edit_at:
+              typeof record.superseded_by_edit_at === 'string'
+                ? record.superseded_by_edit_at
+                : at.toISOString(),
+          } as Prisma.InputJsonValue,
+        }
+      : {}),
+  };
+}
+
 @Injectable()
 export class ReviewService {
   constructor(
@@ -98,9 +128,15 @@ export class ReviewService {
   async updateCard(claims: BffClaims, cardId: string, content: unknown) {
     const card = await this.getCardForReview(claims, cardId);
     return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
       const updated = await tx.lesson_cards.update({
         where: { card_id: cardId },
-        data: { content: content as any, status: 'REVIEWING', updated_at: new Date() },
+        data: {
+          content: content as any,
+          status: 'REVIEWING',
+          updated_at: now,
+          ...unverifiedAfterEdit(card.verification_evidence, now),
+        },
       });
       await tx.review_audit_logs.create({
         data: {
@@ -233,6 +269,7 @@ export class ReviewService {
           })
         : null;
     return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
       const updated = await tx.quiz_items.update({
         where: { quiz_id: quizId },
         data: {
@@ -245,7 +282,8 @@ export class ReviewService {
             : {}),
           explanation: data.explanation,
           status: 'REVIEWING',
-          updated_at: new Date(),
+          updated_at: now,
+          ...unverifiedAfterEdit(quiz.verification_evidence, now),
         },
       });
       await tx.review_audit_logs.create({

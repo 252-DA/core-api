@@ -33,6 +33,7 @@ function setup(attempt: Record<string, unknown> = {}) {
         resource_link_id: LINK,
         grading_status: 'NEEDS_REVIEW',
         grading_input: INPUT,
+        chosen_answer: 'Bài làm',
         feedback: 'AI chưa chấm được',
         ...attempt,
       }),
@@ -116,6 +117,8 @@ describe('EssayGradingService', () => {
         course_id: COURSE,
         attempt_ids: [MCQ, ESSAY],
         essay_attempt_ids: [ESSAY],
+        // Lệnh mới tự chứa: worker chấm theo đề lúc nộp đi kèm, không đọc bảng.
+        answers: [{ attempt_id: ESSAY, grading_input: INPUT, chosen_answer: 'Bài làm' }],
       },
     });
   });

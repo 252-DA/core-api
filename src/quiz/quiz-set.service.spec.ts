@@ -252,11 +252,19 @@ describe('Canvas quiz sets', () => {
     expect(prisma.quiz_items.findMany).not.toHaveBeenCalled();
     const event = prisma.outbox_events.create.mock.calls[0][0].data;
     expect(event.event_type).toBe('ANSWER_GRADING_REQUESTED');
+    // Lệnh tự chứa: đề lúc nộp và bài làm đi kèm, worker không đọc quiz_attempts.
     expect(event.payload).toEqual({
       submission_id: rows[0].submission_id,
       course_id: COURSE,
       attempt_ids: rows.map((r: { attempt_id: string }) => r.attempt_id),
       essay_attempt_ids: [rows[1].attempt_id],
+      answers: [
+        {
+          attempt_id: rows[1].attempt_id,
+          grading_input: rows[1].grading_input,
+          chosen_answer: 'Bài làm của em',
+        },
+      ],
     });
   });
 

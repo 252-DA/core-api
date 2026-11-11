@@ -19,6 +19,7 @@ import { GrpcModule } from './grpc/grpc.module';
 import { AgsModule } from './ags/ags.module';
 import { MicroContentModule } from './micro-content/micro-content.module';
 import { VideoAssetModule } from './video-asset/video-asset.module';
+import { WorkerResultsModule } from './worker-results/worker-results.module';
 
 // Parse Redis URL for BullMQ connection
 const getRedisConnection = () => {
@@ -64,6 +65,7 @@ const getRedisConnection = () => {
     AgsModule,
     MicroContentModule,
     VideoAssetModule,
+    WorkerResultsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

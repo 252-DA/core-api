@@ -9,6 +9,9 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    // CLI (migrate deploy/status) chạy bằng tài khoản quản trị, còn runtime
+    // core-api dùng DATABASE_URL = role lms_core_app không có quyền CREATE
+    // (deploy/postgres/roles.sql). Không đặt thì dùng DATABASE_URL như cũ.
+    url: process.env["MIGRATION_DATABASE_URL"] || process.env["DATABASE_URL"],
   },
 });

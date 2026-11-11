@@ -103,7 +103,7 @@ describe('CanvasDocumentSyncService', () => {
 
   describe('syncCourse', () => {
     it('imports as system without claims and batches file metadata, retaining module scope', async () => {
-      const { service, prisma, canvas, authz } = setup({
+      const { service, prisma, canvas, authz, queue } = setup({
         modules: [{ name: 'Slides', files: [11, 12] }],
         files: { 11: canvasFile(11, 'one.pdf'), 12: canvasFile(12, 'two.pdf'), 13: canvasFile(13, 'unattached.pdf') },
       });
@@ -113,6 +113,9 @@ describe('CanvasDocumentSyncService', () => {
       expect(canvas.getFile).not.toHaveBeenCalled();
       expect(prisma.documents.create).toHaveBeenCalledTimes(2);
       expect(prisma.documents.create.mock.calls[0][0].data.created_by).toBeNull();
+      // Tài liệu mới bắt đầu ở lượt 1; job mang lượt để worker gửi kèm kết quả.
+      expect(prisma.documents.create.mock.calls[0][0].data.processing_generation).toBe(1);
+      expect(queue.add.mock.calls[0][1]).toMatchObject({ processing_generation: 1 });
     });
 
     it('does not delete existing documents if listing fails or is incomplete', async () => {
@@ -232,17 +235,37 @@ describe('CanvasDocumentSyncService', () => {
         }],
       });
 
+      prisma.documents.update.mockImplementation(({ where, data }) =>
+        Promise.resolve({
+          document_id: where.document_id,
+          course_id: courseId,
+          created_by: claims.sub,
+          file_path: `documents/${courseId}/doc-1/Ch1.pdf`,
+          status: data.status,
+          processing_generation: 3,
+        }),
+      );
+
       const summary = await service.syncCourse(courseId, { kind: 'user', userId: claims.sub });
 
       expect(summary.retried).toEqual(['Ch1.pdf']);
       expect(canvas.downloadFile).not.toHaveBeenCalled();
+      // Lượt xử lý mới: kết quả đến trễ của lượt lỗi trước không đè lượt này.
       expect(prisma.documents.update).toHaveBeenCalledWith({
         where: { document_id: 'doc-1' },
-        data: { status: 'QUEUED' },
+        data: {
+          status: 'QUEUED',
+          processing_generation: { increment: 1 },
+          processing_seq: 0,
+        },
       });
       expect(queue.add).toHaveBeenCalledWith(
         'process_document',
-        expect.objectContaining({ document_id: 'doc-1', file_name: 'Ch1.pdf' }),
+        expect.objectContaining({
+          document_id: 'doc-1',
+          file_name: 'Ch1.pdf',
+          processing_generation: 3,
+        }),
         expect.anything(),
       );
     });

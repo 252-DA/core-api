@@ -12,6 +12,7 @@ import {
   gradingInput,
   rowAgsStatus,
   submissionScore,
+  type GradingAnswer,
 } from './answer-grading';
 
 @Injectable()
@@ -60,6 +61,8 @@ export class QuizService {
 
     let totalCorrect = 0;
     const perItem = [];
+    // Câu tự luận kèm đề và bài làm: lệnh chấm tự chứa, worker không đọc lại quiz_attempts.
+    const essays: GradingAnswer[] = [];
     const rows: Array<
       Prisma.quiz_attemptsCreateManyInput & {
         attempt_id: string;
@@ -76,8 +79,16 @@ export class QuizService {
       if (grade.isCorrect) {
         totalCorrect += 1;
       }
+      const attemptId = randomUUID();
+      if (grade.pending) {
+        essays.push({
+          attemptId,
+          gradingInput: gradingInput(quiz),
+          chosenAnswer: answer.chosenAnswer as Prisma.InputJsonValue,
+        });
+      }
       rows.push({
-        attempt_id: randomUUID(),
+        attempt_id: attemptId,
         user_id: claims.sub,
         quiz_id: quiz.quiz_id,
         course_id: quiz.course_id,
@@ -103,7 +114,6 @@ export class QuizService {
       });
     }
 
-    const essays = rows.filter((row) => row.grading_status === GRADING_STATUS.pending);
     const rowStatus = rowAgsStatus(agsStatus, essays.length > 0);
     for (const row of rows) row.ags_status = rowStatus;
     if (rows.length) {
@@ -117,7 +127,7 @@ export class QuizService {
               submissionId: randomUUID(),
               courseId: lesson.course_id,
               attemptIds: rows.map((row) => row.attempt_id),
-              essayAttemptIds: essays.map((row) => row.attempt_id),
+              answers: essays,
             }),
           });
         }

@@ -9,6 +9,7 @@ import { CanvasModule } from '../canvas/canvas.module';
 import { CANVAS_SYNC_QUEUE, CanvasSyncJobsService } from './canvas-sync-jobs.service';
 import { CanvasSyncProcessor } from './canvas-sync.processor';
 import { CANVAS_SYNC_CONFIG, canvasSyncConfig } from './canvas-sync.config';
+import { DocumentProcessingResultHandler } from './document-processing-result.handler';
 
 @Module({
   imports: [
@@ -22,7 +23,7 @@ import { CANVAS_SYNC_CONFIG, canvasSyncConfig } from './canvas-sync.config';
   ],
   controllers: [DocumentController],
   providers: [DocumentService, DocumentStorageService, CanvasDocumentSyncService,
-    CanvasSyncJobsService, CanvasSyncProcessor,
+    CanvasSyncJobsService, CanvasSyncProcessor, DocumentProcessingResultHandler,
     { provide: CANVAS_SYNC_CONFIG, useFactory: canvasSyncConfig }],
   exports: [DocumentService, CanvasDocumentSyncService, CanvasSyncJobsService, DocumentStorageService],
 })

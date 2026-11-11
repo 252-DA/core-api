@@ -53,6 +53,7 @@ describe('LessonService content access', () => {
         status: 'PUBLISHED',
       },
       orderBy: [{ position: 'asc' }, { created_at: 'asc' }],
+      omit: { verification_status: true, verification_evidence: true },
     });
   });
 
@@ -70,7 +71,38 @@ describe('LessonService content access', () => {
         status: 'PUBLISHED',
       },
       orderBy: { created_at: 'asc' },
+      omit: { verification_status: true, verification_evidence: true },
     });
+  });
+
+  it('keeps the judge verification record out of the learner payload, for cards and quiz items', async () => {
+    const { service, prisma } = setup();
+
+    await service.quiz(claims, lessonId, 'PUBLISHED');
+    await service.cards(claims, lessonId, 'PUBLISHED');
+
+    for (const model of [prisma.quiz_items, prisma.lesson_cards]) {
+      const [[args]] = model.findMany.mock.calls as [[{ omit?: Record<string, boolean> }]];
+      expect(args.omit).toEqual({
+        verification_status: true,
+        verification_evidence: true,
+      });
+    }
+  });
+
+  it('still returns the verification record to instructors reviewing non-published content', async () => {
+    const { service, prisma } = setup();
+
+    await service.quiz(claims, lessonId, 'REVIEWING');
+    await service.quiz(claims, lessonId);
+    await service.cards(claims, lessonId, 'REVIEWING');
+    await service.cards(claims, lessonId);
+
+    for (const model of [prisma.quiz_items, prisma.lesson_cards]) {
+      for (const [args] of model.findMany.mock.calls as [{ omit?: unknown }][]) {
+        expect(args).not.toHaveProperty('omit');
+      }
+    }
   });
 
   it('requires instructor or TA access when card status is omitted', async () => {

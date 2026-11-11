@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
@@ -536,6 +537,10 @@ export class MicroContentService {
       throw new BadRequestException('Chưa có kịch bản để render video.');
     }
 
+    // Mỗi lần bấm render là một lần render mới: kết quả của worker mang lại id
+    // này, MicroContentVideoResultHandler bỏ kết quả của lần render cũ hơn.
+    const renderId = randomUUID();
+
     await this.prisma.$transaction(async (tx) => {
       let assetId = item.video_asset_id;
       if (assetId) {
@@ -551,6 +556,7 @@ export class MicroContentService {
               error_message: null,
               ai_prompt: item.ai_prompt,
               ai_script: item.ai_script as any,
+              ai_render_id: renderId,
               updated_at: new Date(),
             },
           });
@@ -572,6 +578,7 @@ export class MicroContentService {
             transcript_status: 'PENDING',
             ai_prompt: item.ai_prompt,
             ai_script: item.ai_script as any,
+            ai_render_id: renderId,
             usage_count: 1,
           },
         });
@@ -579,7 +586,7 @@ export class MicroContentService {
       }
 
       await tx.micro_contents.update({
-        where: { micro_content_id: input.microContentId },
+        where: { micro_content_id: item.micro_content_id },
         data: {
           video_asset_id: assetId,
           video_source: 'AI',
@@ -589,15 +596,19 @@ export class MicroContentService {
         },
       });
 
+      // Lệnh mang id chuẩn từ DB (chữ thường, có gạch), không phải chuỗi client gửi:
+      // Postgres vẫn nhận uuid viết hoa hay bỏ gạch/ngoặc nên findFirst ở trên không
+      // bắt được, còn worker kiểm uuid dạng chuẩn và từ chối lệnh.
       await tx.outbox_events.create({
         data: {
           event_type: 'MICRO_CONTENT_RENDER_REQUESTED',
           aggregate_type: 'micro_content',
-          aggregate_id: input.microContentId,
+          aggregate_id: item.micro_content_id,
           payload: {
-            micro_content_id: input.microContentId,
+            micro_content_id: item.micro_content_id,
             course_id: item.course_id,
             asset_id: assetId,
+            render_id: renderId,
             script: item.ai_script,
           },
         },

@@ -19,6 +19,17 @@ function fileNameFromStorageKey(storageKey: string, fallback: string) {
   return storageKey.split('/').filter(Boolean).pop() || fallback;
 }
 
+/**
+ * Mỗi lần đưa tài liệu vào hàng đợi xử lý là một lượt mới: tăng lượt và về 0
+ * thứ tự kết quả. Worker gửi lượt kèm mọi kết quả trạng thái; handler
+ * DOCUMENT_PROCESSING_RESULT bỏ kết quả của lượt khác (kết quả đến trễ không
+ * đè lần xử lý lại). Dùng cùng câu UPDATE đặt status = 'QUEUED'.
+ */
+export const NEXT_PROCESSING_GENERATION = {
+  processing_generation: { increment: 1 },
+  processing_seq: 0,
+} as const;
+
 /** Nguồn, vai trò và chương của tài liệu — cho màn hình tài liệu của giảng viên. */
 function placementFields(doc: documents) {
   return {
@@ -33,6 +44,14 @@ function placementFields(doc: documents) {
     chapter_reason: doc.chapter_reason,
   };
 }
+
+/**
+ * Số chunk của tài liệu chỉ đếm chunk còn dùng: chunk bị xoá mềm (worker chunk
+ * lại tài liệu) không còn được tìm kiếm, nên không được tính vào "đã có N chunk".
+ */
+const CHUNK_COUNT = {
+  _count: { select: { chunks: { where: { deleted_at: null } } } },
+} as const;
 
 @Injectable()
 export class DocumentService {
@@ -67,7 +86,7 @@ export class DocumentService {
       take: limit,
       skip: offset,
       orderBy: { created_at: 'desc' },
-      include: { _count: { select: { chunks: true } } },
+      include: CHUNK_COUNT,
     });
 
     return docs.map((doc) => ({
@@ -95,7 +114,7 @@ export class DocumentService {
   async getDocument(claims: BffClaims, documentId: string) {
     const doc = await this.prisma.documents.findFirst({
       where: { document_id: documentId, deleted_at: null },
-      include: { _count: { select: { chunks: true } } },
+      include: CHUNK_COUNT,
     });
     if (!doc) {
       throw new NotFoundException(`Document not found: ${documentId}`);
@@ -236,9 +255,10 @@ export class DocumentService {
       );
     }
 
+    // Lượt xử lý mới: kết quả trạng thái của lượt trước (nếu có) bị bỏ.
     const updated = await this.prisma.documents.update({
       where: { document_id: documentId },
-      data: { status: 'QUEUED' },
+      data: { status: 'QUEUED', ...NEXT_PROCESSING_GENERATION },
     });
 
     const job = await this.processingQueue.add(
@@ -253,6 +273,7 @@ export class DocumentService {
           owner_id: updated.created_by,
           storage_key: updated.file_path,
         },
+        processing_generation: updated.processing_generation,
       },
       {
         attempts: 3,
@@ -290,6 +311,7 @@ export class DocumentService {
         mime_type: data.mime_type,
         checksum: data.checksum,
         status: 'QUEUED',
+        processing_generation: 1,
         created_by: claims.sub,
       },
     });
@@ -303,6 +325,7 @@ export class DocumentService {
         owner_id: doc.created_by,
         storage_key: doc.file_path,
       },
+      processing_generation: doc.processing_generation,
     });
 
     return {

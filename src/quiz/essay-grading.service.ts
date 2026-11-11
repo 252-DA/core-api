@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
@@ -163,9 +164,17 @@ export class EssayGradingService {
           // Lesson quiz không có submission_id: id này chỉ gom việc cho worker.
           submissionId: attempt.submission_id ?? randomUUID(),
           courseId: attempt.course_id,
-          // Worker mở khoá AGS cho cả nhóm khi chấm xong câu cuối.
+          // QuizGradingResultHandler tự gom lại nhóm khi áp dụng kết quả;
+          // attempt_ids chỉ còn cho worker bản cũ.
           attemptIds: group.includes(attempt.attempt_id) ? group : [attempt.attempt_id],
-          essayAttemptIds: [attempt.attempt_id],
+          // Lệnh mới tự chứa: worker chấm theo đề lúc nộp đi kèm, không đọc lại bảng.
+          answers: [
+            {
+              attemptId: attempt.attempt_id,
+              gradingInput: attempt.grading_input as Prisma.InputJsonValue,
+              chosenAnswer: attempt.chosen_answer,
+            },
+          ],
         }),
       });
       await tx.review_audit_logs.create({
@@ -197,6 +206,7 @@ export class EssayGradingService {
         resource_link_id: true,
         grading_status: true,
         grading_input: true,
+        chosen_answer: true,
         feedback: true,
       },
     });

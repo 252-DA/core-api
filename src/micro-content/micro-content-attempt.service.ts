@@ -16,6 +16,43 @@ export type SubmitAnswerInput = {
   chosenAnswer: unknown;
 };
 
+/** Outbox chuyển sự kiện này sang hàng đợi `answer_grading` của worker. */
+export const MICRO_CONTENT_GRADING_REQUESTED = 'MICRO_CONTENT_GRADING_REQUESTED';
+
+/**
+ * Giao câu tự luận của một lượt nộp cho worker
+ * (contracts/integration-events/v1/micro-content-grading-requested.json). Lệnh
+ * tự chứa: `answers` mang đề lúc nộp và bài làm, worker không đọc
+ * micro_content_answers; `answer_ids` chỉ còn cho worker bản cũ.
+ */
+export function microContentGradingEvent(input: {
+  attemptId: string;
+  courseId: string;
+  microContentId: string;
+  answers: Array<{
+    answerId: string;
+    gradingInput: Prisma.InputJsonValue;
+    chosenAnswer: Prisma.InputJsonValue | null;
+  }>;
+}) {
+  return {
+    event_type: MICRO_CONTENT_GRADING_REQUESTED,
+    aggregate_type: 'micro_content_attempt',
+    aggregate_id: input.attemptId,
+    payload: {
+      attempt_id: input.attemptId,
+      course_id: input.courseId,
+      micro_content_id: input.microContentId,
+      answer_ids: input.answers.map((a) => a.answerId),
+      answers: input.answers.map((a) => ({
+        answer_id: a.answerId,
+        grading_input: a.gradingInput,
+        chosen_answer: a.chosenAnswer,
+      })),
+    } as Prisma.InputJsonValue,
+  };
+}
+
 @Injectable()
 export class MicroContentAttemptService {
   constructor(
@@ -226,7 +263,7 @@ export class MicroContentAttemptService {
         },
       });
 
-      const createdPendingAnswerIds: string[] = [];
+      const pendingAnswers: Parameters<typeof microContentGradingEvent>[0]['answers'] = [];
       for (const g of gradedList) {
         const createdAns = await tx.micro_content_answers.create({
           data: {
@@ -239,24 +276,23 @@ export class MicroContentAttemptService {
             grading_input: g.gradingInput as Prisma.InputJsonValue,
           },
         });
-        if (g.pending && createdAns?.answer_id) {
-          createdPendingAnswerIds.push(createdAns.answer_id);
+        if (g.pending && g.gradingInput && createdAns?.answer_id) {
+          pendingAnswers.push({
+            answerId: createdAns.answer_id,
+            gradingInput: g.gradingInput,
+            chosenAnswer: g.chosenAnswer ?? null,
+          });
         }
       }
 
-      if (hasPending && createdPendingAnswerIds.length > 0) {
+      if (hasPending && pendingAnswers.length > 0) {
         await tx.outbox_events.create({
-          data: {
-            event_type: 'MICRO_CONTENT_GRADING_REQUESTED',
-            aggregate_type: 'micro_content_attempt',
-            aggregate_id: createdAttempt.attempt_id,
-            payload: {
-              attempt_id: createdAttempt.attempt_id,
-              course_id: item.course_id,
-              micro_content_id: item.micro_content_id,
-              answer_ids: createdPendingAnswerIds,
-            },
-          },
+          data: microContentGradingEvent({
+            attemptId: createdAttempt.attempt_id,
+            courseId: item.course_id,
+            microContentId: item.micro_content_id,
+            answers: pendingAnswers,
+          }),
         });
       }
 

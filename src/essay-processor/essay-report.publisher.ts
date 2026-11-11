@@ -12,6 +12,7 @@ import {
   failedReport,
   gradedReport,
   processingReport,
+  type RubricCriterion,
 } from './essay-grading';
 import { LtiServiceError, LtiServicesClient } from './lti-services.client';
 
@@ -31,7 +32,8 @@ type Row = Prisma.essay_submissionsGetPayload<{ include: { essay_processors: tru
  *   GRADED   → gửi báo cáo điểm gợi ý về SpeedGrader → REPORTED
  *   FAILED   → gửi báo cáo lỗi (một lần) để giảng viên biết phải chấm tay
  *
- * Worker chỉ đọc file từ MinIO và ghi kết quả vào DB, không biết gì về LMS.
+ * Worker chỉ đọc file từ MinIO và trả kết quả qua hàng đợi worker_results
+ * (EssayGradingResultHandler chuyển QUEUED → GRADED/FAILED), không biết gì về LMS.
  * Mỗi thành viên dùng chung DB có tool LTI riêng, nên chỉ nhặt dòng có
  * lti_client_id của chính core-api này.
  */
@@ -169,7 +171,16 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
           },
         });
         await tx.outbox_events.create({
-          data: essayGradingEvent(row.essay_submission_id, row.essay_processors.course_id),
+          data: essayGradingEvent({
+            essaySubmissionId: row.essay_submission_id,
+            courseId: row.essay_processors.course_id,
+            userId: row.user_id ?? null,
+            title: row.essay_processors.title,
+            instructions: row.essay_processors.instructions ?? '',
+            rubric: row.essay_processors.rubric as unknown as RubricCriterion[],
+            maxScore: Number(row.essay_processors.max_score),
+            assets: stored,
+          }),
         });
       });
       this.logger.log(`Đã tải ${stored.length} file của bài nộp ${row.lms_submission_id}, giao worker chấm`);

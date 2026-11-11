@@ -42,6 +42,7 @@ import {
   gradingInput,
   rowAgsStatus,
   submissionScore,
+  type GradingAnswer,
 } from './answer-grading';
 
 export type QuizSnapshotItem = {
@@ -618,7 +619,18 @@ export class QuizSetService {
       attempted_at: attemptedAt,
       ags_status: agsStatus,
     }));
-    const essays = rows.filter((row) => row.grading_status === GRADING_STATUS.pending);
+    // Lệnh chấm tự chứa: đề lúc nộp và bài làm đi kèm, worker không đọc quiz_attempts.
+    const essays: GradingAnswer[] = rows.flatMap((row, index) =>
+      perItem[index].pending
+        ? [
+            {
+              attemptId: row.attempt_id,
+              gradingInput: gradingInput(set.items[index]),
+              chosenAnswer: perItem[index].chosenAnswer ?? null,
+            },
+          ]
+        : [],
+    );
     const sessionId = session?.session_id;
     await this.prisma.$transaction(async (tx) => {
       if (sessionId) {
@@ -637,7 +649,7 @@ export class QuizSetService {
             submissionId,
             courseId: set.course_id,
             attemptIds: rows.map((row) => row.attempt_id),
-            essayAttemptIds: essays.map((row) => row.attempt_id),
+            answers: essays,
           }),
         });
       }

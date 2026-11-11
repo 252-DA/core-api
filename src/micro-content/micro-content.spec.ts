@@ -300,5 +300,85 @@ describe('MicroContentService', () => {
       ).rejects.toThrow(BadRequestException);
     });
   });
-});
 
+  describe('requestRender', () => {
+    // Kết quả worker chỉ được áp dụng khi mang đúng render_id đang ghi trên
+    // asset (MicroContentVideoResultHandler), nên lệnh và asset phải cùng id.
+    type DataArgs = { data: Record<string, unknown> };
+    function renderSetup(existingAsset: { source_type: string } | null) {
+      const { service, prisma } = setup();
+      const tx = {
+        video_assets: {
+          findUnique: jest.fn().mockResolvedValue(existingAsset),
+          update: jest.fn<Promise<unknown>, [DataArgs]>(),
+          create: jest
+            .fn<Promise<{ asset_id: string }>, [DataArgs]>()
+            .mockResolvedValue({ asset_id: 'new-asset' }),
+        },
+        micro_contents: { update: jest.fn() },
+        outbox_events: { create: jest.fn<Promise<unknown>, [DataArgs]>() },
+      };
+      prisma.$transaction.mockImplementation(
+        async (cb: (t: unknown) => Promise<unknown>) => cb(tx),
+      );
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        title: 'Đệ quy',
+        video_asset_id: existingAsset ? 'ai-asset' : null,
+        ai_script: { scenes: [{ title: 'Giới thiệu' }] },
+      });
+      return { service, tx };
+    }
+
+    it('puts the same new render_id on the created asset and in the command', async () => {
+      const { service, tx } = renderSetup(null);
+
+      await service.requestRender(instructorClaims, { microContentId });
+
+      const renderId =
+        tx.video_assets.create.mock.calls[0][0].data.ai_render_id;
+      expect(renderId).toMatch(/^[0-9a-f-]{36}$/);
+      const command = tx.outbox_events.create.mock.calls[0][0].data;
+      expect(command.event_type).toBe('MICRO_CONTENT_RENDER_REQUESTED');
+      expect(command.payload).toEqual({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        asset_id: 'new-asset',
+        render_id: renderId,
+        script: { scenes: [{ title: 'Giới thiệu' }] },
+      });
+    });
+
+    it('sends the canonical id from the database, not the spelling the client used', async () => {
+      const { service, tx } = renderSetup(null);
+      // Postgres nhận uuid viết hoa và bỏ gạch nên findFirst vẫn thấy dòng; worker
+      // kiểm uuid dạng chuẩn thì từ chối lệnh mang chuỗi của client.
+      const sloppy = microContentId.toUpperCase().replace(/-/g, '');
+
+      await service.requestRender(instructorClaims, { microContentId: sloppy });
+
+      const command = tx.outbox_events.create.mock.calls[0][0].data;
+      expect(command.aggregate_id).toBe(microContentId);
+      expect(command.payload).toMatchObject({ micro_content_id: microContentId });
+      expect(tx.micro_contents.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { micro_content_id: microContentId } }),
+      );
+    });
+
+    it('re-render of the AI asset replaces its render_id with a fresh one', async () => {
+      const { service, tx } = renderSetup({ source_type: 'AI_STUDIO' });
+
+      await service.requestRender(instructorClaims, { microContentId });
+      await service.requestRender(instructorClaims, { microContentId });
+
+      const [first, second] = tx.video_assets.update.mock.calls.map(
+        (call) => call[0].data.ai_render_id,
+      );
+      expect(first).not.toEqual(second);
+      expect(
+        tx.outbox_events.create.mock.calls[1][0].data.payload,
+      ).toMatchObject({ asset_id: 'ai-asset', render_id: second });
+    });
+  });
+});

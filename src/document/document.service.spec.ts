@@ -108,6 +108,7 @@ describe('DocumentService', () => {
     prisma.documents.update.mockResolvedValue({
       ...document,
       status: 'QUEUED',
+      processing_generation: 1,
     });
 
     await service.confirmUpload(claims, document.document_id);
@@ -117,9 +118,19 @@ describe('DocumentService', () => {
       expect.objectContaining({
         storage_key: document.file_path,
         file_name: 'syllabus.pdf',
+        processing_generation: 1,
       }),
       expect.any(Object),
     );
+    // QUEUED và lượt mới trong cùng một câu UPDATE.
+    expect(prisma.documents.update).toHaveBeenCalledWith({
+      where: { document_id: document.document_id },
+      data: {
+        status: 'QUEUED',
+        processing_generation: { increment: 1 },
+        processing_seq: 0,
+      },
+    });
   });
   const storedDocument = {
     document_id: '00000000-0000-0000-0000-000000000003',
@@ -211,6 +222,28 @@ describe('DocumentService', () => {
       service.getDocumentFileUrl(claims, storedDocument.document_id),
     ).rejects.toThrow('chưa upload xong');
     expect(storage.createPresignedDownloadUrl).not.toHaveBeenCalled();
+  });
+
+  it('counts only live chunks (soft-deleted ones no longer count) in the list and in the detail', async () => {
+    const { service, prisma } = setup();
+    const liveOnly = {
+      _count: { select: { chunks: { where: { deleted_at: null } } } },
+    };
+    prisma.documents.findMany.mockResolvedValue([storedDocument]);
+    prisma.documents.findFirst.mockResolvedValue(storedDocument);
+
+    const [listed] = await service.listDocuments(claims, storedDocument.course_id);
+    const detail = await service.getDocument(claims, storedDocument.document_id);
+
+    expect(prisma.documents.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ include: liveOnly }),
+    );
+    expect(prisma.documents.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ include: liveOnly }),
+    );
+    // Số đếm trả về là số Prisma đếm theo bộ lọc trên.
+    expect(listed.chunks_count).toBe(12);
+    expect(detail.chunks_count).toBe(12);
   });
 
   it('lists documents hidden on the LMS only to course staff', async () => {

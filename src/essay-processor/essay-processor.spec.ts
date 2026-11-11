@@ -196,7 +196,15 @@ describe('EssayReportPublisherService', () => {
       error: null,
       error_code: null,
       result: RESULT,
-      essay_processors: { course_id: COURSE, visible_to_owner: true },
+      user_id: 'student-1',
+      essay_processors: {
+        course_id: COURSE,
+        visible_to_owner: true,
+        title: 'Tiểu luận',
+        instructions: 'Phân tích',
+        rubric: [{ criterion: 'Nội dung', description: '', points: 10 }],
+        max_score: '10.00',
+      },
       ...overrides,
     } as never;
   }
@@ -225,8 +233,28 @@ describe('EssayReportPublisherService', () => {
         assets: [expect.objectContaining({ storage_key: `essay-submissions/${ESSAY}/a1.pdf`, content_type: 'application/pdf' })],
       }),
     });
+    // Lệnh tự chứa: đề, rubric, điểm tối đa và khoá MinIO đi kèm, worker không đọc essay_submissions.
     expect(prisma.outbox_events.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ event_type: 'ESSAY_GRADING_REQUESTED', payload: { essay_submission_id: ESSAY, course_id: COURSE } }),
+      data: expect.objectContaining({
+        event_type: 'ESSAY_GRADING_REQUESTED',
+        payload: {
+          essay_submission_id: ESSAY,
+          course_id: COURSE,
+          user_id: 'student-1',
+          title: 'Tiểu luận',
+          instructions: 'Phân tích',
+          rubric: [{ criterion: 'Nội dung', description: '', points: 10 }],
+          max_score: 10,
+          assets: [
+            {
+              asset_id: 'a1',
+              title: 'bai.pdf',
+              content_type: 'application/pdf',
+              storage_key: `essay-submissions/${ESSAY}/a1.pdf`,
+            },
+          ],
+        },
+      }),
     });
   });
 

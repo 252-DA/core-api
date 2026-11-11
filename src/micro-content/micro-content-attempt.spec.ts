@@ -241,6 +241,34 @@ describe('MicroContentAttemptService', () => {
       });
 
       expect(res.gradingStatus).toBe('PENDING');
+      // Lệnh chấm tự chứa: worker nhận đề lúc nộp và bài làm, không đọc micro_content_answers.
+      expect(prisma.outbox_events.create).toHaveBeenCalledWith({
+        data: {
+          event_type: 'MICRO_CONTENT_GRADING_REQUESTED',
+          aggregate_type: 'micro_content_attempt',
+          aggregate_id: 'attempt-essay',
+          payload: {
+            attempt_id: 'attempt-essay',
+            course_id: courseId,
+            micro_content_id: microContentId,
+            answer_ids: ['ans-1'],
+            answers: [
+              {
+                answer_id: 'ans-1',
+                grading_input: {
+                  type: 'SHORT_ANSWER',
+                  question: 'Nêu định nghĩa hàm thuần khiết.',
+                  correct_answer: {
+                    model_answer: 'Không tác dụng phụ.',
+                    rubric: ['Không tác dụng phụ', 'Trả cùng kết quả'],
+                  },
+                },
+                chosen_answer: 'Hàm thuần khiết không sinh side-effect.',
+              },
+            ],
+          },
+        },
+      });
       expect(prisma.micro_content_answers.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           grading_status: 'PENDING',

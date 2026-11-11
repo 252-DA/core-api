@@ -277,6 +277,9 @@ model curriculum_imports {
   size_bytes   Int?
   status       String    @default("QUEUED") @db.VarChar(20)
   preview      Json?
+  /// Bản đề cương chuẩn hoá worker gửi về (CURRICULUM_IMPORT_RESULT); áp dụng
+  /// ghi đúng bản này. NULL với lần nạp tạo trước 2026-11-07.
+  curriculum   Json?
   error        String?
   requested_by String?   @db.Uuid
   applied_by   String?   @db.Uuid
@@ -367,6 +370,13 @@ model documents {
   chapter_provenance String?           @db.VarChar(20)
   chapter_confidence Decimal?          @db.Decimal(3, 2)
   chapter_reason     String?           @db.VarChar(255)
+  /// Lượt xử lý: core-api tăng mỗi lần đưa vào hàng đợi; kết quả worker của lượt
+  /// khác bị bỏ (migration 20261107130300).
+  processing_generation Int            @default(0)
+  /// Thứ tự kết quả trạng thái mới nhất đã áp dụng trong lượt hiện tại.
+  processing_seq        Int            @default(0)
+  /// Lượt đã áp dụng học liệu nháp của enrichment; NULL = chưa lượt nào.
+  enrichment_generation Int?
   courses           courses            @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
   lms_user_mappings lms_user_mappings? @relation(fields: [created_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
   chunks            chunks[]
@@ -520,6 +530,10 @@ model lesson_cards {
   source_chunk_ids       String[]                 @db.Uuid
   position               Int                      @default(0)
   status                 String                   @default("GENERATED_DRAFT") @db.VarChar(50)
+  /// UNVERIFIED | VERIFIED | INCONCLUSIVE | FLAGGED (CHECK trong migration 20261107120000).
+  verification_status    String                   @default("UNVERIFIED") @db.VarChar(20)
+  /// Kết luận của judge: lý do, model, thời điểm. NULL khi chưa kiểm chứng.
+  verification_evidence  Json?
   published_at           DateTime?                @db.Timestamptz(6)
   created_at             DateTime?                @default(now()) @db.Timestamptz(6)
   updated_at             DateTime?                @default(now()) @db.Timestamptz(6)
@@ -605,6 +619,10 @@ model quiz_items {
   bloom_level       Int?
   source_chunk_ids  String[]           @db.Uuid
   status            String             @default("GENERATED_DRAFT") @db.VarChar(50)
+  /// UNVERIFIED | VERIFIED | INCONCLUSIVE | FLAGGED (CHECK trong migration 20261107120000).
+  verification_status   String             @default("UNVERIFIED") @db.VarChar(20)
+  /// Kết luận của judge: lý do, model, thời điểm. NULL khi chưa kiểm chứng.
+  verification_evidence Json?
   published_at      DateTime?          @db.Timestamptz(6)
   created_at        DateTime?          @default(now()) @db.Timestamptz(6)
   updated_at        DateTime?          @default(now()) @db.Timestamptz(6)
@@ -812,11 +830,16 @@ model content_generation_requests {
   status          String    @default("QUEUED") @db.VarChar(50)
   generated_count Int       @default(0)
   last_error      String?
+  /// Đếm kết luận kiểm chứng của lần sinh (kể cả câu/card bị loại, không lưu
+  /// thành dòng nào); core-api ghi khi áp CONTENT_GENERATION_RESULT SUCCEEDED.
+  verification_summary Json?
   created_at      DateTime? @default(now()) @db.Timestamptz(6)
   updated_at      DateTime? @default(now()) @db.Timestamptz(6)
   courses         courses   @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
 }
 
+/// status: PENDING → PROCESSING → PROCESSED, hoặc DEAD_LETTER sau 10 lần relay lỗi.
+/// retry_count = số lần relay lỗi. INSERT bắn NOTIFY 'outbox_channel' (trigger).
 model outbox_events {
   event_id       String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
   event_type     String    @db.VarChar(100)
@@ -828,9 +851,17 @@ model outbox_events {
   last_error     String?
   occurred_at    DateTime? @default(now()) @db.Timestamptz(6)
   processed_at   DateTime? @db.Timestamptz(6)
+  /// Thời điểm và tiến trình (hostname:pid) đã giành dòng; NULL khi không PROCESSING.
+  locked_at      DateTime? @db.Timestamptz(6)
+  locked_by      String?   @db.VarChar(64)
+  /// PENDING chỉ được giành khi next_retry_at <= now() (backoff sau lần lỗi).
+  /// dbgenerated, không @default(now()): now() của Prisma lấy giờ máy core-api,
+  /// lệch giờ với DB thì sự kiện mới chưa "đến hạn" lúc poll do NOTIFY gọi.
+  next_retry_at  DateTime  @default(dbgenerated("transaction_timestamp()")) @db.Timestamptz(6)
 
-  @@index([occurred_at], map: "idx_outbox_pending_poller")
-  @@index([occurred_at], map: "idx_outbox_failed")
+  // Hai index đều là partial index (WHERE status ...) trong migration.
+  @@index([next_retry_at, occurred_at], map: "idx_outbox_poller")
+  @@index([occurred_at], map: "idx_outbox_dead_letter")
 }
 
 model youtube_search_cache {
@@ -1044,6 +1075,9 @@ model video_assets {
   ai_prompt         String?           @db.Text
   ai_options        Json?
   ai_script         Json?
+  /// Lần render AI asset đang chờ hoặc đã cho ra file hiện tại; kết quả render
+  /// khác id này bị bỏ (migration 20261107130400). NULL với video tải lên.
+  ai_render_id      String?           @db.Uuid
   transcript_text   String?           @db.Text
   owner_id          String            @db.Uuid
   course_id         String?           @db.Uuid

@@ -40,14 +40,22 @@ export type EssayAsset = {
   storage_key?: string;
 };
 
-/** Worker ghi vào essay_submissions.result (worker/use_cases/grade_essay_submission.py). */
+/**
+ * essay_submissions.result: worker chấm (worker/use_cases/grade_essay_submission.py)
+ * gửi qua ESSAY_GRADING_RESULT, EssayGradingResultHandler ghi.
+ */
 export type EssayResult = {
   score: number;
   max_score: number;
   criteria: { criterion: string; points: number; max_points: number; comment: string }[];
   feedback: string;
   truncated?: boolean;
+  /** Model đã chấm; bài chấm trước 2026-11-07 có thể thiếu. */
+  model?: string | null;
 };
+
+/** Mã lỗi worker gửi khi không chấm được; hai mã chuẩn của Asset Report Service. */
+export const ESSAY_GRADING_ERROR_CODES = ['UNSUPPORTED_ASSET_TYPE', 'PROCESSING_FAILED'] as const;
 
 const MAX_CRITERIA = 10;
 
@@ -88,14 +96,44 @@ export function normalizeProcessorInput(body: Record<string, unknown>) {
   };
 }
 
-export function essayGradingEvent(essaySubmissionId: string, courseId: string) {
+/**
+ * Giao một bài luận cho worker (contracts/integration-events/v1/essay-grading-requested.json).
+ * Lệnh tự chứa: đề, rubric, điểm tối đa (snapshot lúc giao) và khoá MinIO của
+ * từng file, nên worker chỉ đọc file từ object storage, không đọc
+ * essay_submissions/essay_processors.
+ */
+export function essayGradingEvent(input: {
+  essaySubmissionId: string;
+  courseId: string;
+  userId: string | null;
+  title: string;
+  instructions: string;
+  rubric: RubricCriterion[];
+  maxScore: number;
+  assets: EssayAsset[];
+}) {
   return {
     event_type: ESSAY_GRADING_REQUESTED,
     aggregate_type: 'essay_submission',
-    aggregate_id: essaySubmissionId,
+    aggregate_id: input.essaySubmissionId,
     payload: {
-      essay_submission_id: essaySubmissionId,
-      course_id: courseId,
+      essay_submission_id: input.essaySubmissionId,
+      course_id: input.courseId,
+      user_id: input.userId,
+      title: input.title,
+      instructions: input.instructions,
+      rubric: input.rubric.map((c) => ({
+        criterion: c.criterion,
+        description: c.description ?? '',
+        points: Number(c.points),
+      })),
+      max_score: input.maxScore,
+      assets: input.assets.map((a) => ({
+        asset_id: a.asset_id,
+        title: a.title ?? null,
+        content_type: a.content_type ?? null,
+        storage_key: a.storage_key ?? '',
+      })),
     } as Prisma.InputJsonValue,
   };
 }
