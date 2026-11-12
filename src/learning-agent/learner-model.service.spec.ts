@@ -81,13 +81,19 @@ function setup(attempts: ReturnType<typeof attempt>[], sets: ReturnType<typeof s
         item('q4', LO2),
       ]),
     },
-    course_memberships: { findMany: jest.fn().mockResolvedValue([{ user_id: STUDENT }]) },
     lms_user_mappings: {
       findMany: jest.fn().mockResolvedValue([{ internal_user_id: STUDENT, display_name: 'An' }]),
     },
   };
   const authz = { assertCourseAccess: jest.fn().mockResolvedValue(undefined) };
-  return { service: new LearnerModelService(prisma as any, authz as any), prisma, authz };
+  // Mẫu số lớp lấy từ danh sách lớp (membership learner đang hoạt động), không từ lượt làm bài.
+  const roster = { activeLearnerIds: jest.fn().mockResolvedValue([STUDENT]) };
+  return {
+    service: new LearnerModelService(prisma as any, authz as any, roster as any),
+    prisma,
+    authz,
+    roster,
+  };
 }
 
 describe('LearnerModelService', () => {
@@ -134,6 +140,24 @@ describe('LearnerModelService', () => {
     const lo1 = result.los.find((lo) => lo.loId === LO1)!;
     expect(lo1.bank).toEqual({ practice: 2, byType: { MCQ_SINGLE: 2 }, inExam: 1, low: true });
     expect(result.students.map((s) => s.name)).toEqual(['An']);
+  });
+
+  it('bảng cả lớp có cả sinh viên chưa làm bài và người đã rời lớp nhưng còn bằng chứng', async () => {
+    const OTHER = '00000000-0000-0000-0000-000000000008';
+    const LEFT = '00000000-0000-0000-0000-000000000009';
+    const practice = set(PRACTICE, 'practice', [item('q1', LO1)]);
+    const { service, prisma, roster } = setup([{ ...attempt(1, 'q1', PRACTICE, true), user_id: LEFT }], [practice]);
+    roster.activeLearnerIds.mockResolvedValue([STUDENT, OTHER]);
+    prisma.lms_user_mappings.findMany.mockResolvedValue([
+      { internal_user_id: STUDENT, display_name: 'An' },
+      { internal_user_id: OTHER, display_name: 'Bình' },
+      { internal_user_id: LEFT, display_name: 'Cường' },
+    ]);
+    const result = await service.courseMastery(claims(TEACHER, ['instructor']), { courseId: COURSE });
+    expect(roster.activeLearnerIds).toHaveBeenCalledWith(COURSE);
+    expect(result.students.map((s) => s.name)).toEqual(['An', 'Bình', 'Cường']);
+    expect(result.students.find((s) => s.userId === OTHER)!.los[0]).toMatchObject({ observations: 0 });
+    expect(result.students.find((s) => s.userId === LEFT)!.los[0]).toMatchObject({ observations: 1 });
   });
 
   it('xem của sinh viên khác cần quyền giảng viên/trợ giảng', async () => {

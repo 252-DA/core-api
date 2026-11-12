@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsIn,
   IsString,
@@ -5,7 +6,21 @@ import {
   IsOptional,
   IsObject,
   IsNumber,
+  IsArray,
+  ValidateNested,
 } from 'class-validator';
+
+/** Claim `.../lti-nrps/claim/namesroleservice` của id_token: nơi đọc danh sách lớp. */
+export class NrpsClaimDto {
+  @IsString()
+  @MaxLength(2048)
+  contextMembershipsUrl: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  serviceVersions?: string[];
+}
 
 export class LaunchSyncDto {
   @IsIn(['openedx', 'moodle', 'canvas'])
@@ -63,4 +78,9 @@ export class LaunchSyncDto {
   @IsOptional()
   @IsString()
   agsLabel?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => NrpsClaimDto)
+  nrps?: NrpsClaimDto;
 }

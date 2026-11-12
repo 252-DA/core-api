@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { documents } from '@prisma/client';
@@ -63,6 +63,8 @@ function collectEntries(modules: CanvasModule[]): Map<string, Entry> {
 
 @Injectable()
 export class CanvasDocumentSyncService {
+  private readonly logger = new Logger(CanvasDocumentSyncService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly authz: AuthzService,
@@ -84,7 +86,15 @@ export class CanvasDocumentSyncService {
     // Validate the course before accepting the manual request. No downloads in
     // the request path; all three triggers share the same per-course job.
     await this.canvasCourses.contextId(courseId);
-    return this.syncJobs.enqueue(courseId, { kind: 'user', userId: claims.sub }, 'manual');
+    const job = await this.syncJobs.enqueue(courseId, { kind: 'user', userId: claims.sub }, 'manual');
+    // Nút "Đồng bộ từ Canvas" đọc luôn danh sách lớp. Việc này là phần kèm theo:
+    // không để nó làm hỏng yêu cầu đồng bộ tài liệu.
+    try {
+      await this.syncJobs.enqueueRoster(courseId, { kind: 'user', userId: claims.sub }, 'manual');
+    } catch (error) {
+      this.logger.warn(`Không xếp được job danh sách lớp cho ${courseId}: ${String(error)}`);
+    }
+    return job;
   }
 
   /** Internal worker entry point. System imports deliberately have no user owner. */

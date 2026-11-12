@@ -17,6 +17,7 @@ import {
 } from './quiz-set-context';
 import { AGS_STATUS } from '../ags/ags-status';
 import { AgsPublisherService } from '../ags/ags-publisher.service';
+import { CourseRosterRepository } from '../roster/course-roster.repository';
 import {
   groupSubmissions,
   learnerResults,
@@ -72,6 +73,7 @@ export class QuizSetService {
     private readonly canvas: CanvasApiClient,
     private readonly canvasCourses: CanvasCourseService,
     private readonly ags: AgsPublisherService,
+    private readonly roster: CourseRosterRepository,
   ) {}
 
   private async access(claims: BffClaims, courseId: string, roles?: string[]) {
@@ -498,10 +500,15 @@ export class QuizSetService {
     const loIds = [
       ...new Set(set.items.flatMap((i) => (i.lo_id ? [i.lo_id] : []))),
     ];
+    // Mẫu số "cả lớp": sinh viên đang học theo danh sách lớp Canvas, không chỉ
+    // người đã làm bài.
+    const classLearnerIds = await this.roster.activeLearnerIds(set.course_id);
     const [users, los] = await Promise.all([
       this.prisma.lms_user_mappings.findMany({
         where: {
-          internal_user_id: { in: [...new Set(submissions.map((s) => s.userId))] },
+          internal_user_id: {
+            in: [...new Set([...classLearnerIds, ...submissions.map((s) => s.userId)])],
+          },
         },
         select: { internal_user_id: true, display_name: true },
       }),
@@ -517,6 +524,7 @@ export class QuizSetService {
         items: set.items,
         submissions,
         names: new Map(users.map((u) => [u.internal_user_id, u.display_name])),
+        classLearnerIds,
         los: new Map(
           los.map((lo) => [lo.lo_id, { code: lo.code, statement: lo.statement_vi }]),
         ),

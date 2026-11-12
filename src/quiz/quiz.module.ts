@@ -5,12 +5,13 @@ import { QuizService } from './quiz.service';
 import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { CanvasModule } from '../canvas/canvas.module';
+import { RosterModule } from '../roster/roster.module';
 import { QuizSetService } from './quiz-set.service';
 import { EssayGradingService } from './essay-grading.service';
 import { QuizGradingResultHandler } from './quiz-grading-result.handler';
 
 @Module({
-  imports: [AuthModule, PrismaModule, CanvasModule, AgsModule],
+  imports: [AuthModule, PrismaModule, CanvasModule, AgsModule, RosterModule],
   controllers: [QuizController],
   providers: [
     QuizService,

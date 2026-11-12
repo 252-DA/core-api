@@ -141,22 +141,51 @@ export function staffResults(input: {
   submissions: Submission[];
   names: Map<string, string>;
   los: Map<string, { code: string; statement: string }>;
+  /** Sinh viên đang học của khóa (danh sách lớp), kể cả người chưa làm bài. */
+  classLearnerIds: string[];
 }) {
   const byStudent = new Map<string, Submission[]>();
   for (const s of input.submissions) {
     byStudent.set(s.userId, [...(byStudent.get(s.userId) ?? []), s]);
   }
-  const students = [...byStudent.entries()]
-    .map(([userId, subs]) => ({
-      userId,
-      name: input.names.get(userId) ?? 'Sinh viên',
-      attempts: subs.length,
-      bestScore: Math.max(...subs.map((s) => s.score)),
-      latestScore: subs[subs.length - 1].score,
-      lastAttemptedAt: subs[subs.length - 1].attemptedAt,
-      sync: studentSync(subs),
-    }))
+  const inClass = new Set(input.classLearnerIds);
+  // Cả lớp trước, rồi người đã làm bài nhưng không còn trong lớp.
+  const userIds = [
+    ...new Set([...input.classLearnerIds, ...byStudent.keys()]),
+  ];
+  const students = userIds
+    .map((userId) => {
+      const subs = byStudent.get(userId);
+      const base = {
+        userId,
+        name: input.names.get(userId) ?? 'Sinh viên',
+        inClass: inClass.has(userId),
+      };
+      if (!subs) {
+        return {
+          ...base,
+          attempts: 0,
+          bestScore: null,
+          latestScore: null,
+          lastAttemptedAt: null,
+          sync: null,
+        };
+      }
+      return {
+        ...base,
+        attempts: subs.length,
+        bestScore: Math.max(...subs.map((s) => s.score)),
+        latestScore: subs[subs.length - 1].score,
+        lastAttemptedAt: subs[subs.length - 1].attemptedAt,
+        sync: studentSync(subs),
+      };
+    })
     .sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+  // Người đã làm bài: nền cho điểm trung bình và trạng thái sổ điểm Canvas.
+  const attempted = students.filter(
+    (s): s is typeof s & { bestScore: number; sync: GradeSyncState } =>
+      s.bestScore !== null && s.sync !== null,
+  );
 
   // Thống kê câu/LO theo lượt gần nhất của mỗi sinh viên: phản ánh mức hiểu
   // hiện tại, không bị lượt làm thử đầu tiên kéo xuống.
@@ -209,13 +238,18 @@ export function staffResults(input: {
     byLo,
     students,
     summary: {
-      students: students.length,
+      /** Số sinh viên đã nộp ít nhất một lượt (kể cả người không còn trong lớp). */
+      students: attempted.length,
+      /** Quy mô lớp: sinh viên đang học theo danh sách lớp. */
+      classSize: input.classLearnerIds.length,
+      /** Trong số đang học, bao nhiêu người đã làm bài ("đã làm x/n"). */
+      attemptedInClass: attempted.filter((s) => s.inClass).length,
       submissions: input.submissions.length,
-      averageBest: students.length
-        ? Math.round(students.reduce((sum, s) => sum + s.bestScore, 0) / students.length)
+      averageBest: attempted.length
+        ? Math.round(attempted.reduce((sum, s) => sum + s.bestScore, 0) / attempted.length)
         : null,
-      waitingForPublish: students.filter((s) => s.sync === 'WAITING_PUBLISH').length,
-      failed: students.filter((s) => s.sync === 'FAILED').length,
+      waitingForPublish: attempted.filter((s) => s.sync === 'WAITING_PUBLISH').length,
+      failed: attempted.filter((s) => s.sync === 'FAILED').length,
       // Theo lượt nộp, không theo sinh viên: lượt cũ chờ chấm tay vẫn giữ điểm
       // khỏi sổ điểm dù lượt mới nhất đã xong.
       needsReview: input.submissions.filter((s) => s.sync === 'NEEDS_REVIEW').length,

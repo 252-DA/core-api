@@ -4,9 +4,10 @@ import { LtiService } from './lti.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { DocumentModule } from '../document/document.module';
+import { RosterModule } from '../roster/roster.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, DocumentModule],
+  imports: [PrismaModule, AuthModule, DocumentModule, RosterModule],
   controllers: [LtiController],
   providers: [LtiService],
   exports: [LtiService],

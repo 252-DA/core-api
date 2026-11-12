@@ -4,6 +4,10 @@ import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { LaunchSyncDto } from './dto/launch-sync.dto';
 import { CanvasSyncJobsService } from '../document/canvas-sync-jobs.service';
+import {
+  CourseRosterRepository,
+  canvasNumericId,
+} from '../roster/course-roster.repository';
 
 function stableCourseCode(lmsType: string, lmsContextId: string) {
   const hash = createHash('sha256')
@@ -18,11 +22,18 @@ function nullableUuid(value?: string) {
   return value && /^[0-9a-fA-F-]{36}$/.test(value) ? value : null;
 }
 
+/** Body LaunchSync đi qua gRPC không qua class-validator, nên kiểm tra lại ở đây. */
+function nrpsUrl(value: unknown) {
+  const url = typeof value === 'string' ? value.trim() : '';
+  return /^https?:\/\/\S+$/.test(url) && url.length <= 2048 ? url : undefined;
+}
+
 @Injectable()
 export class LtiService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly canvasSyncJobs: CanvasSyncJobsService,
+    private readonly roster: CourseRosterRepository,
   ) {}
 
   async syncLaunch(dto: LaunchSyncDto) {
@@ -174,9 +185,28 @@ export class LtiService {
         ...(internalResourceLinkId && { resourceLinkId: internalResourceLinkId }),
       };
     });
+    // Id Canvas và URL NRPS nằm ở cột mới, ghi sau khi giao dịch launch đã commit
+    // và không làm launch hỏng nếu lỗi (xem CourseRosterRepository).
+    if (dto.lmsType === 'canvas') {
+      await this.roster.recordLaunch({
+        internalUserId: result.internalUserId,
+        courseId: result.internalCourseId,
+        courseRefId: result.lmsCourseRefId,
+        courseRole: dto.courseRole,
+        platformUserId: canvasNumericId(dto.customClaims?.canvas_user_id),
+        platformCourseId: canvasNumericId(dto.customClaims?.canvas_course_id),
+        nrpsUrl: nrpsUrl(dto.nrps?.contextMembershipsUrl),
+      });
+    }
     // Only enqueue after the course/reference transaction has committed. Do not
     // await Redis here: an unavailable queue must never delay the LTI launch.
     void this.canvasSyncJobs.triggerLaunch(result.internalCourseId, dto.lmsType, dto.courseRole);
+    void this.canvasSyncJobs.triggerRosterLaunch(
+      result.internalCourseId,
+      dto.lmsType,
+      dto.courseRole,
+      dto.role,
+    );
     return result;
   }
 }

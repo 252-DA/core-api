@@ -15,6 +15,7 @@ import { EssayGradingService } from '../quiz/essay-grading.service';
 import { ContentGenerationService } from '../content-generation/content-generation.service';
 import { CurriculumImportService } from '../curriculum/curriculum-import.service';
 import { CanvasDocumentSyncService } from '../document/canvas-document-sync.service';
+import { CanvasSyncStatusService } from '../document/canvas-sync-status.service';
 import { ModelSettingsService } from '../model-settings/model-settings.service';
 import { EssayProcessorService } from '../essay-processor/essay-processor.service';
 import { MicroContentService } from '../micro-content/micro-content.service';
@@ -47,6 +48,7 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
     private readonly contentGeneration: ContentGenerationService,
     private readonly curriculumImports: CurriculumImportService,
     private readonly canvasDocuments: CanvasDocumentSyncService,
+    private readonly canvasSyncStatus: CanvasSyncStatusService,
     private readonly modelSettings: ModelSettingsService,
     private readonly essayProcessors: EssayProcessorService,
     private readonly microContent: MicroContentService,
@@ -139,6 +141,9 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       ),
       SyncDocumentsFromCanvas: this.unary((claims, body) =>
         this.canvasDocuments.syncFromCanvas(claims, body.courseId),
+      ),
+      GetCanvasSyncStatus: this.unary((claims, body) =>
+        this.canvasSyncStatus.status(claims, body.courseId),
       ),
       UpdateDocumentPlacement: this.unary((claims, body) =>
         this.canvasDocuments.updatePlacement(claims, body.documentId, {

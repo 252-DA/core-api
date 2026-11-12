@@ -12,6 +12,8 @@ model lms_user_mappings {
   lms_sub            String               @db.VarChar(255)
   display_name       String               @db.VarChar(255)
   role               String               @db.VarChar(50)
+  /// Id người dùng trong Canvas (custom claim canvas_user_id), khác lms_sub là id LTI.
+  lms_platform_user_id String?            @db.VarChar(64)
   created_at         DateTime?            @default(now()) @db.Timestamptz(6)
   updated_at         DateTime?            @default(now()) @db.Timestamptz(6)
   deleted_at         DateTime?            @db.Timestamptz(6)
@@ -35,6 +37,7 @@ model lms_user_mappings {
 
   @@unique([lms_type, lms_sub], map: "uq_lms_user")
   @@index([lms_type, lms_sub], map: "idx_lms_mapping")
+  @@index([lms_type, lms_platform_user_id], map: "idx_lms_user_mappings_platform_user")
   chat_runs          chat_runs[]
   chat_settings      chat_settings[]
   chat_conversations chat_conversations[]
@@ -74,6 +77,7 @@ model courses {
   essay_processors             essay_processors[]
   micro_contents               micro_contents[]
   video_assets                 video_assets[]
+  canvas_sync_runs             canvas_sync_runs[]
 
   @@index([lms_id], map: "idx_course_lms")
   chat_runs           chat_runs[]
@@ -88,6 +92,11 @@ model lms_course_ref {
   lms_custom_settings Json?                @default("{}")
   synced_at           DateTime?            @default(now()) @db.Timestamptz(6)
   deleted_at          DateTime?            @db.Timestamptz(6)
+  /// Id khóa học trong Canvas (custom claim canvas_course_id).
+  lms_platform_course_id       String?     @db.VarChar(64)
+  /// URL NRPS (claim namesroleservice) để đọc danh sách lớp.
+  nrps_context_memberships_url String?     @db.Text
+  nrps_synced_at               DateTime?   @db.Timestamptz(6)
   courses             courses              @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
   lti_resource_links  lti_resource_links[]
 
@@ -127,10 +136,16 @@ model course_memberships {
   course_id         String            @db.Uuid
   role              String            @db.VarChar(30)
   last_seen_at      DateTime?         @default(now()) @db.Timestamptz(6)
+  /// launch (sinh viên mở DA) | nrps (đọc từ danh sách lớp Canvas)
+  source            String            @default("launch") @db.VarChar(20)
+  /// active | inactive
+  status            String            @default("active") @db.VarChar(20)
+  updated_at        DateTime?         @default(now()) @db.Timestamptz(6)
   lms_user_mappings lms_user_mappings @relation(fields: [user_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
   courses           courses           @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
 
   @@id([user_id, course_id, role])
+  @@index([course_id, role, status], map: "idx_course_memberships_course_status")
 }
 
 model chapters {
@@ -1096,4 +1111,23 @@ model video_assets {
   @@index([owner_id, visibility, status])
   @@index([course_id, visibility, status])
   @@index([file_hash])
+}
+
+/// Mỗi lần CanvasSyncProcessor đồng bộ tài liệu của một khóa (migration 20261112120000).
+/// trigger: launch | sweep | manual; status: running | success | error.
+/// Có CHECK trong migration; Prisma không biểu diễn được.
+model canvas_sync_runs {
+  run_id      String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  course_id   String    @db.Uuid
+  trigger     String    @db.VarChar(20)
+  /// documents (đồng bộ tài liệu) | roster (đồng bộ danh sách lớp)
+  kind        String    @default("documents") @db.VarChar(20)
+  started_at  DateTime  @default(now()) @db.Timestamptz(6)
+  finished_at DateTime? @db.Timestamptz(6)
+  status      String    @db.VarChar(20)
+  summary     Json?
+  error       String?
+  courses     courses   @relation(fields: [course_id], references: [course_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([course_id, started_at(sort: Desc)], map: "idx_canvas_sync_runs_course")
 }

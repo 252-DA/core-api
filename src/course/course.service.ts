@@ -21,7 +21,8 @@ export class CourseService {
     const memberships = await this.prisma.course_memberships.findMany({
       where: { user_id: claims.sub },
       include: { courses: true },
-      orderBy: { last_seen_at: 'desc' },
+      // Người mới thấy qua danh sách lớp chưa mở DA lần nào (last_seen_at rỗng): xếp cuối.
+      orderBy: { last_seen_at: { sort: 'desc', nulls: 'last' } },
     });
 
     return memberships

@@ -88,14 +88,17 @@ function setup() {
   );
   const authz = { assertCourseAccess: jest.fn() };
   const ags = { isWaitingForPublish: jest.fn().mockReturnValue(false) };
+  // Danh sách lớp mặc định chỉ có USER, giữ nguyên số liệu của các test cũ.
+  const roster = { activeLearnerIds: jest.fn().mockResolvedValue([USER]) };
   const service = new QuizSetService(
     prisma as never,
     authz as never,
     {} as never,
     {} as never,
     ags as never,
+    roster as never,
   );
-  return { service, prisma, authz, ags, snapshot };
+  return { service, prisma, authz, ags, roster, snapshot };
 }
 
 describe('Canvas quiz sets', () => {
@@ -364,6 +367,118 @@ describe('Canvas quiz sets', () => {
       const items = (result as { items: Array<{ quiz_id: string; correct: number; answered: number }> }).items;
       expect(items.find((i) => i.quiz_id === Q1)).toMatchObject({ answered: 1, correct: 0 });
       expect(items.find((i) => i.quiz_id === Q2)).toMatchObject({ answered: 1, correct: 1 });
+    });
+
+    describe('cả lớp', () => {
+      const BINH = '00000000-0000-0000-0000-0000000000b1';
+      const CUONG = '00000000-0000-0000-0000-0000000000c1';
+      const LEFT = '00000000-0000-0000-0000-0000000000d1';
+      const names = [
+        { internal_user_id: USER, display_name: 'An' },
+        { internal_user_id: BINH, display_name: 'Bình' },
+        { internal_user_id: CUONG, display_name: 'Cường' },
+        { internal_user_id: LEFT, display_name: 'Dũng' },
+      ];
+
+      it('liệt kê cả sinh viên chưa làm bài, với 0 lượt và điểm rỗng', async () => {
+        const { service, prisma, roster } = setup();
+        prisma.course_memberships.count.mockResolvedValue(1);
+        roster.activeLearnerIds.mockResolvedValue([USER, BINH, CUONG]);
+        prisma.lms_user_mappings.findMany.mockResolvedValue(names);
+        prisma.quiz_attempts.findMany.mockResolvedValue([
+          row('s1', Q1, true, '2026-09-27T07:00:00Z'),
+          row('s1', Q2, true, '2026-09-27T07:00:00Z'),
+        ]);
+        const result = (await service.results(
+          { ...claims, roles: ['instructor'] },
+          { quizSetId: SET },
+        )) as {
+          students: Array<Record<string, unknown>>;
+          summary: Record<string, unknown>;
+        };
+        expect(roster.activeLearnerIds).toHaveBeenCalledWith(COURSE);
+        expect(result.students.map((s) => s.name)).toEqual(['An', 'Bình', 'Cường']);
+        expect(result.students[0]).toMatchObject({ attempts: 1, bestScore: 100, inClass: true });
+        expect(result.students[1]).toEqual({
+          userId: BINH,
+          name: 'Bình',
+          inClass: true,
+          attempts: 0,
+          bestScore: null,
+          latestScore: null,
+          lastAttemptedAt: null,
+          sync: null,
+        });
+        expect(result.summary).toMatchObject({
+          students: 1,
+          classSize: 3,
+          attemptedInClass: 1,
+          averageBest: 100,
+          waitingForPublish: 0,
+          failed: 0,
+        });
+        // Tên của cả lớp được tra, không chỉ của người đã làm bài.
+        const lookup = prisma.lms_user_mappings.findMany.mock.calls[0][0].where.internal_user_id.in;
+        expect(lookup).toEqual(expect.arrayContaining([USER, BINH, CUONG]));
+      });
+
+      it('người đã làm bài nhưng không còn trong lớp vẫn hiện, kèm cờ inClass false', async () => {
+        const { service, prisma, roster } = setup();
+        prisma.course_memberships.count.mockResolvedValue(1);
+        roster.activeLearnerIds.mockResolvedValue([USER, BINH]);
+        prisma.lms_user_mappings.findMany.mockResolvedValue(names);
+        prisma.quiz_attempts.findMany.mockResolvedValue([
+          row('s1', Q1, true, '2026-09-27T07:00:00Z'),
+          { ...row('s2', Q1, false, '2026-09-27T08:00:00Z'), user_id: LEFT },
+        ]);
+        const result = (await service.results(
+          { ...claims, roles: ['instructor'] },
+          { quizSetId: SET },
+        )) as {
+          students: Array<{ userId: string; inClass: boolean; attempts: number }>;
+          summary: Record<string, unknown>;
+        };
+        expect(result.students.find((s) => s.userId === LEFT)).toMatchObject({
+          inClass: false,
+          attempts: 1,
+        });
+        expect(result.students.find((s) => s.userId === BINH)).toMatchObject({
+          inClass: true,
+          attempts: 0,
+        });
+        // "Đã làm x/n" chỉ đếm người đang học; người đã rời lớp vẫn nằm trong tổng nộp.
+        expect(result.summary).toMatchObject({
+          students: 2,
+          classSize: 2,
+          attemptedInClass: 1,
+          submissions: 2,
+        });
+      });
+
+      it('lớp có sinh viên nhưng chưa ai làm: averageBest rỗng', async () => {
+        const { service, prisma, roster } = setup();
+        prisma.course_memberships.count.mockResolvedValue(1);
+        roster.activeLearnerIds.mockResolvedValue([USER, BINH]);
+        prisma.lms_user_mappings.findMany.mockResolvedValue(names);
+        const result = (await service.results(
+          { ...claims, roles: ['instructor'] },
+          { quizSetId: SET },
+        )) as { students: unknown[]; summary: Record<string, unknown> };
+        expect(result.students).toHaveLength(2);
+        expect(result.summary).toMatchObject({
+          students: 0,
+          classSize: 2,
+          attemptedInClass: 0,
+          averageBest: null,
+        });
+      });
+
+      it('người học không bị lộ danh sách lớp', async () => {
+        const { service, roster } = setup();
+        const result = await service.results(claims, { quizSetId: SET });
+        expect(roster.activeLearnerIds).not.toHaveBeenCalled();
+        expect(result).toMatchObject({ view: 'learner' });
+      });
     });
   });
 

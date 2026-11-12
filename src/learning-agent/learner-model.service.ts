@@ -5,6 +5,7 @@ import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { answersRevealed } from '../quiz/quiz-set-exam';
 import type { QuizSnapshotItem } from '../quiz/quiz-set.service';
+import { CourseRosterRepository } from '../roster/course-roster.repository';
 import { BKT_DEFAULTS, MASTERY_DEFAULTS } from './bkt';
 import { learnerLoStates, type LoState } from './learner-state';
 import { bktPolicy } from './mastery-policy';
@@ -68,6 +69,7 @@ export class LearnerModelService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authz: AuthzService,
+    private readonly roster: CourseRosterRepository,
   ) {}
 
   private async access(claims: BffClaims, courseId: string, roles?: string[]) {
@@ -101,22 +103,24 @@ export class LearnerModelService {
     };
   }
 
-  /** Bảng sinh viên × LO cho giảng viên, kèm thống kê kho luyện theo LO × loại câu. */
+  /**
+   * Bảng sinh viên × LO cho giảng viên, kèm thống kê kho luyện theo LO × loại câu.
+   * Mẫu số là sinh viên đang học theo danh sách lớp (cùng truy vấn với trang kết
+   * quả quiz), không phải chỉ người đã làm bài; người đã làm bài nhưng rời lớp
+   * vẫn có mặt vì bằng chứng của họ còn đó.
+   */
   async courseMastery(claims: BffClaims, body: { courseId: string }) {
     await this.access(claims, body.courseId, ['instructor', 'ta']);
-    const [los, sets, learners] = await Promise.all([
+    const [los, sets, learnerIds] = await Promise.all([
       this.courseLos(body.courseId),
       this.courseSets(body.courseId),
-      this.prisma.course_memberships.findMany({
-        where: { course_id: body.courseId, role: 'learner' },
-        select: { user_id: true },
-      }),
+      this.roster.activeLearnerIds(body.courseId),
     ]);
     const [evidence, bank] = await Promise.all([
       this.evidence(body.courseId, sets),
       this.practiceBank(body.courseId, sets),
     ]);
-    const userIds = [...new Set([...learners.map((m) => m.user_id), ...evidence.keys()])];
+    const userIds = [...new Set([...learnerIds, ...evidence.keys()])];
     const users = await this.prisma.lms_user_mappings.findMany({
       where: { internal_user_id: { in: userIds } },
       select: { internal_user_id: true, display_name: true },

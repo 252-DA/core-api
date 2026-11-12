@@ -70,7 +70,10 @@ describe('CanvasDocumentSyncService', () => {
       getDocument: jest.fn().mockResolvedValue({}),
     };
     const queue = { add: jest.fn().mockResolvedValue({ id: 'job' }) };
-    const syncJobs = { enqueue: jest.fn().mockResolvedValue({ job_id: `canvas-sync-${courseId}`, status: 'QUEUED' }) };
+    const syncJobs = {
+      enqueue: jest.fn().mockResolvedValue({ job_id: `canvas-sync-${courseId}`, status: 'QUEUED' }),
+      enqueueRoster: jest.fn().mockResolvedValue({ job_id: `canvas-roster-${courseId}`, status: 'QUEUED' }),
+    };
     const service = new CanvasDocumentSyncService(
       prisma as never,
       authz as never,
@@ -93,11 +96,20 @@ describe('CanvasDocumentSyncService', () => {
       expect(canvas.listModules).not.toHaveBeenCalled();
     });
 
+    it('also enqueues a roster job, but a roster failure does not fail the request', async () => {
+      const { service, syncJobs } = setup({ modules: [], files: {} });
+      await service.syncFromCanvas(claims, courseId);
+      expect(syncJobs.enqueueRoster).toHaveBeenCalledWith(courseId, { kind: 'user', userId: claims.sub }, 'manual');
+      syncJobs.enqueueRoster.mockRejectedValue(new Error('queue full'));
+      await expect(service.syncFromCanvas(claims, courseId)).resolves.toMatchObject({ status: 'QUEUED' });
+    });
+
     it('does not enqueue an unauthorized request', async () => {
       const { service, authz, syncJobs } = setup({ modules: [], files: {} });
       authz.assertCourseAccess.mockRejectedValue(new Error('Forbidden'));
       await expect(service.syncFromCanvas(claims, courseId)).rejects.toThrow('Forbidden');
       expect(syncJobs.enqueue).not.toHaveBeenCalled();
+      expect(syncJobs.enqueueRoster).not.toHaveBeenCalled();
     });
   });
 

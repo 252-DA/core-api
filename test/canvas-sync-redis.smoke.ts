@@ -29,6 +29,11 @@ async function main() {
     intervalMs: 900_000,
     launchCooldownMs: 120_000,
   };
+  // sweep() cũng xếp job danh sách lớp (sync_roster); các kiểm tra dưới đây chỉ
+  // nói về job đồng bộ tài liệu của khóa.
+  const waitingDocs = async () =>
+    (await queue.getJobs(['waiting'])).filter((j) => j.name === 'sync_course')
+      .length;
   const jobs = new CanvasSyncJobsService(queue, prisma as never, config);
   const replica = new CanvasSyncJobsService(queue, prisma as never, config);
   let release!: () => void;
@@ -50,7 +55,18 @@ async function main() {
       return { created: ['one.pdf'] };
     },
   };
-  const processor = new CanvasSyncProcessor(sync as never, jobs);
+  const runs = {
+    start: async () => randomUUID(),
+    finish: async () => undefined,
+    fail: async () => undefined,
+  };
+  const processor = new CanvasSyncProcessor(
+    sync as never,
+    jobs,
+    runs as never,
+    { check: async () => ({ ok: true }) } as never,
+    { syncCourse: async () => ({ total: 0 }) } as never,
+  );
   try {
     await events.waitUntilReady();
     await jobs.onModuleInit();
@@ -69,7 +85,7 @@ async function main() {
       jobs.sweep(),
     ]);
     assert.equal(
-      await queue.getWaitingCount(),
+      await waitingDocs(),
       1,
       'concurrent triggers must create one waiting job',
     );
@@ -95,7 +111,7 @@ async function main() {
       'active course sync must not execute twice across workers',
     );
     assert.equal(
-      await queue.getWaitingCount(),
+      await waitingDocs(),
       0,
       'active triggers must not queue duplicates',
     );

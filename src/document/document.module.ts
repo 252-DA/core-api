@@ -6,8 +6,12 @@ import { DocumentStorageService } from './document-storage.service';
 import { CanvasDocumentSyncService } from './canvas-document-sync.service';
 import { AuthModule } from '../auth/auth.module';
 import { CanvasModule } from '../canvas/canvas.module';
+import { RosterModule } from '../roster/roster.module';
 import { CANVAS_SYNC_QUEUE, CanvasSyncJobsService } from './canvas-sync-jobs.service';
 import { CanvasSyncProcessor } from './canvas-sync.processor';
+import { CanvasSyncRunsService } from './canvas-sync-runs.service';
+import { CanvasSyncStatusService } from './canvas-sync-status.service';
+import { CanvasTokenStatusService } from './canvas-token-status.service';
 import { CANVAS_SYNC_CONFIG, canvasSyncConfig } from './canvas-sync.config';
 import { DocumentProcessingResultHandler } from './document-processing-result.handler';
 
@@ -20,11 +24,13 @@ import { DocumentProcessingResultHandler } from './document-processing-result.ha
     ),
     AuthModule,
     CanvasModule,
+    RosterModule,
   ],
   controllers: [DocumentController],
   providers: [DocumentService, DocumentStorageService, CanvasDocumentSyncService,
     CanvasSyncJobsService, CanvasSyncProcessor, DocumentProcessingResultHandler,
+    CanvasSyncRunsService, CanvasTokenStatusService, CanvasSyncStatusService,
     { provide: CANVAS_SYNC_CONFIG, useFactory: canvasSyncConfig }],
-  exports: [DocumentService, CanvasDocumentSyncService, CanvasSyncJobsService, DocumentStorageService],
+  exports: [DocumentService, CanvasDocumentSyncService, CanvasSyncJobsService, DocumentStorageService, CanvasSyncStatusService],
 })
 export class DocumentModule {}
