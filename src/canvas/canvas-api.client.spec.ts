@@ -216,3 +216,88 @@ describe('CanvasApiClient errors and token check', () => {
     });
   });
 });
+
+describe('CanvasApiClient setAssignmentAllowedAttempts', () => {
+  const saved = { ...process.env };
+  let fetchMock: jest.SpyInstance;
+  const echo = (allowed_attempts: unknown) =>
+    new Response(JSON.stringify({ id: 42, allowed_attempts }));
+
+  beforeEach(() => {
+    process.env.CANVAS_API_URL = 'https://canvas.example';
+    process.env.CANVAS_API_TOKEN = 'test-token';
+    fetchMock = jest.spyOn(globalThis, 'fetch');
+  });
+  afterEach(() => {
+    fetchMock.mockRestore();
+    process.env = { ...saved };
+  });
+
+  it('PUTs the limit as JSON without following redirects and with a short timeout', async () => {
+    fetchMock.mockResolvedValueOnce(echo(2));
+    await new CanvasApiClient().setAssignmentAllowedAttempts('8', '42', 2);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://canvas.example/api/v1/courses/8/assignments/42');
+    expect(init).toMatchObject({
+      method: 'PUT',
+      body: JSON.stringify({ assignment: { allowed_attempts: 2 } }),
+      redirect: 'manual',
+      headers: expect.objectContaining({
+        Authorization: 'Bearer test-token',
+        'Content-Type': 'application/json',
+      }),
+    });
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('addresses the course by LTI context id when there is no numeric id', async () => {
+    fetchMock.mockResolvedValueOnce(echo(1));
+    await new CanvasApiClient().setAssignmentAllowedAttempts('lti_context_id:abc', '42', 1);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://canvas.example/api/v1/courses/lti_context_id%3Aabc/assignments/42',
+    );
+  });
+
+  it('fails when Canvas does not echo the limit that was set', async () => {
+    fetchMock.mockResolvedValueOnce(echo(-1));
+    await expect(
+      new CanvasApiClient().setAssignmentAllowedAttempts('8', '42', 2),
+    ).rejects.toThrow('không xác nhận');
+    fetchMock.mockResolvedValueOnce(new Response('not json'));
+    await expect(
+      new CanvasApiClient().setAssignmentAllowedAttempts('8', '42', 2),
+    ).rejects.toThrow('không xác nhận');
+  });
+
+  it('reports the HTTP status without copying the response body into the error', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('secret detail', { status: 403 }));
+    const error = await new CanvasApiClient()
+      .setAssignmentAllowedAttempts('8', '42', 2)
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({ canvasStatus: 403 });
+    expect((error as Error).message).toContain('HTTP 403');
+    expect((error as Error).message).not.toContain('secret detail');
+  });
+
+  it('treats a redirect response as a failure instead of following it', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('', { status: 302 }));
+    await expect(
+      new CanvasApiClient().setAssignmentAllowedAttempts('8', '42', 2),
+    ).rejects.toMatchObject({ canvasStatus: 302 });
+  });
+
+  it('wraps network failures and rejects invalid arguments before any request', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+    await expect(
+      new CanvasApiClient().setAssignmentAllowedAttempts('8', '42', 2),
+    ).rejects.toThrow('Không kết nối được Canvas');
+    fetchMock.mockClear();
+    await expect(
+      new CanvasApiClient().setAssignmentAllowedAttempts('8', '4/2', 2),
+    ).rejects.toThrow('không hợp lệ');
+    await expect(
+      new CanvasApiClient().setAssignmentAllowedAttempts('8', '42', 0),
+    ).rejects.toThrow('không hợp lệ');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

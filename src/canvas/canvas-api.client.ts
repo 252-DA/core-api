@@ -38,6 +38,18 @@ const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const PAGE_SIZE = 100;
 const MAX_PAGES = 20;
 const TOKEN_CHECK_TIMEOUT_MS = 15_000;
+// Ghi lên Canvas nằm trên đường launch LTI nên không được chờ lâu như đọc file.
+const WRITE_TIMEOUT_MS = 5_000;
+
+/** Tùy chọn của request ghi; bỏ trống thì là GET như trước. */
+type CanvasFetchInit = {
+  method?: 'PUT';
+  body?: string;
+  timeoutMs?: number;
+  redirect?: RequestRedirect;
+  /** false: không đưa nội dung phản hồi lỗi vào thông báo. */
+  detail?: boolean;
+};
 
 /** Kết quả kiểm tra token Canvas; lưu nguyên dạng JSON ở Redis (canvas:token-status). */
 export type CanvasTokenCheck = {
@@ -245,20 +257,78 @@ export class CanvasApiClient {
     }
   }
 
-  private async fetch(url: string, token: string, action: string, internal = true) {
+  /**
+   * Đặt số lần làm của một Assignment (PUT /courses/:id/assignments/:id). Dùng
+   * để đẩy giới hạn lần làm của DA sang Canvas vì Deep Linking không mang nó.
+   * `course` là id số của khóa hoặc `lti_context_id:<id>`. Canvas phải trả đúng
+   * `allowed_attempts` vừa đặt, không thì coi như chưa ghi được.
+   */
+  async setAssignmentAllowedAttempts(
+    course: string,
+    assignmentId: string,
+    attempts: number,
+  ): Promise<void> {
+    if (!/^[1-9]\d{0,31}$/.test(assignmentId) || !Number.isInteger(attempts) || attempts < 1) {
+      throw new Error('Tham số số lần làm của Assignment không hợp lệ.');
+    }
+    const { baseUrl, token } = this.config();
+    const path =
+      `/api/v1/courses/${encodeURIComponent(course)}/assignments/${assignmentId}`;
+    // Không đọc nội dung phản hồi lỗi vào thông báo: log chỉ cần mã HTTP.
+    const response = await this.fetch(
+      `${baseUrl}${path}`,
+      token,
+      'đặt số lần làm của Assignment',
+      true,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ assignment: { allowed_attempts: attempts } }),
+        timeoutMs: WRITE_TIMEOUT_MS,
+        redirect: 'manual',
+        detail: false,
+      },
+    );
+    let echoed: unknown;
+    try {
+      echoed = ((await response.json()) as { allowed_attempts?: unknown }).allowed_attempts;
+    } catch {
+      echoed = undefined;
+    }
+    if (echoed !== attempts) {
+      throw new CanvasApiError(
+        'Canvas không xác nhận số lần làm vừa đặt cho Assignment.',
+        response.status,
+      );
+    }
+  }
+
+  private async fetch(
+    url: string,
+    token: string,
+    action: string,
+    internal = true,
+    init: CanvasFetchInit = {},
+  ) {
     let response: Response;
     try {
       response = await fetch(internal ? toInternalCanvasUrl(url) : url, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-        redirect: 'follow',
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        ...(init.method ? { method: init.method } : {}),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+          ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        },
+        ...(init.body !== undefined ? { body: init.body } : {}),
+        redirect: init.redirect ?? 'follow',
+        signal: AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS),
       });
     } catch (error: unknown) {
       const reason = error instanceof Error ? error.message : String(error);
       throw new CanvasApiError(`Không kết nối được Canvas khi ${action}: ${reason}`);
     }
     if (!response.ok) {
-      const detail = (await response.text()).slice(0, 300);
+      const detail =
+        init.detail === false ? '' : (await response.text()).slice(0, 300);
       throw new CanvasApiError(
         `Canvas trả HTTP ${response.status} khi ${action}${detail ? `: ${detail}` : ''}`,
         response.status,

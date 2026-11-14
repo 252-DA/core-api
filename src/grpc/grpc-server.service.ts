@@ -188,11 +188,14 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       SubmitQuiz: this.unary((claims, body) => this.quiz.submit(claims, body)),
       GetCanvasQuizContext: this.unary((claims, body) => this.quizSets.context(claims, body)),
       CreateQuizSet: this.unary((claims, body) => this.quizSets.create(claims, body)),
-      GetQuizSet: this.unary((claims, body) => this.quizSets.get(claims, body.quizSetId)),
+      GetQuizSet: this.unary((claims, body) =>
+        this.quizSets.get(claims, body.quizSetId, body.resourceLinkId),
+      ),
       GetQuizBuilderContext: this.unary((claims, body) => this.quizSets.builderContext(claims, body)),
       StartQuizSet: this.unary((claims, body) => this.quizSets.start(claims, body)),
       SubmitQuizSet: this.unary((claims, body) => this.quizSets.submit(claims, body)),
       GetQuizSetResults: this.unary((claims, body) => this.quizSets.results(claims, body)),
+      GetQuizSubmission: this.unary((claims, body) => this.quizSets.submissionDetail(claims, body)),
       ListQuizAttempts: this.unary((claims, body) =>
         this.quiz.attempts(claims, body.lessonId),
       ),

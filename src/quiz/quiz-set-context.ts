@@ -22,13 +22,18 @@ export async function loadCanvasQuizContext(
     canvas: CanvasApiClient;
     canvasCourses: CanvasCourseService;
   },
-  body: { courseId: string; moduleId: string; chapterId?: string },
+  body: { courseId: string; moduleId?: string | null; chapterId?: string },
 ) {
   const { prisma, canvas, canvasCourses } = deps;
-  if (!/^\d+$/.test(body.moduleId || ''))
-    throw new BadRequestException('Thiếu module Canvas.');
+  // Mở từ trang Assignment thì Canvas không gắn module nào: bài tập được tạo
+  // ngoài module và giảng viên tự chọn chương. Có moduleId thì phải là id số.
+  const moduleId = body.moduleId ? String(body.moduleId) : null;
+  if (moduleId !== null && !/^\d+$/.test(moduleId))
+    throw new BadRequestException('Module Canvas không hợp lệ.');
   const [modules, chapters, sessions] = await Promise.all([
-    canvas.listModules(await canvasCourses.contextId(body.courseId)),
+    moduleId
+      ? canvas.listModules(await canvasCourses.contextId(body.courseId))
+      : Promise.resolve([]),
     prisma.chapters.findMany({
       where: { course_id: body.courseId, deleted_at: null },
       orderBy: { sort_order: 'asc' },
@@ -39,10 +44,12 @@ export async function loadCanvasQuizContext(
       include: { chapters: true },
     }),
   ]);
-  const module = modules.find((item) => String(item.id) === body.moduleId);
-  if (!module)
+  const module = moduleId
+    ? modules.find((item) => String(item.id) === moduleId)
+    : null;
+  if (moduleId && !module)
     throw new NotFoundException('Module không thuộc khóa Canvas hiện tại.');
-  const ref = classifyModule(module.name).chapterRef;
+  const ref = module ? classifyModule(module.name).chapterRef : null;
   const code =
     ref &&
     resolveChapterCode(
@@ -98,7 +105,7 @@ export async function loadCanvasQuizContext(
   const covers = (set: { chapter_ids: string[] }) =>
     Boolean(chapter && set.chapter_ids.includes(chapter.chapter_id));
   return {
-    module: { id: String(module.id), name: module.name },
+    module: module ? { id: String(module.id), name: module.name } : null,
     chapters: chapters.map(({ chapter_id, code, title }) => ({
       chapter_id,
       code,

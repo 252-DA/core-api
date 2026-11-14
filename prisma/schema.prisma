@@ -112,6 +112,15 @@ model lti_resource_links {
   custom_claims        Json?           @default("{}")
   created_at           DateTime?       @default(now()) @db.Timestamptz(6)
   deleted_at           DateTime?       @db.Timestamptz(6)
+  /// Cài đặt Assignment đọc từ Canvas ở launch gần nhất (biến $Canvas.assignment.*).
+  /// NULL ở cả bốn cột ngày/lần làm vẫn là giá trị hợp lệ khi assignment_synced_at đã có:
+  /// nghĩa là Canvas không đặt hạn/giờ mở/giờ đóng/giới hạn lần làm.
+  canvas_assignment_id        String?   @db.VarChar(32)
+  assignment_due_at           DateTime? @db.Timestamptz(6)
+  assignment_unlock_at        DateTime? @db.Timestamptz(6)
+  assignment_lock_at          DateTime? @db.Timestamptz(6)
+  assignment_allowed_attempts Int?
+  assignment_synced_at        DateTime? @db.Timestamptz(6)
   lms_course_ref       lms_course_ref  @relation(fields: [course_ref_id], references: [course_ref_id], onDelete: Restrict, onUpdate: NoAction)
   lti_line_items       lti_line_items?
   quiz_attempts        quiz_attempts[]

@@ -56,7 +56,12 @@ function setup(options: {
   users?: Array<Record<string, unknown>>;
   postResult?: unknown;
   /** Điểm trung bình theo từng lượt nộp đã lưu (kể cả lượt đã đẩy trước đó). */
-  recorded?: Array<{ submission_id: string; _avg: { score: number } }>;
+  recorded?: Array<{
+    submission_id: string;
+    _avg: { score: number };
+    _max?: { attempted_at: Date };
+  }>;
+  config?: Partial<AgsConfig>;
 }) {
   const findMany = jest
     .fn()
@@ -99,7 +104,7 @@ function setup(options: {
   const service = new AgsPublisherService(
     prisma as never,
     { postScore } as never,
-    CONFIG,
+    { ...CONFIG, ...options.config },
   );
 
   return { service, prisma, findMany, updateMany, groupBy, postScore };
@@ -144,7 +149,9 @@ describe('AgsPublisherService', () => {
     ];
     const { service, postScore, findMany } = setup({ attempts });
     await service.publishPending();
-    expect(findMany).toHaveBeenCalledTimes(2);
+    // Giành batch, bổ sung câu còn thiếu của lượt nộp, rồi đọc câu của lượt tốt
+    // nhất để dựng nhận xét.
+    expect(findMany).toHaveBeenCalledTimes(3);
     // Lượt sau kém hơn không kéo điểm xuống; timestamp vẫn là lượt mới nhất
     // vì Canvas từ chối timestamp cũ hơn kết quả đã có.
     expect(postScore).toHaveBeenCalledWith('https://canvas.test/line_items/9', expect.objectContaining({ scoreGiven: 20, timestamp: '2026-08-25T10:01:00.000Z' }));
@@ -394,5 +401,171 @@ describe('AgsPublisherService', () => {
 
     expect(published).toBe(0);
     expect(postScore).not.toHaveBeenCalled();
+  });
+});
+
+describe('AgsPublisherService SpeedGrader submission and comment', () => {
+  const QUIZ_SET = '00000000-0000-0000-0000-0000000000dd';
+  const TOOL = 'https://tool.example';
+  const quizLineItem = [
+    {
+      resource_link_id: LINK,
+      lms_line_item_url: 'https://canvas.test/line_items/9',
+      score_maximum: 10,
+      lti_resource_links: { target_kind: 'quiz_set', target_id: QUIZ_SET },
+    },
+  ];
+  const submissionRows = [
+    { ...attempt('n1', 100, '2026-08-25T10:01:00.000Z'), submission_id: 'new' },
+    { ...attempt('n2', 100, '2026-08-25T10:01:00.000Z'), submission_id: 'new' },
+    { ...attempt('n3', 0, '2026-08-25T10:01:30.000Z'), submission_id: 'new' },
+    { ...attempt('n4', 100, '2026-08-25T10:01:30.000Z'), submission_id: 'new' },
+  ];
+  const lo = (code: string, statement: string, correct: boolean) => ({
+    is_correct: correct,
+    quiz_items: { learning_outcomes: { code, statement_vi: statement } },
+  });
+
+  function quizSetup(extra: Partial<Parameters<typeof setup>[0]>) {
+    const ctx = setup({
+      attempts: submissionRows,
+      lineItems: quizLineItem,
+      config: { toolUrl: TOOL },
+      ...extra,
+    });
+    // Ba lần findMany: giành batch, bổ sung câu còn thiếu, đọc câu để dựng nhận xét.
+    ctx.findMany
+      .mockResolvedValueOnce(submissionRows)
+      .mockResolvedValueOnce(submissionRows)
+      .mockResolvedValueOnce([
+        lo('LO1.1', 'Định nghĩa tiến trình', true),
+        lo('LO1.1', 'Định nghĩa tiến trình', true),
+        lo('LO2.3', 'Phân biệt tiến trình và luồng', false),
+        lo('LO2.3', 'Phân biệt tiến trình và luồng', true),
+      ]);
+    return ctx;
+  }
+
+  it('sends the best submission as a SpeedGrader launch URL with a short comment', async () => {
+    const { service, postScore } = quizSetup({});
+    await service.publishPending();
+    expect(postScore).toHaveBeenCalledWith(
+      'https://canvas.test/line_items/9',
+      expect.objectContaining({
+        scoreGiven: 7.5,
+        scoreMaximum: 10,
+        comment: 'Đúng 3/4 câu. LO yếu nhất: LO2.3 – Phân biệt tiến trình và luồng (1/2 câu đúng).',
+        submission: {
+          url: `${TOOL}/learn/quizzes/${QUIZ_SET}/submissions/new`,
+          submittedAt: '2026-08-25T10:01:30.000Z',
+        },
+      }),
+    );
+  });
+
+  it('keeps the scores in step with the maximum Canvas holds today', async () => {
+    const { service, postScore } = quizSetup({
+      lineItems: [{ ...quizLineItem[0], score_maximum: 40 }],
+    });
+    await service.publishPending();
+    expect(postScore).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ scoreGiven: 30, scoreMaximum: 40 }),
+    );
+  });
+
+  it('points SpeedGrader at an earlier better attempt and does not repeat its comment', async () => {
+    const retake = [
+      { ...attempt('r1', 0, '2026-08-25T11:00:00.000Z'), submission_id: 'retake' },
+    ];
+    const { service, postScore, findMany } = setup({
+      attempts: retake,
+      lineItems: quizLineItem,
+      config: { toolUrl: TOOL },
+      recorded: [
+        {
+          submission_id: 'first',
+          _avg: { score: 100 },
+          _max: { attempted_at: new Date('2026-08-25T10:00:00.000Z') },
+        },
+        {
+          submission_id: 'retake',
+          _avg: { score: 0 },
+          _max: { attempted_at: new Date('2026-08-25T11:00:00.000Z') },
+        },
+      ],
+    });
+    await service.publishPending();
+    const payload = postScore.mock.calls[0][1];
+    expect(payload.scoreGiven).toBe(10);
+    expect(payload.submission).toEqual({
+      url: `${TOOL}/learn/quizzes/${QUIZ_SET}/submissions/first`,
+      // Giữ nguyên lúc nộp của bài đã đẩy để Canvas không tính thêm lần nộp.
+      submittedAt: '2026-08-25T10:00:00.000Z',
+    });
+    // Lượt tốt nhất không nằm trong batch này: không gửi lại nhận xét cũ.
+    expect(payload).not.toHaveProperty('comment');
+    expect(findMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('prefers the earlier attempt when two attempts score the same', async () => {
+    const tie = [
+      { ...attempt('t1', 100, '2026-08-25T12:00:00.000Z'), submission_id: 'later' },
+    ];
+    const { service, postScore } = setup({
+      attempts: tie,
+      lineItems: quizLineItem,
+      config: { toolUrl: TOOL },
+      recorded: [
+        {
+          submission_id: 'earlier',
+          _avg: { score: 100 },
+          _max: { attempted_at: new Date('2026-08-25T10:00:00.000Z') },
+        },
+        {
+          submission_id: 'later',
+          _avg: { score: 100 },
+          _max: { attempted_at: new Date('2026-08-25T12:00:00.000Z') },
+        },
+      ],
+    });
+    await service.publishPending();
+    expect(postScore.mock.calls[0][1].submission?.url).toMatch(/\/submissions\/earlier$/);
+  });
+
+  it('still pushes the score when the comment cannot be built', async () => {
+    const { service, postScore, findMany } = quizSetup({});
+    findMany.mockReset();
+    findMany
+      .mockResolvedValueOnce(submissionRows)
+      .mockResolvedValueOnce(submissionRows)
+      .mockRejectedValueOnce(new Error('db down'));
+    await expect(service.publishPending()).resolves.toBe(1);
+    const payload = postScore.mock.calls[0][1];
+    expect(payload).not.toHaveProperty('comment');
+    expect(payload.submission?.url).toContain('/submissions/new');
+  });
+
+  it('sends no submission without a public tool URL', async () => {
+    const { service, postScore } = quizSetup({ config: { toolUrl: undefined } });
+    await service.publishPending();
+    expect(postScore.mock.calls[0][1]).not.toHaveProperty('submission');
+  });
+
+  it('leaves lesson quizzes untouched', async () => {
+    const { service, postScore } = setup({
+      attempts: [attempt('a1', 100, '2026-08-25T10:00:00.000Z')],
+      lineItems: [
+        {
+          ...quizLineItem[0],
+          lti_resource_links: { target_kind: 'lesson', target_id: QUIZ_SET },
+        },
+      ],
+      config: { toolUrl: TOOL },
+    });
+    await service.publishPending();
+    const payload = postScore.mock.calls[0][1];
+    expect(payload).not.toHaveProperty('submission');
+    expect(payload).not.toHaveProperty('comment');
   });
 });

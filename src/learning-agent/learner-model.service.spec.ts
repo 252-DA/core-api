@@ -133,6 +133,51 @@ describe('LearnerModelService', () => {
     expect(mine.los[0]).toMatchObject({ observations: 1, consecutiveWrong: 1 });
   });
 
+  describe('giờ đóng theo Assignment Canvas', () => {
+    const canvasLink = (lockAt: Date | null, synced = true) =>
+      ({
+        target_kind: 'quiz_set',
+        target_id: EXAM,
+        assignment_synced_at: synced ? new Date() : null,
+        assignment_due_at: lockAt,
+        assignment_unlock_at: null,
+        assignment_lock_at: lockAt,
+        assignment_allowed_attempts: null,
+      }) as never;
+    const examAttempt = (link: unknown) =>
+      ({ ...attempt(1, 'q1', EXAM, false), lti_resource_links: link }) as ReturnType<typeof attempt>;
+
+    it('Canvas dời giờ đóng sớm lại thì đáp án đã công bố, dù đề còn hạn lúc Deep Linking', async () => {
+      const exam = set(EXAM, 'exam', [item('q1', LO1)], new Date(Date.now() + 3600_000));
+      const { service } = setup(
+        [examAttempt(canvasLink(new Date(Date.now() - 3600_000)))],
+        [exam],
+      );
+      const mine = await service.summary(claims(STUDENT, ['learner']), { courseId: COURSE });
+      expect(mine.los[0]).toMatchObject({ observations: 1, consecutiveWrong: 1 });
+    });
+
+    it('Canvas gia hạn thì đáp án chưa công bố, dù đề đã hết hạn lúc Deep Linking', async () => {
+      const exam = set(EXAM, 'exam', [item('q1', LO1)], new Date(Date.now() - 3600_000));
+      const { service } = setup(
+        [examAttempt(canvasLink(new Date(Date.now() + 3600_000)))],
+        [exam],
+      );
+      const mine = await service.summary(claims(STUDENT, ['learner']), { courseId: COURSE });
+      expect(mine.los[0]).toMatchObject({ observations: 0, pending: { not_revealed: 1 } });
+    });
+
+    it('link chưa đọc từ Canvas thì vẫn theo cài đặt của đề', async () => {
+      const exam = set(EXAM, 'exam', [item('q1', LO1)], new Date(Date.now() - 3600_000));
+      const { service } = setup(
+        [examAttempt(canvasLink(new Date(Date.now() + 3600_000), false))],
+        [exam],
+      );
+      const mine = await service.summary(claims(STUDENT, ['learner']), { courseId: COURSE });
+      expect(mine.los[0]).toMatchObject({ observations: 1 });
+    });
+  });
+
   it('kho luyện bỏ câu thuộc đề Kiểm tra và gộp câu trùng văn bản', async () => {
     const exam = set(EXAM, 'exam', [item('q1', LO1)]);
     const { service } = setup([], [exam]);

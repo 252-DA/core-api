@@ -5,9 +5,10 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
 import { DocumentModule } from '../document/document.module';
 import { RosterModule } from '../roster/roster.module';
+import { CanvasModule } from '../canvas/canvas.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, DocumentModule, RosterModule],
+  imports: [PrismaModule, AuthModule, DocumentModule, RosterModule, CanvasModule],
   controllers: [LtiController],
   providers: [LtiService],
   exports: [LtiService],

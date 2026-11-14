@@ -3,6 +3,8 @@ import { AGS_CONFIG, AGS_SCORE_SCOPE, type AgsConfig } from './ags.config';
 import { AgsTokenService } from './ags-token.service';
 
 const SCORE_CONTENT_TYPE = 'application/vnd.ims.lis.v1.score+json';
+/** Phần mở rộng của Canvas: loại bài nộp mà SpeedGrader hiện cho giảng viên. */
+const CANVAS_SUBMISSION_EXTENSION = 'https://canvas.instructure.com/lti/submission';
 
 export interface AgsScorePayload {
   userId: string;
@@ -10,6 +12,12 @@ export interface AgsScorePayload {
   scoreMaximum: number;
   timestamp: string;
   comment?: string;
+  /**
+   * Bài làm để SpeedGrader mở lại. Canvas ghi nó thành bài nộp `basic_lti_launch`
+   * và launch DA vào đúng `url` khi giảng viên chấm. `submittedAt` phải ổn định
+   * giữa các lần đẩy cùng một bài: Canvas chỉ tăng số lần nộp khi nó đổi.
+   */
+  submission?: { url: string; submittedAt: string };
 }
 
 export type AgsPostResult =
@@ -71,14 +79,18 @@ export class AgsClientService {
     }
 
     try {
-      const result = await this.send(url, payload);
-      if (result.ok || result.status !== 401) {
-        return result;
+      let result = await this.send(url, payload);
+      if (!result.ok && result.status === 401) {
+        // 401 thường là token hết hạn sớm hơn dự kiến: bỏ cache rồi thử lại một lần.
+        this.tokenService.invalidate(AGS_SCORE_SCOPE);
+        result = await this.send(url, payload);
       }
-
-      // 401 thường là token hết hạn sớm hơn dự kiến: bỏ cache rồi thử lại một lần.
-      this.tokenService.invalidate(AGS_SCORE_SCOPE);
-      return await this.send(url, payload);
+      if (!result.ok && payload.submission && attemptsExhausted(result)) {
+        // Canvas đếm mỗi lần nộp mới vào số lần làm của Assignment. Hết lượt thì
+        // vẫn ghi điểm, chỉ không tạo thêm bài nộp.
+        result = await this.send(url, payload, { newSubmission: false });
+      }
+      return result;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       // Lỗi mạng / timeout / không lấy được token — luôn coi là tạm thời.
@@ -89,6 +101,7 @@ export class AgsClientService {
   private async send(
     url: string,
     payload: AgsScorePayload,
+    options: { newSubmission?: boolean } = {},
   ): Promise<{ ok: true } | (AgsPostResult & { ok: false; status: number })> {
     const token = await this.tokenService.getAccessToken(AGS_SCORE_SCOPE);
 
@@ -107,6 +120,19 @@ export class AgsClientService {
         activityProgress: 'Completed',
         gradingProgress: 'FullyGraded',
         ...(payload.comment ? { comment: payload.comment } : {}),
+        ...(payload.submission
+          ? {
+              submission: { submittedAt: payload.submission.submittedAt },
+              [CANVAS_SUBMISSION_EXTENSION]: {
+                submission_type: 'basic_lti_launch',
+                submission_data: payload.submission.url,
+                submitted_at: payload.submission.submittedAt,
+                ...(options.newSubmission === false
+                  ? { new_submission: false }
+                  : {}),
+              },
+            }
+          : {}),
       }),
       signal: AbortSignal.timeout(this.config.requestTimeoutMs),
     });
@@ -138,6 +164,13 @@ export class AgsClientService {
       error,
     };
   }
+}
+
+function attemptsExhausted(result: { ok: false; status: number; error: string }) {
+  return (
+    result.status === 422 &&
+    /maximum number of allowed attempts/i.test(result.error)
+  );
 }
 
 function isRetryableStatus(status: number): boolean {

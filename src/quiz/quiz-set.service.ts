@@ -33,6 +33,8 @@ import {
   settingsView,
   SUBMIT_GRACE_MS,
   windowState,
+  withCanvasSettings,
+  type CanvasLinkSettings,
   type ItemOrder,
 } from './quiz-set-exam';
 import { parseBlueprint } from './quiz-blueprint';
@@ -86,9 +88,23 @@ export class QuizSetService {
     await this.authz.assertCourseAccess(claims, courseId, roles);
   }
 
+  /** Giảng viên/trợ giảng của khóa học, hoặc token quản trị. */
+  private async isStaff(claims: BffClaims, courseId: string) {
+    if (claims.scope === 'admin') return true;
+    return (
+      (await this.prisma.course_memberships.count({
+        where: {
+          user_id: claims.sub,
+          course_id: courseId,
+          role: { in: ['instructor', 'ta'] },
+        },
+      })) > 0
+    );
+  }
+
   async context(
     claims: BffClaims,
-    body: { courseId: string; moduleId: string; chapterId?: string },
+    body: { courseId: string; moduleId?: string | null; chapterId?: string },
   ) {
     await this.access(claims, body.courseId, ['instructor', 'ta']);
     return loadCanvasQuizContext(
@@ -268,8 +284,33 @@ export class QuizSetService {
     return { ...set, items: set.items as unknown as QuizSnapshotItem[] };
   }
 
-  async get(claims: BffClaims, id: string) {
-    const set = await this.snapshot(claims, id);
+  /**
+   * Cài đặt Canvas của đúng resource link người dùng đang mở. Link không khớp
+   * quiz/khóa học (hoặc không gửi) thì bỏ qua, quay về cài đặt của quiz set.
+   */
+  private async linkSettings(
+    set: { quiz_set_id: string; course_id: string },
+    resourceLinkId: unknown,
+  ): Promise<CanvasLinkSettings | null> {
+    if (!uuid(resourceLinkId)) return null;
+    return this.prisma.lti_resource_links.findFirst({
+      where: {
+        resource_link_id: resourceLinkId,
+        target_kind: 'quiz_set',
+        target_id: set.quiz_set_id,
+        deleted_at: null,
+        lms_course_ref: { course_id: set.course_id, deleted_at: null },
+      },
+      include: { lti_line_items: true },
+    });
+  }
+
+  async get(claims: BffClaims, id: string, resourceLinkId?: string) {
+    const found = await this.snapshot(claims, id);
+    const set = withCanvasSettings(
+      found,
+      await this.linkSettings(found, resourceLinkId),
+    );
     // Never serialize answers or explanations before submission. Đề kiểm tra
     // chỉ trả về khi bắt đầu một lượt (start), để mở trang chưa xem được đề.
     return {
@@ -306,6 +347,7 @@ export class QuizSetService {
         lms_course_ref: { course_id: set.course_id, deleted_at: null },
         lti_line_items: { is: { deleted_at: null } },
       },
+      include: { lti_line_items: true },
     });
     if (!link)
       throw new ForbiddenException(
@@ -350,10 +392,12 @@ export class QuizSetService {
     claims: BffClaims,
     body: { quizSetId: string; resourceLinkId: string },
   ) {
-    const set = await this.snapshot(claims, body.quizSetId, ['learner']);
-    if (set.mode !== 'exam')
+    const found = await this.snapshot(claims, body.quizSetId, ['learner']);
+    if (found.mode !== 'exam')
       throw new BadRequestException('Quiz luyện tập không cần bắt đầu lượt làm.');
-    const link = await this.quizLink(set, body.resourceLinkId);
+    const link = await this.quizLink(found, body.resourceLinkId);
+    // Hạn, giờ mở/đóng và số lần làm theo Assignment hiện tại của Canvas.
+    const set = withCanvasSettings(found, link);
     const scope = {
       quiz_set_id: set.quiz_set_id,
       user_id: claims.sub,
@@ -409,25 +453,26 @@ export class QuizSetService {
    * bộ đáp án, thống kê theo câu/LO và trạng thái điểm Canvas của từng sinh
    * viên; người học chỉ thấy các lượt nộp của chính mình, không kèm đáp án.
    */
-  async results(claims: BffClaims, body: { quizSetId: string }) {
-    const set = await this.snapshot(claims, body.quizSetId);
-    const staff =
-      claims.scope === 'admin' ||
-      (await this.prisma.course_memberships.count({
-        where: {
-          user_id: claims.sub,
-          course_id: set.course_id,
-          role: { in: ['instructor', 'ta'] },
-        },
-      })) > 0;
+  async results(
+    claims: BffClaims,
+    body: { quizSetId: string; resourceLinkId?: string },
+  ) {
+    const found = await this.snapshot(claims, body.quizSetId);
+    const staff = await this.isStaff(claims, found.course_id);
     const links = await this.prisma.lti_resource_links.findMany({
       where: {
         target_kind: 'quiz_set',
-        target_id: set.quiz_set_id,
+        target_id: found.quiz_set_id,
         deleted_at: null,
       },
-      select: { resource_link_id: true },
+      include: { lti_line_items: true },
     });
+    // Cài đặt theo Assignment người dùng đang mở; chỉ có một Assignment dùng
+    // quiz này thì cũng đủ rõ để dùng cài đặt của nó.
+    const current =
+      links.find((l) => l.resource_link_id === body.resourceLinkId) ??
+      (links.length === 1 ? links[0] : null);
+    const set = withCanvasSettings(found, current);
     const rows = links.length
       ? await this.prisma.quiz_attempts.findMany({
           where: {
@@ -532,6 +577,100 @@ export class QuizSetService {
     };
   }
 
+  /**
+   * Bài làm của một lượt nộp, cho SpeedGrader: điểm gửi về Canvas mang URL của
+   * trang này (AgsPublisherService, extension .../lti/submission) và Canvas mở
+   * lại nó khi giảng viên chấm. Chỉ giảng viên/trợ giảng của khóa xem được; lượt
+   * nộp phải thuộc quiz này và một Assignment của nó trong khóa.
+   */
+  async submissionDetail(
+    claims: BffClaims,
+    body: { quizSetId: string; submissionId: string },
+  ) {
+    if (!uuid(body.submissionId))
+      throw new BadRequestException('Bài làm không hợp lệ.');
+    const found = await this.snapshot(claims, body.quizSetId, ['instructor', 'ta']);
+    const links = await this.prisma.lti_resource_links.findMany({
+      where: {
+        target_kind: 'quiz_set',
+        target_id: found.quiz_set_id,
+        deleted_at: null,
+        lms_course_ref: { course_id: found.course_id, deleted_at: null },
+      },
+      include: { lti_line_items: true },
+    });
+    const linkIds = links.map((l) => l.resource_link_id);
+    const rows = linkIds.length
+      ? await this.prisma.quiz_attempts.findMany({
+          where: {
+            submission_id: body.submissionId,
+            resource_link_id: { in: linkIds },
+            quiz_id: { in: found.items.map((i) => i.quiz_id) },
+            deleted_at: null,
+          },
+          select: {
+            submission_id: true,
+            user_id: true,
+            quiz_id: true,
+            is_correct: true,
+            score: true,
+            attempted_at: true,
+            ags_status: true,
+            resource_link_id: true,
+            chosen_answer: true,
+            grading_status: true,
+            feedback: true,
+          },
+        })
+      : [];
+    if (!rows.length) throw new NotFoundException('Không tìm thấy bài làm.');
+    const [submission] = groupSubmissions(rows, (id) =>
+      this.ags.isWaitingForPublish(id),
+    );
+    const userId = rows[0].user_id;
+    const link = links.find((l) => l.resource_link_id === rows[0].resource_link_id);
+    const set = withCanvasSettings(found, link);
+    const [student, mine] = await Promise.all([
+      this.prisma.lms_user_mappings.findUnique({
+        where: { internal_user_id: userId },
+        select: { display_name: true },
+      }),
+      this.prisma.quiz_attempts.groupBy({
+        by: ['submission_id'],
+        where: {
+          user_id: userId,
+          resource_link_id: { in: linkIds },
+          submission_id: { not: null },
+          deleted_at: null,
+        },
+        _min: { attempted_at: true },
+      }),
+    ]);
+    const order = mine
+      .map((row) => ({
+        id: row.submission_id,
+        at: row._min.attempted_at?.getTime() ?? 0,
+      }))
+      .sort((a, b) => a.at - b.at);
+    const pointsPossible = Number(set.points_possible);
+    return {
+      quiz_set_id: set.quiz_set_id,
+      title: set.title,
+      mode: set.mode,
+      submissionId: submission.submissionId,
+      student: { userId, name: student?.display_name ?? 'Sinh viên' },
+      attemptedAt: submission.attemptedAt,
+      attemptNumber: order.findIndex((o) => o.id === submission.submissionId) + 1,
+      attemptCount: order.length,
+      score: submission.score,
+      pointsPossible,
+      scoreGiven: Math.round(submission.score * pointsPossible) / 100,
+      sync: submission.sync,
+      // Giảng viên xem đủ đáp án đúng và giải thích, kể cả khi bài chưa đóng.
+      review: reviewOf(found.items, rows, submission.submissionId),
+    };
+  }
+
   async submit(
     claims: BffClaims,
     body: {
@@ -541,8 +680,9 @@ export class QuizSetService {
       sessionId?: string;
     },
   ) {
-    const set = await this.snapshot(claims, body.quizSetId, ['learner']);
-    const link = await this.quizLink(set, body.resourceLinkId);
+    const found = await this.snapshot(claims, body.quizSetId, ['learner']);
+    const link = await this.quizLink(found, body.resourceLinkId);
+    const set = withCanvasSettings(found, link);
     const exam = set.mode === 'exam';
     // Bài kiểm tra cho nộp khi còn câu bỏ trống (hết giờ tự nộp); câu bỏ trống
     // tính sai. Luyện tập vẫn yêu cầu trả lời đủ.

@@ -3,7 +3,7 @@ import type { quiz_sets as QuizSetRow } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
-import { answersRevealed } from '../quiz/quiz-set-exam';
+import { answersRevealed, withCanvasSettings } from '../quiz/quiz-set-exam';
 import type { QuizSnapshotItem } from '../quiz/quiz-set.service';
 import { CourseRosterRepository } from '../roster/course-roster.repository';
 import { BKT_DEFAULTS, MASTERY_DEFAULTS } from './bkt';
@@ -193,7 +193,18 @@ export class LearnerModelService {
         grading_status: true,
         attempted_at: true,
         quiz_items: { select: { lo_id: true, type: true, question: true, options: true } },
-        lti_resource_links: { select: { target_kind: true, target_id: true } },
+        // Cột Canvas của link để lấy hạn/giờ đóng hiệu lực, cùng một truy vấn.
+        lti_resource_links: {
+          select: {
+            target_kind: true,
+            target_id: true,
+            assignment_synced_at: true,
+            assignment_due_at: true,
+            assignment_unlock_at: true,
+            assignment_lock_at: true,
+            assignment_allowed_attempts: true,
+          },
+        },
       },
     });
     const setById = new Map(sets.map((s) => [s.quiz_set_id, s]));
@@ -216,7 +227,8 @@ export class LearnerModelService {
         gradingStatus: row.grading_status,
         attemptedAt: row.attempted_at,
         source: set ? (set.mode === 'exam' ? 'exam' : 'practice') : 'lesson',
-        hidden: set ? !answersRevealed(set, now) : false,
+        // Hạn và giờ đóng theo Assignment Canvas, như lúc sinh viên làm bài.
+        hidden: set ? !answersRevealed(withCanvasSettings(set, link), now) : false,
       });
       byUser.set(row.user_id, list);
     }

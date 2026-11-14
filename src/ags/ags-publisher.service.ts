@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AGS_CONFIG, type AgsConfig } from './ags.config';
 import { AGS_STATUS } from './ags-status';
 import { AgsClientService } from './ags-client.service';
+import { buildScoreComment } from './ags-score-comment';
 
 interface ClaimedAttempt {
   submission_id?: string | null;
@@ -23,6 +24,16 @@ interface ScoreTally {
   /** Tổng phần trăm đúng của từng câu (mỗi câu 0 hoặc 100 — xem QuizService.submit). */
   percentTotal: number;
   scoredCount: number;
+  /** Lúc nộp muộn nhất trong các câu của lượt nộp này (có trong batch). */
+  latestAt: Date;
+}
+
+/** Lượt nộp tốt nhất của một người học trên một bài tập. */
+interface BestSubmission {
+  id: string;
+  fraction: number;
+  /** Lúc nộp; ổn định giữa các lần đẩy để Canvas không tính thêm lần nộp. */
+  submittedAt: Date;
 }
 
 interface AttemptGroup {
@@ -167,6 +178,10 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
           resource_link_id: { in: unique(groups.map((g) => g.resourceLinkId)) },
           deleted_at: null,
         },
+        // Quiz của bài tập nào, để dựng URL bài làm cho SpeedGrader.
+        include: {
+          lti_resource_links: { select: { target_kind: true, target_id: true } },
+        },
       }),
     ]);
 
@@ -196,10 +211,33 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
       }
 
       const scoreMaximum = Number(lineItem.score_maximum);
-      const fraction = group.quizSet
-        ? Math.max(bestFraction(group), await this.bestRecordedFraction(group))
-        : bestFraction(group);
+      let fraction = bestFraction(group);
+      let best: BestSubmission | null = null;
+      if (group.quizSet) {
+        const recorded = await this.recordedSubmissions(group);
+        fraction = Math.max(fraction, ...recorded.map((r) => r.fraction));
+        best = pickBest(recorded, group);
+      }
       const scoreGiven = round2(fraction * scoreMaximum);
+
+      // SpeedGrader mở lại bài làm tốt nhất, và chỉ khi bài đó vừa được chấm
+      // (có trong batch này) mới gửi nhận xét: Canvas thêm một bình luận mới ở
+      // mỗi lần đẩy điểm, nên gửi lại cùng bài sẽ lặp bình luận.
+      const quizSetId =
+        lineItem.lti_resource_links?.target_kind === 'quiz_set'
+          ? lineItem.lti_resource_links.target_id
+          : null;
+      const submission =
+        best && quizSetId && this.config.toolUrl
+          ? {
+              url: `${this.config.toolUrl}/learn/quizzes/${quizSetId}/submissions/${best.id}`,
+              submittedAt: best.submittedAt.toISOString(),
+            }
+          : undefined;
+      const comment =
+        best && group.tallies.has(best.id)
+          ? await this.scoreComment(best.id)
+          : undefined;
 
       const result = await this.client.postScore(lineItem.lms_line_item_url, {
         // AGS định danh người học bằng `sub` của platform, không phải id nội bộ.
@@ -207,6 +245,8 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
         scoreGiven,
         scoreMaximum,
         timestamp: group.latestAt.toISOString(),
+        ...(comment ? { comment } : {}),
+        ...(submission ? { submission } : {}),
       });
 
       if (result.ok) {
@@ -338,9 +378,12 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
   /**
    * Làm lại quiz set không được kéo điểm đã có xuống: sổ điểm LMS chỉ giữ điểm
    * gửi sau cùng, nên luôn gửi lượt nộp tốt nhất của người học trên bài tập
-   * này, kể cả các lượt đã đẩy hoặc bị từ chối trước đó.
+   * này, kể cả các lượt đã đẩy hoặc bị từ chối trước đó. Trả về từng lượt đã
+   * lưu với tỉ lệ đúng và lúc nộp.
    */
-  private async bestRecordedFraction(group: AttemptGroup): Promise<number> {
+  private async recordedSubmissions(
+    group: AttemptGroup,
+  ): Promise<BestSubmission[]> {
     const submissions = await this.prisma.quiz_attempts.groupBy({
       by: ['submission_id'],
       where: {
@@ -350,11 +393,53 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
         deleted_at: null,
       },
       _avg: { score: true },
+      _max: { attempted_at: true },
     });
-    return Math.max(
-      0,
-      ...submissions.map((row) => Number(row._avg.score ?? 0) / 100),
+    return submissions.flatMap((row) =>
+      row.submission_id
+        ? [
+            {
+              id: row.submission_id,
+              fraction: Number(row._avg.score ?? 0) / 100,
+              submittedAt: row._max?.attempted_at ?? group.latestAt,
+            },
+          ]
+        : [],
     );
+  }
+
+  /**
+   * Nhận xét ngắn cho một lượt nộp (số câu đúng, LO yếu nhất). Không bao giờ
+   * làm hỏng việc đẩy điểm: lỗi ở đây chỉ làm mất phần nhận xét.
+   */
+  private async scoreComment(submissionId: string): Promise<string | undefined> {
+    try {
+      const rows = await this.prisma.quiz_attempts.findMany({
+        where: { submission_id: submissionId, deleted_at: null },
+        select: {
+          is_correct: true,
+          quiz_items: {
+            select: {
+              learning_outcomes: { select: { code: true, statement_vi: true } },
+            },
+          },
+        },
+      });
+      return (
+        buildScoreComment(
+          rows.map((row) => ({
+            correct: Boolean(row.is_correct),
+            loCode: row.quiz_items?.learning_outcomes?.code ?? null,
+            loStatement: row.quiz_items?.learning_outcomes?.statement_vi ?? null,
+          })),
+        ) ?? undefined
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Không dựng được nhận xét điểm cho lượt nộp ${submissionId}: ${(err as Error).message}`,
+      );
+      return undefined;
+    }
   }
 
   private async mark(attemptIds: string[], status: string, postedAt?: Date) {
@@ -413,9 +498,13 @@ function groupAttempts(attempts: ClaimedAttempt[]): AttemptGroup[] {
     const tally = group.tallies.get(tallyKey) ?? {
       percentTotal: 0,
       scoredCount: 0,
+      latestAt: attemptedAt,
     };
     tally.percentTotal += Number(attempt.score);
     tally.scoredCount += 1;
+    if (attemptedAt > tally.latestAt) {
+      tally.latestAt = attemptedAt;
+    }
     group.tallies.set(tallyKey, tally);
     group.quizSet ||= Boolean(attempt.submission_id);
     if (attemptedAt > group.latestAt) {
@@ -434,6 +523,43 @@ function bestFraction(group: AttemptGroup): number {
       (t) => t.percentTotal / (100 * t.scoredCount),
     ),
   );
+}
+
+/**
+ * Lượt nộp tốt nhất: tỉ lệ đúng cao nhất, hòa thì lượt nộp sớm hơn để lượt làm
+ * lại bằng điểm không đổi bài nộp của Canvas. Lượt nằm trong batch lấy số liệu
+ * của batch nếu cao hơn bản đã lưu (chưa kịp phản ánh).
+ */
+function pickBest(
+  recorded: BestSubmission[],
+  group: AttemptGroup,
+): BestSubmission | null {
+  const candidates = new Map(recorded.map((r) => [r.id, r]));
+  for (const [id, tally] of group.tallies) {
+    if (!id) continue;
+    const fraction = tally.percentTotal / (100 * tally.scoredCount);
+    const known = candidates.get(id);
+    candidates.set(id, {
+      id,
+      fraction: Math.max(fraction, known?.fraction ?? 0),
+      submittedAt:
+        known && known.submittedAt > tally.latestAt
+          ? known.submittedAt
+          : tally.latestAt,
+    });
+  }
+  let best: BestSubmission | null = null;
+  for (const candidate of candidates.values()) {
+    if (
+      !best ||
+      candidate.fraction > best.fraction + 1e-9 ||
+      (Math.abs(candidate.fraction - best.fraction) <= 1e-9 &&
+        candidate.submittedAt < best.submittedAt)
+    ) {
+      best = candidate;
+    }
+  }
+  return best;
 }
 
 function unique<T>(values: T[]): T[] {
