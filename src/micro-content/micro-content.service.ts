@@ -835,12 +835,12 @@ export class MicroContentService {
           ai_prompt: promptText,
           ai_options:
             input.options !== undefined
-              ? (({
+              ? ({
                   ...existingAiOptions,
                   ...(typeof input.options === 'object' && input.options !== null
                     ? input.options
                     : {}),
-                } as Prisma.InputJsonValue) ?? Prisma.DbNull)
+                } as Prisma.InputJsonValue)
               : undefined,
           script_status: 'GENERATING',
           script_request_id: created.request_id,

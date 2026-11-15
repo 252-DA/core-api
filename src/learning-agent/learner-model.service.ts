@@ -9,7 +9,15 @@ import { CourseRosterRepository } from '../roster/course-roster.repository';
 import { BKT_DEFAULTS, MASTERY_DEFAULTS } from './bkt';
 import { learnerLoStates, type LoState } from './learner-state';
 import { bktPolicy } from './mastery-policy';
-import { duplicateKey, normalizeAttempts, type AttemptEvidence } from './observations';
+import {
+  duplicateKey,
+  normalizeAttempts,
+  type AttemptEvidence,
+  type NormalizedEvidence,
+} from './observations';
+import { plan, type Decision, type PlannerLo } from './planner';
+import { dueLoIds, reviewQueue, type ReviewQueueEntry } from './review-queue';
+import { localDayStart, REVIEW_DEFAULTS } from './review-schedule';
 
 /** Trạng thái câu được dùng trong đề, cũng là trạng thái câu được vào kho luyện. */
 const POOL_STATUSES = ['APPROVED', 'PUBLISHED'];
@@ -80,8 +88,9 @@ export class LearnerModelService {
   }
 
   /**
-   * Mức nắm theo LO của người học đang đăng nhập. Giảng viên/trợ giảng truyền
-   * `userId` để xem của một sinh viên.
+   * Mức nắm theo LO của người học đang đăng nhập, kèm lịch ôn dẫn xuất và đề
+   * xuất tiếp theo của planner. Giảng viên/trợ giảng truyền `userId` để xem
+   * của một sinh viên.
    */
   async summary(claims: BffClaims, body: { courseId: string; userId?: string }) {
     const self = !body.userId || body.userId === claims.sub;
@@ -90,16 +99,27 @@ export class LearnerModelService {
     const userId = self ? claims.sub : body.userId!;
 
     const [los, sets] = await Promise.all([this.courseLos(body.courseId), this.courseSets(body.courseId)]);
-    const evidence = await this.evidence(body.courseId, sets, [userId]);
-    const states = learnerLoStates(
-      los.map((lo) => lo.lo_id),
-      normalizeAttempts(evidence.get(userId) ?? []),
-    );
+    const loIds = los.map((lo) => lo.lo_id);
+    const [evidence, bank, sources] = await Promise.all([
+      this.evidence(body.courseId, sets, [userId]),
+      this.practiceBank(body.courseId, sets),
+      this.sourceLoIds(loIds),
+    ]);
+    const rows = evidence.get(userId) ?? [];
+    const normalized = normalizeAttempts(rows);
+    const states = learnerLoStates(loIds, normalized);
+    const now = new Date();
+    const reviews = reviewQueue(states, normalized, now);
     return {
       courseId: body.courseId,
       userId,
       model: modelInfo(),
-      los: los.map((lo, i) => ({ ...loView(lo), ...stateView(states[i]) })),
+      plan: this.buildPlan({ states, normalized, rows, reviews, bank, sources, now }),
+      los: los.map((lo, i) => ({
+        ...loView(lo),
+        ...stateView(states[i]),
+        review: reviews.get(lo.lo_id) ?? null,
+      })),
     };
   }
 
@@ -147,7 +167,12 @@ export class LearnerModelService {
         const stock = bank.get(lo.lo_id) ?? { practice: 0, byType: {}, inExam: 0 };
         return {
           ...loView(lo),
-          bank: { ...stock, low: stock.practice < MIN_PRACTICE_ITEMS },
+          bank: {
+            practice: stock.practice,
+            byType: stock.byType,
+            inExam: stock.inExam,
+            low: stock.practice < MIN_PRACTICE_ITEMS,
+          },
           mastered: students.filter((s) => s.los.find((x) => x.loId === lo.lo_id)?.status === 'mastered')
             .length,
         };
@@ -175,8 +200,8 @@ export class LearnerModelService {
    * người học đã thấy), câu ngoài đề lấy theo ngân hàng.
    *
    * Bài kiểm tra chưa công bố đáp án bị ẩn với MỌI người xem, không chỉ người
-   * học: nếu mô hình (và planner sau này) dùng ngay kết quả đó thì mức nắm hoặc
-   * đề xuất kế tiếp sẽ để lộ câu nào đúng, câu nào sai.
+   * học: nếu mô hình và planner dùng ngay kết quả đó thì mức nắm hoặc đề xuất
+   * kế tiếp sẽ để lộ câu nào đúng, câu nào sai.
    */
   private async evidence(courseId: string, sets: QuizSetRow[], userIds?: string[]) {
     const rows = await this.prisma.quiz_attempts.findMany({
@@ -306,7 +331,8 @@ export class LearnerModelService {
 
   /**
    * Kho luyện theo LO: câu đã duyệt, không thuộc đề Kiểm tra nào còn hiệu lực,
-   * đếm theo nhóm câu trùng văn bản (§5.4, §2.11).
+   * đếm theo nhóm câu trùng văn bản (§5.4, §2.11). `keys` phục vụ planner
+   * (phân biệt câu người học đã gặp); bảng giảng viên chỉ lấy phần đếm.
    */
   private async practiceBank(courseId: string, sets: QuizSetRow[]) {
     const examIds = new Set(
@@ -323,10 +349,7 @@ export class LearnerModelService {
       },
       select: { quiz_id: true, lo_id: true, type: true, question: true },
     });
-    const bank = new Map<
-      string,
-      { practice: number; byType: Record<string, number>; inExam: number; keys: Set<string> }
-    >();
+    const bank = new Map<string, BankStock>();
     for (const item of items) {
       const entry = bank.get(item.lo_id!) ?? { practice: 0, byType: {}, inExam: 0, keys: new Set() };
       bank.set(item.lo_id!, entry);
@@ -340,10 +363,110 @@ export class LearnerModelService {
       entry.practice++;
       entry.byType[item.type] = (entry.byType[item.type] ?? 0) + 1;
     }
-    return new Map(
-      [...bank].map(([loId, { keys: _keys, ...stock }]) => [loId, stock] as const),
-    );
+    return bank;
   }
+
+  /**
+   * LO có tài nguyên để A3 trỏ về: thẻ bài học đã duyệt hoặc đoạn tài liệu
+   * đã gắn LO (bao-cao-learning-agent §7). Truy vấn tùy chọn để spec không
+   * cần dựng thêm mock.
+   */
+  private async sourceLoIds(loIds: string[]): Promise<Set<string>> {
+    const out = new Set<string>();
+    if (!loIds.length) return out;
+    const chunkRows = this.prisma.chunk_lo_mappings?.findMany
+      ? await this.prisma.chunk_lo_mappings.findMany({
+          where: { lo_id: { in: loIds } },
+          select: { lo_id: true },
+          distinct: ['lo_id'],
+        })
+      : [];
+    const cardRows = this.prisma.lesson_cards?.findMany
+      ? await this.prisma.lesson_cards.findMany({
+          where: { lo_id: { in: loIds }, deleted_at: null, status: { in: POOL_STATUSES } },
+          select: { lo_id: true },
+          distinct: ['lo_id'],
+        })
+      : [];
+    for (const row of [...chunkRows, ...cardRows]) {
+      if (row.lo_id) out.add(row.lo_id);
+    }
+    return out;
+  }
+
+  /**
+   * Dựng đầu vào cho planner từ dữ liệu đã dựng lại (§7). Hai chỗ chưa đủ hạ
+   * tầng sự kiện nên nhận giá trị trung lập: `sourceViews` (chưa ghi nhận xem
+   * nguồn) và `paused` (chưa lưu tạm dừng; R2 trả A6 dạng tư vấn). Cũng chưa
+   * có khái niệm "đợt luyện" được lưu: `episodeObservations` tạm là toàn bộ
+   * quan sát của LO.
+   */
+  private buildPlan(args: {
+    states: LoState[];
+    normalized: NormalizedEvidence;
+    rows: AttemptEvidence[];
+    reviews: Map<string, ReviewQueueEntry>;
+    bank: Map<string, BankStock>;
+    sources: Set<string>;
+    now: Date;
+  }): Decision {
+    const { states, normalized, rows, reviews, bank, sources, now } = args;
+    const dayStart = localDayStart(now, 0, REVIEW_DEFAULTS);
+    const masteredAt = new Map(
+      states.filter((s) => s.firstMasteredAt).map((s) => [s.loId, s.firstMasteredAt!.getTime()]),
+    );
+
+    const seenKeys = new Map<string, Set<string>>();
+    for (const row of rows) {
+      if (!row.loId) continue;
+      const keys = seenKeys.get(row.loId) ?? new Set<string>();
+      keys.add(duplicateKey(row.question));
+      seenKeys.set(row.loId, keys);
+    }
+
+    const scope: PlannerLo[] = states.map((state) => {
+      const stock = bank.get(state.loId);
+      const seen = seenKeys.get(state.loId);
+      const hasNewItem = stock ? [...stock.keys].some((key) => !seen?.has(key)) : false;
+      return {
+        loId: state.loId,
+        mastered: state.status === 'mastered',
+        episodeObservations: state.observations,
+        wrongSinceSource: state.consecutiveWrong,
+        sourceViews: 0,
+        paused: false,
+        awaitingGrade: state.pending.grading + state.pending.review > 0,
+        hasNewItem,
+        hasReviewItem: (stock?.keys.size ?? 0) > 0,
+        hasSource: sources.has(state.loId),
+      };
+    });
+
+    const lastObservation = normalized.observations[normalized.observations.length - 1];
+    const answered = rows.filter(
+      (row) => row.attemptedAt && row.attemptedAt.getTime() >= dayStart.getTime(),
+    ).length;
+    const reviewsAnswered = normalized.observations.filter((obs) => {
+      const mastered = masteredAt.get(obs.loId);
+      return (
+        obs.at.getTime() >= dayStart.getTime() && mastered !== undefined && obs.at.getTime() > mastered
+      );
+    }).length;
+
+    return plan({
+      scope,
+      currentLoId: lastObservation?.loId ?? null,
+      dueLoIds: dueLoIds(reviews),
+      today: { answered, reviewsAnswered },
+    });
+  }
+}
+
+interface BankStock {
+  practice: number;
+  byType: Record<string, number>;
+  inExam: number;
+  keys: Set<string>;
 }
 
 function loView(lo: {

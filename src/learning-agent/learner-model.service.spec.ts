@@ -283,4 +283,66 @@ describe('LearnerModelService', () => {
     expect(lo1.mastery).toBeGreaterThan(0.5);
     expect(lo1.pending).toMatchObject({ grading: 1, not_revealed: 0, review: 0 });
   });
+
+  describe('lịch ôn và planner', () => {
+    const masteredPractice = () =>
+      set(PRACTICE, 'practice', [item('q1', LO1), item('q2', LO1), item('q3', LO1)]);
+
+    it('LO đã đạt có lịch ôn; quá hạn thì planner đề xuất ôn (A4)', async () => {
+      const { service } = setup(
+        [
+          attempt(1, 'q1', PRACTICE, true),
+          attempt(2, 'q2', PRACTICE, true),
+          attempt(3, 'q3', PRACTICE, true),
+        ],
+        [masteredPractice()],
+      );
+      const result = await service.summary(claims(STUDENT, ['learner']), { courseId: COURSE });
+      const lo1 = result.los.find((lo) => lo.loId === LO1)!;
+      // Lần đạt đầu 2026-11-01, hộp đầu nhắc sau 1 ngày nên giờ đã quá hạn.
+      expect(lo1.review).toMatchObject({ loId: LO1, box: 0, needsRecheck: false, due: true });
+      expect(result.los.find((lo) => lo.loId === LO2)!.review).toBeNull();
+      expect(result.plan).toMatchObject({ action: 'A4', loId: LO1, rule: 'R1', reason: 'review_due' });
+    });
+
+    it('LO chưa đạt và còn câu chưa gặp thì planner đề xuất luyện tiếp (A1)', async () => {
+      const { service } = setup([attempt(1, 'q1', PRACTICE, false)], [masteredPractice()]);
+      const result = await service.summary(claims(STUDENT, ['learner']), { courseId: COURSE });
+      expect(result.los.find((lo) => lo.loId === LO1)!.review).toBeNull();
+      expect(result.plan).toMatchObject({ action: 'A1', loId: LO1, rule: 'R4', reason: 'need_evidence' });
+    });
+
+    it('sai liên tiếp mà thiếu nguồn thì rơi về luyện tiếp và báo thiếu nguồn', async () => {
+      const { service } = setup(
+        [attempt(1, 'q1', PRACTICE, false), attempt(2, 'q2', PRACTICE, false)],
+        [masteredPractice()],
+      );
+      const result = await service.summary(claims(STUDENT, ['learner']), { courseId: COURSE });
+      expect(result.plan).toMatchObject({ action: 'A1', rule: 'R4', reason: 'need_evidence' });
+      expect(result.plan.issues).toContainEqual({ loId: LO1, issue: 'missing_source' });
+    });
+
+    it('có nguồn gắn LO thì planner đề xuất xem lại nguồn (A3)', async () => {
+      const { service, prisma } = setup(
+        [attempt(1, 'q1', PRACTICE, false), attempt(2, 'q2', PRACTICE, false)],
+        [masteredPractice()],
+      );
+      (prisma as Record<string, unknown>).chunk_lo_mappings = {
+        findMany: jest.fn().mockResolvedValue([{ lo_id: LO1 }]),
+      };
+      const result = await service.summary(claims(STUDENT, ['learner']), { courseId: COURSE });
+      expect(result.plan).toMatchObject({ action: 'A3', loId: LO1, rule: 'R3', reason: 'wrong_streak' });
+    });
+
+    it('đủ giới hạn câu trong ngày thì chỉ còn nghỉ (A0)', async () => {
+      const rows = Array.from({ length: 30 }, (_, i) => ({
+        ...attempt(i + 1, `qt${i}`, PRACTICE, true, item(`qt${i}`, LO2)),
+        attempted_at: new Date(),
+      }));
+      const practice = set(PRACTICE, 'practice', rows.map((row) => row.quiz_items));
+      const { service } = setup(rows, [practice]);
+      const result = await service.summary(claims(STUDENT, ['learner']), { courseId: COURSE });
+      expect(result.plan).toMatchObject({ action: 'A0', loId: null, rule: 'R0', reason: 'daily_limit' });
+    });
+  });
 });
