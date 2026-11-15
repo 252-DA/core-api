@@ -183,6 +183,7 @@ export class MicroContentService {
       scriptStatus: item.script_status,
       scriptRequestId: item.script_request_id,
       hasScript: Boolean(item.ai_script),
+      lowText: this.readLowTextFlag(item.ai_options),
       flaggedSceneCount: countFlaggedScenes(item.ai_script),
       questionCount: item._count.questions,
       attemptCount: item._count.attempts,
@@ -325,6 +326,7 @@ export class MicroContentService {
       videoError: item.video_error,
       aiPrompt: item.ai_prompt,
       aiOptions: item.ai_options,
+      lowText: this.readLowTextFlag(item.ai_options),
       aiScript: item.ai_script,
       sourceDocumentId: item.source_document_id,
       sourceDocumentTitle: item.source_document?.title ?? null,
@@ -751,7 +753,20 @@ export class MicroContentService {
 
     const pageFrom = item.source_page_from ?? 1;
     const pageTo = Math.max(pageFrom, item.source_page_to ?? pageFrom);
-    const promptText = input.prompt?.trim() || item.ai_prompt || item.title;
+    const inputPrompt = input.prompt?.trim() ?? '';
+    const savedCustomPrompt =
+      item.ai_prompt && item.ai_prompt.trim() !== item.title.trim()
+        ? item.ai_prompt.trim()
+        : '';
+    const instructorPrompt = inputPrompt || savedCustomPrompt;
+    const promptText = instructorPrompt || item.ai_prompt || item.title;
+    const existingAiOptions =
+      item.ai_options &&
+      typeof item.ai_options === 'object' &&
+      !Array.isArray(item.ai_options)
+        ? (item.ai_options as Record<string, unknown>)
+        : {};
+    const isLowText = this.readLowTextFlag(existingAiOptions);
     const voice =
       input.options &&
       typeof input.options.voice === 'string' &&
@@ -784,6 +799,8 @@ export class MicroContentService {
       page_to: pageTo,
       topic_title: item.title,
       ...(item.description ? { topic_summary: item.description } : {}),
+      ...(instructorPrompt ? { instructor_prompt: instructorPrompt } : {}),
+      ...(isLowText ? { low_text: true } : {}),
       ...(item.learning_outcome?.lo_id || item.lo_id
         ? { lo_id: item.learning_outcome?.lo_id ?? item.lo_id }
         : {}),
@@ -818,7 +835,12 @@ export class MicroContentService {
           ai_prompt: promptText,
           ai_options:
             input.options !== undefined
-              ? ((input.options as Prisma.InputJsonValue) ?? Prisma.DbNull)
+              ? (({
+                  ...existingAiOptions,
+                  ...(typeof input.options === 'object' && input.options !== null
+                    ? input.options
+                    : {}),
+                } as Prisma.InputJsonValue) ?? Prisma.DbNull)
               : undefined,
           script_status: 'GENERATING',
           script_request_id: created.request_id,
@@ -993,6 +1015,11 @@ export class MicroContentService {
   ) {
     const item = await this.prisma.micro_contents.findFirst({
       where: { micro_content_id: input.microContentId, deleted_at: null },
+      include: {
+        source_document: {
+          select: { file_path: true, mime_type: true },
+        },
+      },
     });
     if (!item) {
       throw new NotFoundException('Micro content not found');
@@ -1009,6 +1036,9 @@ export class MicroContentService {
         `Kịch bản còn ${flaggedCount} cảnh chưa kiểm chứng được nguồn. Vui lòng kiểm tra/sửa lại hoặc xác nhận vẫn dựng video.`,
       );
     }
+
+    const sourceDocKey = item.source_document?.file_path?.trim() || undefined;
+    const sourceDocMime = item.source_document?.mime_type?.trim() || undefined;
 
     // Mỗi lần bấm render là một lần render mới: kết quả của worker mang lại id
     // này, MicroContentVideoResultHandler bỏ kết quả của lần render cũ hơn.
@@ -1086,6 +1116,8 @@ export class MicroContentService {
             course_id: item.course_id,
             asset_id: assetId,
             render_id: renderId,
+            ...(sourceDocKey ? { source_document_key: sourceDocKey } : {}),
+            ...(sourceDocMime ? { source_document_mime_type: sourceDocMime } : {}),
             script: item.ai_script,
           },
         },
@@ -1096,6 +1128,13 @@ export class MicroContentService {
       success: true,
       videoStatus: 'PROCESSING',
     };
+  }
+
+  private readLowTextFlag(aiOptions: unknown): boolean {
+    if (!aiOptions || typeof aiOptions !== 'object' || Array.isArray(aiOptions)) {
+      return false;
+    }
+    return Boolean((aiOptions as Record<string, unknown>).low_text);
   }
 
   async reportProgress(claims: BffClaims, _body: unknown) {

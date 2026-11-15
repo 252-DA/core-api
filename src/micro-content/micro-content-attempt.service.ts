@@ -62,11 +62,13 @@ export class MicroContentAttemptService {
 
   /**
    * Cập nhật tiến độ xem video (heartbeat định kỳ ~10s từ client).
-   * Chống tua gian lận: Chỉ cộng watched_ms dựa trên thời gian thực tế đã trôi qua.
+   * Chống tua gian lận: Chỉ cộng watched_ms dựa trên thời gian thực tế đã trôi qua
+   * (tối đa tốc độ phát 2x + sai số mạng), đồng thời vẫn tính thời gian xem hợp lệ
+   * khi người học tua trước hoặc bấm chuyển cảnh rồi quay lại xem bù.
    */
   async reportProgress(
     claims: BffClaims,
-    input: { microContentId: string; positionMs: number },
+    input: { microContentId: string; positionMs: number; playedMs?: number },
   ) {
     const item = await this.prisma.micro_contents.findFirst({
       where: { micro_content_id: input.microContentId, deleted_at: null },
@@ -83,6 +85,12 @@ export class MicroContentAttemptService {
 
     const videoDurationMs = item.video_duration_ms || 60000;
     const now = new Date();
+    const rawPosMs = Math.max(0, Math.round(Number(input.positionMs) || 0));
+    const hasPlayedMs =
+      typeof input.playedMs === 'number' && Number.isFinite(input.playedMs);
+    const requestedPlayedMs = hasPlayedMs
+      ? Math.max(0, Math.round(input.playedMs as number))
+      : undefined;
 
     const existing = await this.prisma.micro_content_progress.findUnique({
       where: {
@@ -94,24 +102,33 @@ export class MicroContentAttemptService {
     });
 
     let newWatchedMs = 0;
-    let newMaxPosMs = input.positionMs;
+    let newMaxPosMs = rawPosMs;
 
     if (existing) {
-      const realElapsedMs = Math.max(0, now.getTime() - (existing.updated_at?.getTime() || now.getTime()));
-      // Cho phép dung sai 1.5x thời gian thực giữa 2 heartbeat (đề phòng mạng lag/delay)
-      const maxAllowedIncrementMs = Math.round(realElapsedMs * 1.5);
+      const realElapsedMs = Math.max(
+        0,
+        now.getTime() - (existing.updated_at?.getTime() || now.getTime()),
+      );
+      // Hỗ trợ tốc độ phát tới 2x (+10% sai số mạng giữa các heartbeat)
+      const maxAllowedIncrementMs = Math.round(realElapsedMs * 2.2);
 
-      // Nếu vị trí phát không tiến vượt max_position_ms (tạm dừng/treo máy),
-      // không cộng thêm thời gian xem; nếu tua nhanh, chặn theo tốc độ thực 1.5x.
-      const forwardDeltaMs = Math.max(0, input.positionMs - existing.max_position_ms);
-      const actualIncrementMs = Math.min(maxAllowedIncrementMs, forwardDeltaMs);
+      // Khi client gửi playedMs (chỉ tính thời lượng phát liên tục, bỏ qua bước tua),
+      // cộng tiến độ kể cả khi positionMs <= max_position_ms (quay lại xem bù).
+      // Fallback sang forwardDelta theo max_position_ms nếu không có playedMs.
+      const candidateDeltaMs =
+        requestedPlayedMs !== undefined
+          ? requestedPlayedMs
+          : Math.max(0, rawPosMs - existing.max_position_ms);
+      const actualIncrementMs = Math.min(maxAllowedIncrementMs, candidateDeltaMs);
 
       newWatchedMs = Math.min(videoDurationMs, existing.watched_ms + actualIncrementMs);
-      newMaxPosMs = Math.max(existing.max_position_ms, input.positionMs);
+      newMaxPosMs = Math.max(existing.max_position_ms, rawPosMs);
     } else {
       // Lần đầu tiên ghi nhận, tối đa 15 giây
-      newWatchedMs = Math.min(15000, input.positionMs);
-      newMaxPosMs = input.positionMs;
+      const initialMs =
+        requestedPlayedMs !== undefined ? requestedPlayedMs : rawPosMs;
+      newWatchedMs = Math.min(videoDurationMs, Math.min(15000, initialMs));
+      newMaxPosMs = rawPosMs;
     }
 
     const saved = await this.prisma.micro_content_progress.upsert({

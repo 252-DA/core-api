@@ -419,6 +419,43 @@ describe('MicroContentService', () => {
       });
       expect(tx.outbox_events.create).toHaveBeenCalledTimes(1);
     });
+
+    it('includes source_document_key and mime_type in render payload when available', async () => {
+      const { service, prisma } = setup();
+      const tx = {
+        video_assets: {
+          findUnique: jest.fn().mockResolvedValue(null),
+          create: jest.fn().mockResolvedValue({ asset_id: 'new-asset' }),
+        },
+        micro_contents: { update: jest.fn() },
+        outbox_events: { create: jest.fn() },
+      };
+      prisma.$transaction.mockImplementation(
+        async (cb: (t: unknown) => Promise<unknown>) => cb(tx),
+      );
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        title: 'Big Data Intro',
+        video_asset_id: null,
+        ai_script: { scenes: [{ title: 'Giới thiệu', slide_page: 2 }] },
+        source_document: {
+          file_path: 'courses/c1/Ch1_BigData.pdf',
+          mime_type: 'application/pdf',
+        },
+      });
+
+      await service.requestRender(instructorClaims, { microContentId });
+
+      expect(tx.outbox_events.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          payload: expect.objectContaining({
+            source_document_key: 'courses/c1/Ch1_BigData.pdf',
+            source_document_mime_type: 'application/pdf',
+          }),
+        }),
+      });
+    });
   });
 
   describe('AI outline / script / quiz workflow', () => {
@@ -584,6 +621,49 @@ describe('MicroContentService', () => {
       });
     });
 
+    it('requestScript forwards instructor_prompt and preserves low_text in ai_options', async () => {
+      const { service, prisma, tx } = aiSetup();
+      prisma.micro_contents.findFirst.mockResolvedValueOnce({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        title: 'Spark RDD',
+        ai_options: { low_text: true, lo_rationale: 'Khớp nội dung RDD' },
+        source_document_id: docId,
+        source_page_from: 3,
+        source_page_to: 8,
+        learning_outcome: null,
+      });
+      prisma.micro_contents.findMany.mockResolvedValue([]);
+
+      await service.requestScript(instructorClaims, {
+        microContentId,
+        prompt: 'Nhấn mạnh ví dụ map và filter',
+        options: { voice: 'vi-VN-NamMinhNeural' },
+      });
+
+      expect(tx.micro_contents.update).toHaveBeenCalledWith({
+        where: { micro_content_id: microContentId },
+        data: expect.objectContaining({
+          ai_prompt: 'Nhấn mạnh ví dụ map và filter',
+          ai_options: {
+            low_text: true,
+            lo_rationale: 'Khớp nội dung RDD',
+            voice: 'vi-VN-NamMinhNeural',
+          },
+        }),
+      });
+      expect(tx.outbox_events.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          payload: expect.objectContaining({
+            scope: expect.objectContaining({
+              instructor_prompt: 'Nhấn mạnh ví dụ map và filter',
+              low_text: true,
+            }),
+          }),
+        }),
+      });
+    });
+
     it('requestQuiz emits micro_quiz request with clamped count and valid types', async () => {
       const { service, prisma, tx, reqId } = aiSetup();
       prisma.micro_contents.findFirst.mockResolvedValue({
@@ -649,6 +729,7 @@ describe('MicroContentService', () => {
           learning_outcome: null,
           position: 1,
           script_status: 'NONE',
+          ai_options: { low_text: true },
           ai_script: null,
           _count: { questions: 2, attempts: 1 },
         },
@@ -657,6 +738,8 @@ describe('MicroContentService', () => {
       const items = await service.list(instructorClaims, courseId);
 
       expect(items.map((i) => i.id)).toEqual(['a1', 'b2']);
+      expect(items[0].lowText).toBe(true);
+      expect(items[1].lowText).toBe(false);
       expect(items[1].flaggedSceneCount).toBe(1);
     });
   });
