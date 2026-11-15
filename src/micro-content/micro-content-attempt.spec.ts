@@ -92,6 +92,38 @@ describe('MicroContentAttemptService', () => {
       expect(res.maxPositionMs).toBe(90000);
       expect(res.unlocked).toBe(false); // Chưa đạt 90%
     });
+
+    it('adds 0 watchedMs when playback position does not advance (paused/idle)', async () => {
+      const { service, prisma } = setup();
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        video_duration_ms: 100000,
+        required_watch_percent: 80,
+      });
+
+      const twoMinutesAgo = new Date(Date.now() - 120000);
+      prisma.micro_content_progress.findUnique.mockResolvedValue({
+        micro_content_id: microContentId,
+        user_id: learnerClaims.sub,
+        max_position_ms: 15000,
+        watched_ms: 15000,
+        updated_at: twoMinutesAgo,
+      });
+      prisma.micro_content_progress.upsert.mockImplementation(
+        (args: { create: unknown }) => args.create,
+      );
+
+      const res = await service.reportProgress(learnerClaims, {
+        microContentId,
+        positionMs: 15000,
+      });
+
+      expect(res.watchedMs).toBe(15000);
+      expect(res.maxPositionMs).toBe(15000);
+      expect(res.watchedPercent).toBe(15);
+      expect(res.unlocked).toBe(false);
+    });
   });
 
   describe('submit', () => {

@@ -212,6 +212,7 @@ model learning_outcomes {
   lessons           lessons[]
   lesson_cards      lesson_cards[]
   quiz_items        quiz_items[]
+  micro_contents    micro_contents[]
 
   @@unique([course_id, code, academic_year, version], map: "uq_lo_code_versioned")
   @@index([course_id], map: "idx_lo_course")
@@ -407,6 +408,7 @@ model documents {
 
   @@index([course_id, status], map: "idx_documents_course_status")
   knowledge_relations knowledge_relations[]
+  micro_contents      micro_contents[]
 }
 
 model chunks {
@@ -919,15 +921,26 @@ model micro_contents {
   updated_at             DateTime?                 @default(now()) @db.Timestamptz(6)
   deleted_at             DateTime?                 @db.Timestamptz(6)
   video_asset_id         String?                   @db.Uuid
+  source_document_id     String?                   @db.Uuid
+  source_page_from       Int?
+  source_page_to         Int?
+  lo_id                  String?                   @db.Uuid
+  position               Int?
+  script_status          String?                   @db.VarChar(20)
+  script_request_id      String?                   @db.Uuid
   courses                courses                   @relation(fields: [course_id], references: [course_id], onDelete: Cascade, onUpdate: NoAction)
   creator                lms_user_mappings         @relation(fields: [created_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
   video_asset            video_assets?             @relation(fields: [video_asset_id], references: [asset_id], onDelete: SetNull, onUpdate: NoAction)
+  source_document        documents?                @relation(fields: [source_document_id], references: [document_id], onDelete: SetNull, onUpdate: NoAction)
+  learning_outcome       learning_outcomes?        @relation(fields: [lo_id], references: [lo_id], onDelete: SetNull, onUpdate: NoAction)
   questions              micro_content_questions[]
   progress               micro_content_progress[]
   attempts               micro_content_attempts[]
 
   @@index([course_id, deleted_at])
   @@index([video_asset_id])
+  @@index([source_document_id], map: "idx_micro_contents_source_document")
+  @@index([lo_id], map: "idx_micro_contents_lo")
 }
 
 model micro_content_questions {
@@ -1103,6 +1116,7 @@ model video_assets {
   /// khác id này bị bỏ (migration 20261107130400). NULL với video tải lên.
   ai_render_id      String?           @db.Uuid
   transcript_text   String?           @db.Text
+  scene_timeline    Json?
   owner_id          String            @db.Uuid
   course_id         String?           @db.Uuid
   forked_from_id    String?           @db.Uuid

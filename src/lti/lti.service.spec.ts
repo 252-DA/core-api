@@ -525,5 +525,30 @@ describe('LtiService Canvas assignment settings', () => {
       expect(canvas.setAssignmentAllowedAttempts).not.toHaveBeenCalled();
       expect(prisma.lti_resource_links.updateMany).not.toHaveBeenCalled();
     });
+
+    it('accepts targetKind micro_content in DTO and syncs lti_resource_links', async () => {
+      const { plainToInstance } = await import('class-transformer');
+      const { validate } = await import('class-validator');
+      const payload = {
+        ...dto,
+        resourceLinkId: 'rl-mc-1',
+        targetKind: 'micro_content' as const,
+        targetId: '22222222-2222-4222-8222-222222222222',
+      };
+      const errors = await validate(plainToInstance(LaunchSyncDto, payload));
+      expect(errors).toHaveLength(0);
+
+      const { service, tx } = setup();
+      tx.quiz_sets.findFirst.mockResolvedValue(null);
+      await service.syncLaunch(payload);
+      expect(tx.lti_resource_links.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            target_kind: 'micro_content',
+            target_id: '22222222-2222-4222-8222-222222222222',
+          }),
+        }),
+      );
+    });
   });
 });

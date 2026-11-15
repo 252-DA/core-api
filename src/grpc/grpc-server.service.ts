@@ -260,6 +260,12 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       GetMicroContentVideoUrl: this.unary((claims, body) =>
         this.microContentVideo.getVideoUrl(claims, body),
       ),
+      GetMicroContentSubtitles: this.unary((claims, body) =>
+        this.microContentVideo.getSubtitlesUrl(claims, body),
+      ),
+      RequestMicroContentOutline: this.unary((claims, body) =>
+        this.microContent.requestOutline(claims, body),
+      ),
       RequestMicroContentScript: this.unary((claims, body) =>
         this.microContent.requestScript(claims, body),
       ),
@@ -268,6 +274,9 @@ export class GrpcServerService implements OnModuleInit, OnModuleDestroy {
       ),
       RequestMicroContentRender: this.unary((claims, body) =>
         this.microContent.requestRender(claims, body),
+      ),
+      RequestMicroContentQuiz: this.unary((claims, body) =>
+        this.microContent.requestQuiz(claims, body),
       ),
       ReportMicroContentProgress: this.unary((claims, body) =>
         this.microContentAttempt.reportProgress(claims, body),

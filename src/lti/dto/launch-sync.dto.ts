@@ -56,8 +56,8 @@ export class LaunchSyncDto {
   resourceLinkId?: string;
 
   @IsOptional()
-  @IsIn(['lesson', 'card', 'quiz_set', 'chat', 'video'])
-  targetKind?: 'lesson' | 'card' | 'quiz_set' | 'chat' | 'video';
+  @IsIn(['lesson', 'card', 'quiz_set', 'chat', 'video', 'micro_content'])
+  targetKind?: 'lesson' | 'card' | 'quiz_set' | 'chat' | 'video' | 'micro_content';
 
   @IsOptional()
   @IsString()

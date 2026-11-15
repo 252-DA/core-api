@@ -643,4 +643,226 @@ describe('ContentGenerationResultHandler', () => {
     });
     expect(tx.content_generation_requests.update).not.toHaveBeenCalled();
   });
+
+  describe('micro-content generation results (outline, script, quiz)', () => {
+    const DOC = '0193f2a1-7c4e-7d10-9a3b-5e6f7a8b9c10';
+    const MC = '0193f2a1-7c4e-7d10-9a3b-5e6f7a8b9c11';
+    const USER = '0193f2a1-7c4e-7d10-9a3b-5e6f7a8b9c12';
+
+    function microSetup(
+      request: { type: string; status: string; requested_by?: string | null },
+    ) {
+      const tx = {
+        $queryRaw: jest.fn().mockResolvedValue([
+          {
+            request_id: REQUEST,
+            course_id: COURSE,
+            type: request.type,
+            status: request.status,
+            requested_by: request.requested_by ?? USER,
+          },
+        ]),
+        documents: {
+          findFirst: jest.fn().mockResolvedValue({ document_id: DOC, created_by: USER }),
+        },
+        learning_outcomes: {
+          findFirst: jest.fn().mockResolvedValue({ lo_id: LO, course_id: COURSE }),
+          findMany: jest.fn().mockResolvedValue([{ lo_id: LO }]),
+        },
+        micro_contents: {
+          updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+          create: jest.fn().mockResolvedValue({ micro_content_id: MC }),
+          findFirst: jest.fn().mockResolvedValue({
+            micro_content_id: MC,
+            script_request_id: REQUEST,
+            lo_id: LO,
+          }),
+          update: jest.fn().mockResolvedValue({}),
+        },
+        micro_content_questions: {
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          create: jest.fn().mockResolvedValue({}),
+        },
+        content_generation_requests: { update: jest.fn().mockResolvedValue({}) },
+      };
+      const prisma = {
+        $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
+        content_generation_requests: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        micro_contents: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      };
+      return { tx, prisma, handler: new ContentGenerationResultHandler(prisma as never) };
+    }
+
+    it('micro_outline SUCCEEDED replaces untouched drafts and validates suggested_lo_id', async () => {
+      const { tx, handler } = microSetup({ type: 'micro_outline', status: 'RUNNING' });
+      const unknownLo = '0193f2a1-7c4e-7d10-9a3b-5e6f7a8b9cff';
+
+      const out = await handler.handle(
+        envelope({
+          request_id: REQUEST,
+          course_id: COURSE,
+          content_type: 'micro_outline',
+          status: 'SUCCEEDED',
+          document_id: DOC,
+          generated_count: 2,
+          sections: [
+            {
+              title: 'Phần 1: Kiến trúc',
+              page_from: 1,
+              page_to: 5,
+              summary: 'Tổng quan kiến trúc',
+              suggested_lo_id: LO,
+              low_text: false,
+            },
+            {
+              title: 'Phần 2: Thực hành',
+              page_from: 6,
+              page_to: 10,
+              summary: 'Ví dụ minh hoạ',
+              suggested_lo_id: unknownLo,
+              low_text: true,
+            },
+          ],
+        }),
+      );
+
+      expect(out).toMatchObject({ applied: true, status: 'SUCCEEDED', written: 2 });
+      expect(tx.micro_contents.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            course_id: COURSE,
+            source_document_id: DOC,
+            status: 'DRAFT',
+            video_status: 'NONE',
+          }),
+        }),
+      );
+      expect(tx.micro_contents.create).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          data: expect.objectContaining({
+            title: 'Phần 1: Kiến trúc',
+            source_page_from: 1,
+            source_page_to: 5,
+            lo_id: LO,
+            position: 1,
+          }),
+        }),
+      );
+      expect(tx.micro_contents.create).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          data: expect.objectContaining({
+            title: 'Phần 2: Thực hành',
+            lo_id: null,
+            position: 2,
+          }),
+        }),
+      );
+    });
+
+    it('video_script SUCCEEDED updates ai_script and script_status when active, skips if superseded', async () => {
+      const { tx, handler } = microSetup({ type: 'video_script', status: 'RUNNING' });
+      const scriptPayload = {
+        request_id: REQUEST,
+        course_id: COURSE,
+        content_type: 'video_script',
+        status: 'SUCCEEDED',
+        micro_content_id: MC,
+        generated_count: 1,
+        script: {
+          language: 'vi',
+          voice: 'vi-VN-HoaiMyNeural',
+          topic: 'Spark RDD',
+          scenes: [
+            {
+              title: 'Mở đầu',
+              bullets: ['Khái niệm RDD'],
+              narration: 'RDD là tập dữ liệu bất biến.',
+              check: { status: 'VERIFIED' },
+            },
+          ],
+        },
+        rejected: [],
+      };
+
+      const activeOut = await handler.handle(envelope(scriptPayload));
+      expect(activeOut).toMatchObject({ applied: true, status: 'SUCCEEDED', written: 1 });
+      expect(tx.micro_contents.update).toHaveBeenCalledWith({
+        where: { micro_content_id: MC },
+        data: expect.objectContaining({
+          script_status: 'READY',
+          ai_script: scriptPayload.script,
+        }),
+      });
+
+      tx.micro_contents.update.mockClear();
+      tx.micro_contents.findFirst.mockResolvedValueOnce({
+        micro_content_id: MC,
+        script_request_id: '0193f2a1-7c4e-7d10-9a3b-5e6f7a8b9c99',
+      });
+      const staleOut = await handler.handle(envelope(scriptPayload));
+      expect(staleOut).toMatchObject({ applied: true, status: 'SUCCEEDED', written: 0, skipped: 1 });
+      expect(tx.micro_contents.update).not.toHaveBeenCalled();
+    });
+
+    it('video_script FAILED marks micro_contents.script_status = FAILED', async () => {
+      const { tx, handler } = microSetup({ type: 'video_script', status: 'RUNNING' });
+      tx.micro_contents.updateMany = jest.fn().mockResolvedValue({ count: 1 }) as never;
+
+      const out = await handler.handle(
+        envelope({
+          request_id: REQUEST,
+          course_id: COURSE,
+          content_type: 'video_script',
+          status: 'FAILED',
+          error: 'Không có chunk nào trong trang slide.',
+        }),
+      );
+
+      expect(out).toMatchObject({ applied: true, status: 'FAILED' });
+      expect(tx.micro_contents.updateMany).toHaveBeenCalledWith({
+        where: { script_request_id: REQUEST, script_status: 'GENERATING' },
+        data: expect.objectContaining({ script_status: 'FAILED' }),
+      });
+    });
+
+    it('micro_quiz SUCCEEDED soft-deletes old questions and writes generated questions', async () => {
+      const { tx, handler } = microSetup({ type: 'micro_quiz', status: 'RUNNING' });
+
+      const out = await handler.handle(
+        envelope({
+          request_id: REQUEST,
+          course_id: COURSE,
+          content_type: 'micro_quiz',
+          status: 'SUCCEEDED',
+          micro_content_id: MC,
+          lo_id: LO,
+          generated_count: 2,
+          quiz_items: [
+            quizItem(),
+            quizItem({
+              quiz_id: '8d3c6a52-5b1e-5c7a-9f0e-2a4b6c8d0e12',
+              type: 'SHORT_ANSWER',
+              question: 'Giải thích tính bất biến của RDD.',
+              options: null,
+              correct_answer: {
+                model_answer: 'Không thể sửa đổi sau khi tạo.',
+                rubric: ['Không thể thay đổi trực tiếp'],
+              },
+            }),
+          ],
+          rejected: [],
+        }),
+      );
+
+      expect(out).toMatchObject({ applied: true, status: 'SUCCEEDED', written: 2 });
+      expect(tx.micro_content_questions.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { micro_content_id: MC, deleted_at: null },
+        }),
+      );
+      expect(tx.micro_content_questions.create).toHaveBeenCalledTimes(2);
+    });
+  });
 });

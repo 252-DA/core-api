@@ -380,5 +380,284 @@ describe('MicroContentService', () => {
         tx.outbox_events.create.mock.calls[1][0].data.payload,
       ).toMatchObject({ asset_id: 'ai-asset', render_id: second });
     });
+
+    it('blocks rendering when FLAGGED scenes exist unless allowFlagged is true', async () => {
+      const { service, prisma } = setup();
+      const tx = {
+        video_assets: {
+          findUnique: jest.fn().mockResolvedValue(null),
+          update: jest.fn(),
+          create: jest.fn().mockResolvedValue({ asset_id: 'new-asset' }),
+        },
+        micro_contents: { update: jest.fn() },
+        outbox_events: { create: jest.fn() },
+      };
+      prisma.$transaction.mockImplementation(
+        async (cb: (t: unknown) => Promise<unknown>) => cb(tx),
+      );
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        title: 'Spark RDD',
+        video_asset_id: null,
+        ai_script: {
+          scenes: [
+            { title: 'Cảnh 1', check: { status: 'VERIFIED' } },
+            { title: 'Cảnh 2', check: { status: 'FLAGGED' } },
+          ],
+        },
+      });
+
+      await expect(
+        service.requestRender(instructorClaims, { microContentId }),
+      ).rejects.toThrow(/chưa kiểm chứng/);
+      expect(tx.outbox_events.create).not.toHaveBeenCalled();
+
+      await service.requestRender(instructorClaims, {
+        microContentId,
+        allowFlagged: true,
+      });
+      expect(tx.outbox_events.create).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('AI outline / script / quiz workflow', () => {
+    const docId = '33333333-3333-4333-8333-333333333333';
+    const loId = '44444444-4444-4444-8444-444444444444';
+
+    function aiSetup() {
+      const reqId = '55555555-5555-4555-8555-555555555555';
+      const tx = {
+        content_generation_requests: {
+          create: jest.fn().mockResolvedValue({ request_id: reqId, status: 'QUEUED' }),
+        },
+        micro_contents: {
+          create: jest.fn(),
+          update: jest.fn().mockResolvedValue({}),
+        },
+        outbox_events: {
+          create: jest.fn().mockResolvedValue({ event_id: 'evt-1' }),
+        },
+      };
+      const prisma = {
+        documents: {
+          findFirst: jest.fn(),
+        },
+        chunks: {
+          count: jest.fn().mockResolvedValue(12),
+        },
+        learning_outcomes: {
+          findFirst: jest.fn(),
+        },
+        content_generation_requests: {
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        micro_contents: {
+          findMany: jest.fn().mockResolvedValue([]),
+          findFirst: jest.fn(),
+          create: jest.fn(),
+          update: jest.fn(),
+        },
+        $transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(tx)),
+      };
+      const authz = {
+        assertCourseAccess: jest.fn().mockResolvedValue(undefined),
+      };
+      const service = new MicroContentService(prisma as never, authz as never);
+      return { service, prisma, tx, reqId };
+    }
+
+    it('requestOutline validates lecture doc & chunks and emits CONTENT_GENERATION_REQUESTED', async () => {
+      const { service, prisma, tx, reqId } = aiSetup();
+      prisma.documents.findFirst.mockResolvedValue({
+        document_id: docId,
+        title: 'Spark.pdf',
+        role: 'lecture',
+        chapter_code: '8',
+      });
+
+      const res = await service.requestOutline(instructorClaims, {
+        courseId,
+        documentId: docId,
+      });
+
+      expect(res).toEqual({ requestId: reqId, status: 'QUEUED', deduplicated: false });
+      expect(tx.content_generation_requests.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          course_id: courseId,
+          type: 'micro_outline',
+          status: 'QUEUED',
+        }),
+      });
+      expect(tx.outbox_events.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          event_type: 'CONTENT_GENERATION_REQUESTED',
+          payload: expect.objectContaining({
+            request_id: reqId,
+            type: 'micro_outline',
+            scope: expect.objectContaining({ document_id: docId, chapter_code: '8' }),
+          }),
+        }),
+      });
+    });
+
+    it('requestOutline deduplicates active request for same document', async () => {
+      const { service, prisma, tx } = aiSetup();
+      prisma.documents.findFirst.mockResolvedValue({
+        document_id: docId,
+        title: 'Spark.pdf',
+        role: 'lecture',
+        chapter_code: '8',
+      });
+      prisma.content_generation_requests.findMany.mockResolvedValue([
+        { request_id: 'active-req-1', status: 'PROCESSING', scope: { document_id: docId } },
+      ]);
+
+      const res = await service.requestOutline(instructorClaims, {
+        courseId,
+        documentId: docId,
+      });
+
+      expect(res).toEqual({ requestId: 'active-req-1', status: 'PROCESSING', deduplicated: true });
+      expect(tx.content_generation_requests.create).not.toHaveBeenCalled();
+    });
+
+    it('requestScript rejects when source_document_id is missing, else queues video_script', async () => {
+      const { service, prisma, tx, reqId } = aiSetup();
+      prisma.micro_contents.findFirst.mockResolvedValueOnce({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        source_document_id: null,
+        title: 'Chủ đề 1',
+      });
+      await expect(
+        service.requestScript(instructorClaims, { microContentId }),
+      ).rejects.toThrow(BadRequestException);
+
+      prisma.micro_contents.findFirst.mockResolvedValueOnce({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        title: 'Spark RDD',
+        description: 'Tóm tắt RDD',
+        source_document_id: docId,
+        source_page_from: 3,
+        source_page_to: 8,
+        lo_id: loId,
+        learning_outcome: {
+          lo_id: loId,
+          code: 'L.O.8.1',
+          statement_vi: 'Hiểu mô hình RDD',
+          statement_en: null,
+        },
+      });
+      prisma.micro_contents.findMany.mockResolvedValue([{ title: 'DataFrame API' }]);
+
+      const res = await service.requestScript(instructorClaims, { microContentId });
+
+      expect(res).toEqual({
+        success: true,
+        requestId: reqId,
+        scriptStatus: 'GENERATING',
+      });
+      expect(tx.micro_contents.update).toHaveBeenCalledWith({
+        where: { micro_content_id: microContentId },
+        data: expect.objectContaining({
+          script_status: 'GENERATING',
+          script_request_id: reqId,
+        }),
+      });
+      expect(tx.outbox_events.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          event_type: 'CONTENT_GENERATION_REQUESTED',
+          payload: expect.objectContaining({
+            type: 'video_script',
+            scope: expect.objectContaining({
+              micro_content_id: microContentId,
+              document_id: docId,
+              page_from: 3,
+              page_to: 8,
+              lo_code: 'L.O.8.1',
+              neighbor_topics: ['DataFrame API'],
+            }),
+          }),
+        }),
+      });
+    });
+
+    it('requestQuiz emits micro_quiz request with clamped count and valid types', async () => {
+      const { service, prisma, tx, reqId } = aiSetup();
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        title: 'Spark RDD',
+        source_document_id: docId,
+        source_page_from: 3,
+        source_page_to: 8,
+        lo_id: loId,
+        learning_outcome: { lo_id: loId, code: 'L.O.8.1', statement_vi: 'Hiểu RDD', statement_en: null },
+        ai_script: { scenes: [] },
+      });
+
+      const res = await service.requestQuiz(instructorClaims, {
+        microContentId,
+        count: 4,
+        questionTypes: ['MCQ_SINGLE', 'SHORT_ANSWER'],
+      });
+
+      expect(res).toEqual({ success: true, requestId: reqId, status: 'QUEUED' });
+      expect(tx.outbox_events.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          payload: expect.objectContaining({
+            type: 'micro_quiz',
+            scope: expect.objectContaining({
+              micro_content_id: microContentId,
+              count: 4,
+              question_types: ['MCQ_SINGLE', 'SHORT_ANSWER'],
+            }),
+          }),
+        }),
+      });
+    });
+
+    it('list orders sections of same source_document_id by position', async () => {
+      const { service, prisma } = aiSetup();
+      prisma.micro_contents.findMany.mockResolvedValue([
+        {
+          micro_content_id: 'b2',
+          course_id: courseId,
+          title: 'Phần 2',
+          source_document_id: docId,
+          source_document: { document_id: docId, title: 'Spark.pdf' },
+          source_page_from: 6,
+          source_page_to: 10,
+          lo_id: loId,
+          learning_outcome: { lo_id: loId, code: 'L.O.8.1', statement_vi: 'Hiểu RDD' },
+          position: 2,
+          script_status: 'READY',
+          ai_script: { scenes: [{ check: { status: 'FLAGGED' } }] },
+          _count: { questions: 0, attempts: 0 },
+        },
+        {
+          micro_content_id: 'a1',
+          course_id: courseId,
+          title: 'Phần 1',
+          source_document_id: docId,
+          source_document: { document_id: docId, title: 'Spark.pdf' },
+          source_page_from: 1,
+          source_page_to: 5,
+          lo_id: null,
+          learning_outcome: null,
+          position: 1,
+          script_status: 'NONE',
+          ai_script: null,
+          _count: { questions: 2, attempts: 1 },
+        },
+      ]);
+
+      const items = await service.list(instructorClaims, courseId);
+
+      expect(items.map((i) => i.id)).toEqual(['a1', 'b2']);
+      expect(items[1].flaggedSceneCount).toBe(1);
+    });
   });
 });

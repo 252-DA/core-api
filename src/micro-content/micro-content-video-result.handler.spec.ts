@@ -115,6 +115,36 @@ describe('MicroContentVideoResultHandler', () => {
     });
   });
 
+  it('READY: persists vtt_subtitles_key, transcript_text, and scene_timeline when provided', async () => {
+    const { handler, prisma } = setup();
+    const vttKey = `micro-content/c/${MC}/ai-${RENDER}.vtt`;
+    const timeline = [
+      { scene_index: 0, title: 'Giới thiệu', start_ms: 0, end_ms: 3500, duration_ms: 3500 },
+      { scene_index: 1, title: 'Chi tiết', start_ms: 3500, end_ms: 7700, duration_ms: 4200 },
+    ];
+
+    const out = await handler.handle(
+      envelope(
+        ready({
+          vtt_object_key: vttKey,
+          transcript_text: 'Xin chào các bạn',
+          scene_timeline: timeline,
+        }),
+      ),
+    );
+
+    expect(out).toEqual({ applied: true, status: 'READY', microContents: 1 });
+    expect(prisma.video_assets.updateMany).toHaveBeenCalledWith({
+      where: { asset_id: ASSET, ai_render_id: RENDER, status: 'PROCESSING' },
+      data: expect.objectContaining({
+        vtt_subtitles_key: vttKey,
+        transcript_status: 'READY',
+        transcript_text: 'Xin chào các bạn',
+        scene_timeline: timeline,
+      }),
+    });
+  });
+
   it('FAILED: status and error on asset and waiting lessons, keeps the old file', async () => {
     const { handler, prisma } = setup();
 
@@ -328,6 +358,18 @@ describe('micro-content-video-result: độ dài tính theo code point', () => {
     expect(() => parse(ready({ object_key: MATH.repeat(513) }))).toThrow(
       /object_key/,
     );
+  });
+
+  it('rejects malformed scene_timeline where end_ms < start_ms', () => {
+    expect(() =>
+      parse(
+        ready({
+          scene_timeline: [
+            { scene_index: 0, title: 'Cảnh 1', start_ms: 2000, end_ms: 1000, duration_ms: 1000 },
+          ],
+        }),
+      ),
+    ).toThrow(/scene_timeline\[0\]\.end_ms/);
   });
 });
 

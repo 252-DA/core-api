@@ -217,4 +217,70 @@ describe('LearnerModelService', () => {
       service.summary(claims(STUDENT, ['learner']), { courseId: '00000000-0000-0000-0000-0000000000ff' }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it('tính kết quả bài micro-content gắn lo_id vào mức đạt LO của người học', async () => {
+    const { service, prisma } = setup([], []);
+    (prisma as Record<string, unknown>).micro_content_answers = {
+      findMany: jest.fn().mockResolvedValue([
+        {
+          answer_id: 'mc-ans-1',
+          question_id: 'mc-q-1',
+          is_correct: true,
+          grading_status: 'GRADED',
+          created_at: new Date('2026-11-15T10:00:00Z'),
+          attempt: {
+            user_id: STUDENT,
+            submitted_at: new Date('2026-11-15T10:00:00Z'),
+            micro_contents: { lo_id: LO1 },
+          },
+          question: {
+            type: 'MCQ_SINGLE',
+            options: ['A', 'B', 'C', 'D'],
+            question: 'RDD là gì?',
+          },
+        },
+        {
+          answer_id: 'mc-ans-2',
+          question_id: 'mc-q-2',
+          is_correct: true,
+          grading_status: 'GRADED',
+          created_at: new Date('2026-11-15T10:01:00Z'),
+          attempt: {
+            user_id: STUDENT,
+            submitted_at: new Date('2026-11-15T10:01:00Z'),
+            micro_contents: { lo_id: LO1 },
+          },
+          question: {
+            type: 'TRUE_FALSE',
+            options: ['Đúng', 'Sai'],
+            question: 'Spark chạy in-memory.',
+          },
+        },
+        {
+          answer_id: 'mc-ans-3',
+          question_id: 'mc-q-3',
+          is_correct: false,
+          grading_status: 'PENDING',
+          created_at: new Date('2026-11-15T10:02:00Z'),
+          attempt: {
+            user_id: STUDENT,
+            submitted_at: new Date('2026-11-15T10:02:00Z'),
+            micro_contents: { lo_id: LO1 },
+          },
+          question: {
+            type: 'SHORT_ANSWER',
+            options: null,
+            question: 'Giải thích lazy evaluation.',
+          },
+        },
+      ]),
+    };
+
+    const result = await service.summary(claims(STUDENT, ['learner']), { courseId: COURSE });
+    const lo1 = result.los.find((lo) => lo.loId === LO1)!;
+
+    expect(lo1.observations).toBe(2);
+    expect(lo1.mastery).toBeGreaterThan(0.5);
+    expect(lo1.pending).toMatchObject({ grading: 1, not_revealed: 0, review: 0 });
+  });
 });

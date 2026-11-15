@@ -101,9 +101,10 @@ export class MicroContentAttemptService {
       // Cho phép dung sai 1.5x thời gian thực giữa 2 heartbeat (đề phòng mạng lag/delay)
       const maxAllowedIncrementMs = Math.round(realElapsedMs * 1.5);
 
-      // Nếu client tua tiến vượt xa, chỉ tăng tối đa bằng maxAllowedIncrementMs
+      // Nếu vị trí phát không tiến vượt max_position_ms (tạm dừng/treo máy),
+      // không cộng thêm thời gian xem; nếu tua nhanh, chặn theo tốc độ thực 1.5x.
       const forwardDeltaMs = Math.max(0, input.positionMs - existing.max_position_ms);
-      const actualIncrementMs = Math.min(maxAllowedIncrementMs, forwardDeltaMs > 0 ? forwardDeltaMs : realElapsedMs);
+      const actualIncrementMs = Math.min(maxAllowedIncrementMs, forwardDeltaMs);
 
       newWatchedMs = Math.min(videoDurationMs, existing.watched_ms + actualIncrementMs);
       newMaxPosMs = Math.max(existing.max_position_ms, input.positionMs);

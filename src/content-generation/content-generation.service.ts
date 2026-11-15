@@ -34,8 +34,13 @@ export class ContentGenerationService {
   ) {
     await this.authz.assertCourseAccess(claims, courseId, ['instructor', 'ta']);
 
-    if (type !== undefined && type !== 'card' && type !== 'quiz' && type !== 'relations') {
-      throw new BadRequestException('type must be one of: card, quiz, relations');
+    if (
+      type !== undefined &&
+      !['card', 'quiz', 'relations', 'micro_outline', 'video_script', 'micro_quiz'].includes(type)
+    ) {
+      throw new BadRequestException(
+        'type must be one of: card, quiz, relations, micro_outline, video_script, micro_quiz',
+      );
     }
 
     const parsedLimit =

@@ -13,6 +13,10 @@ function createClient() {
     useSSL: process.env.MINIO__SECURE === 'true',
     accessKey: process.env.MINIO__ACCESS_KEY || 'minioadmin',
     secretKey: process.env.MINIO__SECRET_KEY || 'minioadmin',
+    // Cloudflare R2 dùng region "auto". Có region thì minio-js bỏ qua bước dò
+    // region của bucket (một request riêng, R2 có thể không trả lời được).
+    // Để trống thì giữ hành vi cũ — MinIO tự dựng, B2.
+    ...(process.env.MINIO__REGION ? { region: process.env.MINIO__REGION } : {}),
   });
 }
 

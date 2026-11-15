@@ -232,6 +232,75 @@ export class LearnerModelService {
       });
       byUser.set(row.user_id, list);
     }
+
+    if (this.prisma.micro_content_answers?.findMany) {
+      const microRows = await this.prisma.micro_content_answers.findMany({
+        where: {
+          question: { deleted_at: null },
+          attempt: {
+            ...(userIds ? { user_id: { in: userIds } } : {}),
+            micro_contents: {
+              course_id: courseId,
+              lo_id: { not: null },
+              deleted_at: null,
+            },
+          },
+        },
+        select: {
+          answer_id: true,
+          question_id: true,
+          is_correct: true,
+          grading_status: true,
+          created_at: true,
+          attempt: {
+            select: {
+              user_id: true,
+              submitted_at: true,
+              micro_contents: {
+                select: { lo_id: true },
+              },
+            },
+          },
+          question: {
+            select: {
+              type: true,
+              options: true,
+              question: true,
+            },
+          },
+        },
+        orderBy: [{ created_at: 'asc' }, { answer_id: 'asc' }],
+      });
+
+      for (const row of microRows) {
+        const loId = row.attempt.micro_contents.lo_id;
+        if (!loId) continue;
+        const list = byUser.get(row.attempt.user_id) ?? [];
+        list.push({
+          attemptId: row.answer_id,
+          quizId: row.question_id,
+          loId,
+          type: row.question.type,
+          optionCount: optionCount(row.question.options),
+          question: row.question.question,
+          isCorrect: row.is_correct,
+          gradingStatus: row.grading_status,
+          attemptedAt: row.attempt.submitted_at ?? row.created_at ?? new Date(),
+          source: 'lesson',
+          hidden: false,
+        });
+        byUser.set(row.attempt.user_id, list);
+      }
+
+      if (microRows.length > 0) {
+        for (const list of byUser.values()) {
+          list.sort(
+            (a, b) => (a.attemptedAt?.getTime() ?? 0) - (b.attemptedAt?.getTime() ?? 0),
+          );
+        }
+      }
+    }
+
     return byUser;
   }
 

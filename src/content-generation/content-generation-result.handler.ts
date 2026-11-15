@@ -50,6 +50,7 @@ type LockedRequest = {
   course_id: string;
   type: string;
   status: string;
+  requested_by: string | null;
 };
 
 /**
@@ -140,6 +141,9 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
           status: 'FAILED',
           last_error: clip(result.error),
         });
+        if (request.type === 'video_script') {
+          await markMicroContentScriptFailed(tx, requestId);
+        }
         return { applied: true, request_id: requestId, status: 'FAILED' };
 
       case 'SUCCEEDED':
@@ -160,6 +164,15 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
         last_error: null,
       });
       return { applied: true, request_id: requestId, status: 'SUCCEEDED' };
+    }
+    if (result.content_type === 'micro_outline') {
+      return this.applyMicroOutline(tx, request, result);
+    }
+    if (result.content_type === 'video_script') {
+      return this.applyVideoScript(tx, request, result);
+    }
+    if (result.content_type === 'micro_quiz') {
+      return this.applyMicroQuiz(tx, request, result);
     }
 
     const lo = await findCurrentLearningOutcome(tx, result.lo_id);
@@ -207,6 +220,232 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
     };
   }
 
+  private async applyMicroOutline(
+    tx: Prisma.TransactionClient,
+    request: LockedRequest,
+    result: Extract<ContentGenerationResult, { status: 'SUCCEEDED'; content_type: 'micro_outline' }>,
+  ): Promise<Outcome> {
+    const requestId = request.request_id;
+    const doc = await tx.documents.findFirst({
+      where: {
+        document_id: result.document_id,
+        course_id: request.course_id,
+        deleted_at: null,
+      },
+      select: { document_id: true, created_by: true },
+    });
+    if (!doc) {
+      await updateRequest(tx, requestId, {
+        status: 'FAILED',
+        last_error: `Document ${result.document_id} was deleted or does not belong to course ${request.course_id}`,
+      });
+      return { applied: true, request_id: requestId, status: 'FAILED', reason: 'document missing' };
+    }
+
+    let creatorId = request.requested_by ?? doc.created_by ?? null;
+    if (!creatorId) {
+      const staff = await tx.course_memberships.findFirst({
+        where: { course_id: request.course_id, role: { in: ['instructor', 'ta', 'admin'] }, status: 'active' },
+        select: { user_id: true },
+      });
+      creatorId = staff?.user_id ?? null;
+    }
+    if (!creatorId) {
+      await updateRequest(tx, requestId, {
+        status: 'FAILED',
+        last_error: 'Không xác định được giảng viên tạo bản nháp micro-content.',
+      });
+      return { applied: true, request_id: requestId, status: 'FAILED', reason: 'creator missing' };
+    }
+
+    const validLos = await tx.learning_outcomes.findMany({
+      where: { course_id: request.course_id, is_current: true, deleted_at: null },
+      select: { lo_id: true },
+    });
+    const validLoIds = new Set(validLos.map((lo) => lo.lo_id));
+    const now = new Date();
+
+    // Chỉ thay thế bản nháp cũ từ cùng bộ slide mà giảng viên chưa sinh kịch bản/video/câu hỏi.
+    await tx.micro_contents.updateMany({
+      where: {
+        course_id: request.course_id,
+        source_document_id: result.document_id,
+        deleted_at: null,
+        status: 'DRAFT',
+        video_status: 'NONE',
+        ai_script: { equals: Prisma.DbNull },
+        questions: { none: { deleted_at: null } },
+        attempts: { none: {} },
+      },
+      data: { deleted_at: now, updated_at: now },
+    });
+
+    for (let idx = 0; idx < result.sections.length; idx++) {
+      const sec = result.sections[idx];
+      const loId =
+        sec.suggested_lo_id && validLoIds.has(sec.suggested_lo_id) ? sec.suggested_lo_id : null;
+      await tx.micro_contents.create({
+        data: {
+          course_id: request.course_id,
+          title: sec.title.trim().slice(0, 255),
+          description: sec.summary?.trim() || null,
+          video_source: 'AI',
+          video_status: 'NONE',
+          source_document_id: result.document_id,
+          source_page_from: sec.page_from,
+          source_page_to: sec.page_to,
+          lo_id: loId,
+          position: idx + 1,
+          script_status: 'NONE',
+          ai_options: {
+            low_text: sec.low_text,
+            ...(sec.lo_rationale ? { lo_rationale: sec.lo_rationale } : {}),
+          } as Prisma.InputJsonValue,
+          status: 'DRAFT',
+          created_by: creatorId,
+        },
+      });
+    }
+
+    await updateRequest(tx, requestId, {
+      status: 'SUCCEEDED',
+      generated_count: result.sections.length,
+      last_error: null,
+    });
+    return {
+      applied: true,
+      request_id: requestId,
+      status: 'SUCCEEDED',
+      written: result.sections.length,
+    };
+  }
+
+  private async applyVideoScript(
+    tx: Prisma.TransactionClient,
+    request: LockedRequest,
+    result: Extract<ContentGenerationResult, { status: 'SUCCEEDED'; content_type: 'video_script' }>,
+  ): Promise<Outcome> {
+    const requestId = request.request_id;
+    const item = await tx.micro_contents.findFirst({
+      where: {
+        micro_content_id: result.micro_content_id,
+        course_id: request.course_id,
+        deleted_at: null,
+      },
+      select: { micro_content_id: true, script_request_id: true },
+    });
+    if (!item) {
+      await updateRequest(tx, requestId, {
+        status: 'FAILED',
+        last_error: `Micro-content ${result.micro_content_id} missing or deleted`,
+      });
+      return { applied: true, request_id: requestId, status: 'FAILED', reason: 'micro_content missing' };
+    }
+
+    const superseded = Boolean(item.script_request_id && item.script_request_id !== requestId);
+    if (!superseded) {
+      await tx.micro_contents.update({
+        where: { micro_content_id: item.micro_content_id },
+        data: {
+          video_source: 'AI',
+          script_status: 'READY',
+          ai_script: result.script as unknown as Prisma.InputJsonValue,
+          updated_at: new Date(),
+        },
+      });
+    }
+
+    const statuses: VerificationStatus[] = result.script.scenes.map(
+      (s) => s.check?.status ?? 'UNVERIFIED',
+    );
+    await updateRequest(tx, requestId, {
+      status: 'SUCCEEDED',
+      generated_count: result.generated_count,
+      last_error: null,
+      verification_summary: verificationSummary(statuses, result.rejected),
+    });
+    return {
+      applied: true,
+      request_id: requestId,
+      status: 'SUCCEEDED',
+      written: superseded ? 0 : result.generated_count,
+      skipped: superseded ? result.generated_count : 0,
+    };
+  }
+
+  private async applyMicroQuiz(
+    tx: Prisma.TransactionClient,
+    request: LockedRequest,
+    result: Extract<ContentGenerationResult, { status: 'SUCCEEDED'; content_type: 'micro_quiz' }>,
+  ): Promise<Outcome> {
+    const requestId = request.request_id;
+    const item = await tx.micro_contents.findFirst({
+      where: {
+        micro_content_id: result.micro_content_id,
+        course_id: request.course_id,
+        deleted_at: null,
+      },
+      select: { micro_content_id: true, lo_id: true },
+    });
+    if (!item) {
+      await updateRequest(tx, requestId, {
+        status: 'FAILED',
+        last_error: `Micro-content ${result.micro_content_id} missing or deleted`,
+      });
+      return { applied: true, request_id: requestId, status: 'FAILED', reason: 'micro_content missing' };
+    }
+
+    const now = new Date();
+    await tx.micro_content_questions.updateMany({
+      where: { micro_content_id: item.micro_content_id, deleted_at: null },
+      data: { deleted_at: now, updated_at: now },
+    });
+
+    for (let idx = 0; idx < result.quiz_items.length; idx++) {
+      const q = result.quiz_items[idx];
+      await tx.micro_content_questions.create({
+        data: {
+          micro_content_id: item.micro_content_id,
+          position: idx + 1,
+          type: q.type,
+          question: q.question,
+          options: (q.options ?? Prisma.DbNull) as Prisma.InputJsonValue,
+          correct_answer: (q.correct_answer ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          explanation: q.explanation,
+        },
+      });
+    }
+
+    let resolvedLoId: string | undefined;
+    if (!item.lo_id && result.lo_id) {
+      const lo = await findCurrentLearningOutcome(tx, result.lo_id);
+      if (lo && lo.course_id === request.course_id) {
+        resolvedLoId = lo.lo_id;
+      }
+    }
+    await tx.micro_contents.update({
+      where: { micro_content_id: item.micro_content_id },
+      data: {
+        ...(resolvedLoId ? { lo_id: resolvedLoId } : {}),
+        updated_at: now,
+      },
+    });
+
+    const statuses = result.quiz_items.map((i) => i.verification_status);
+    await updateRequest(tx, requestId, {
+      status: 'SUCCEEDED',
+      generated_count: result.quiz_items.length,
+      last_error: null,
+      verification_summary: verificationSummary(statuses, result.rejected),
+    });
+    return {
+      applied: true,
+      request_id: requestId,
+      status: 'SUCCEEDED',
+      written: result.quiz_items.length,
+    };
+  }
+
   /**
    * Kết quả không bao giờ áp dụng được nữa — payload sai dạng, lệch course/type/LO
    * với request (InvalidWorkerResultError ném cả trong transaction), hay lỗi DB
@@ -238,6 +477,12 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
             updated_at: new Date(),
           },
         });
+        if (
+          typeof (this.prisma.micro_contents as { updateMany?: unknown } | undefined)
+            ?.updateMany === 'function'
+        ) {
+          await markMicroContentScriptFailed(this.prisma, requestId);
+        }
         if (count) {
           this.logger.warn(
             `Request ${requestId} → FAILED vì kết quả ${envelope.result_id} thất bại vĩnh viễn: ${error.message}`,
@@ -248,6 +493,16 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
   }
 }
 
+async function markMicroContentScriptFailed(
+  db: PrismaService | Prisma.TransactionClient,
+  requestId: string,
+) {
+  await db.micro_contents.updateMany({
+    where: { script_request_id: requestId, script_status: 'GENERATING' },
+    data: { script_status: 'FAILED', updated_at: new Date() },
+  });
+}
+
 async function lockRequest(
   tx: Prisma.TransactionClient,
   requestId: string,
@@ -255,7 +510,11 @@ async function lockRequest(
   // FOR UPDATE: nhiều bản core-api có thể nhận hai kết quả của cùng request
   // cùng lúc; khoá để chúng áp dụng lần lượt trên trạng thái mới nhất.
   const rows = await tx.$queryRaw<LockedRequest[]>`
-    SELECT request_id::text AS request_id, course_id::text AS course_id, type, status
+    SELECT request_id::text AS request_id,
+           course_id::text AS course_id,
+           type,
+           status,
+           requested_by::text AS requested_by
       FROM content_generation_requests
      WHERE request_id = ${requestId}::uuid
        FOR UPDATE`;

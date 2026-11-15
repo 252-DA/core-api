@@ -121,13 +121,18 @@ export class MicroContentVideoService {
     };
   }
 
-  /**
-   * Lấy presigned GET URL ngắn hạn để stream video.
-   * Kiểm tra quyền truy cập theo vai trò (Learner chỉ xem được nội dung PUBLISHED).
-   */
-  async getVideoUrl(claims: BffClaims, input: { microContentId: string }) {
+  private async findAuthorizedItem(claims: BffClaims, microContentId: string) {
     const item = await this.prisma.micro_contents.findFirst({
-      where: { micro_content_id: input.microContentId, deleted_at: null },
+      where: { micro_content_id: microContentId, deleted_at: null },
+      include: {
+        video_asset: {
+          select: {
+            vtt_subtitles_key: true,
+            transcript_text: true,
+            scene_timeline: true,
+          },
+        },
+      },
     });
     if (!item) {
       throw new NotFoundException('Micro content not found');
@@ -145,6 +150,15 @@ export class MicroContentVideoService {
     } else {
       await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
     }
+    return item;
+  }
+
+  /**
+   * Lấy presigned GET URL ngắn hạn để stream video.
+   * Kiểm tra quyền truy cập theo vai trò (Learner chỉ xem được nội dung PUBLISHED).
+   */
+  async getVideoUrl(claims: BffClaims, input: { microContentId: string }) {
+    const item = await this.findAuthorizedItem(claims, input.microContentId);
 
     if (!item.video_object_key || item.video_status !== 'READY') {
       throw new BadRequestException('Video chưa sẵn sàng để phát.');
@@ -157,6 +171,26 @@ export class MicroContentVideoService {
       mimeType: item.video_mime_type || 'video/mp4',
       durationMs: item.video_duration_ms,
       title: item.title,
+    };
+  }
+
+  /**
+   * Lấy presigned URL tệp phụ đề WebVTT (nếu có) cùng timeline chuyển cảnh.
+   */
+  async getSubtitlesUrl(claims: BffClaims, input: { microContentId: string }) {
+    const item = await this.findAuthorizedItem(claims, input.microContentId);
+    const vttKey = item.video_asset?.vtt_subtitles_key;
+    const url = vttKey
+      ? await this.storage.createPresignedDownloadUrl(vttKey, 5 * 60)
+      : null;
+
+    return {
+      url,
+      mimeType: 'text/vtt',
+      transcriptText: item.video_asset?.transcript_text ?? null,
+      sceneTimeline: Array.isArray(item.video_asset?.scene_timeline)
+        ? item.video_asset.scene_timeline
+        : [],
     };
   }
 }
