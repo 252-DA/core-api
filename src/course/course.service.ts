@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
@@ -31,6 +35,9 @@ export class CourseService {
   }
 
   async getCourse(claims: BffClaims, courseId: string) {
+    if (!courseId?.trim()) {
+      throw new BadRequestException('courseId is required');
+    }
     await this.authz.assertCourseAccess(claims, courseId);
     const course = await this.prisma.courses.findFirst({
       where: { course_id: courseId, deleted_at: null },
@@ -41,12 +48,16 @@ export class CourseService {
     return course;
   }
 
-  async createCourse(data: {
-    code: string;
-    name: string;
-    description?: string;
-    lms_id?: string;
-  }) {
+  async createCourse(
+    claims: BffClaims,
+    data: {
+      code: string;
+      name: string;
+      description?: string;
+      lms_id?: string;
+    },
+  ) {
+    await this.authz.assertPlatformAdmin(claims);
     return this.prisma.courses.create({
       data: {
         code: data.code,

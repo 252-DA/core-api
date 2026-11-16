@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -9,25 +10,67 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { DocumentService } from './document.service';
+import { CanvasDocumentSyncService } from './canvas-document-sync.service';
+import { CanvasSyncStatusService } from './canvas-sync-status.service';
 import { BffJwtGuard } from '../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../auth/current-bff-claims.decorator';
 import type { BffClaims } from '../auth/bff-claims';
+import { parseOptionalInt } from '../common/query-params';
+import {
+  CreateUploadSessionDto,
+  RegisterDocumentDto,
+  SyncCanvasDocumentsDto,
+  UpdateDocumentPlacementDto,
+} from './dto/document.dto';
 
 @Controller('api/documents')
 @UseGuards(BffJwtGuard)
 export class DocumentController {
-  constructor(private readonly documentService: DocumentService) {}
+  constructor(
+    private readonly documentService: DocumentService,
+    private readonly canvasDocuments: CanvasDocumentSyncService,
+    private readonly canvasSyncStatus: CanvasSyncStatusService,
+  ) {}
 
   @Get()
   async listDocuments(
     @CurrentBffClaims() claims: BffClaims,
-    @Query('course_id') courseId: string,
+    @Query('courseId') courseId?: string,
+    @Query('course_id') courseIdSnake?: string,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
-    const lim = limit ? parseInt(limit, 10) : 50;
-    const off = offset ? parseInt(offset, 10) : 0;
-    return this.documentService.listDocuments(claims, courseId, lim, off);
+    const resolvedCourseId = courseId ?? courseIdSnake ?? '';
+    return this.documentService.listDocuments(
+      claims,
+      resolvedCourseId,
+      parseOptionalInt(limit, 'limit'),
+      parseOptionalInt(offset, 'offset'),
+    );
+  }
+
+  @Post('upload-session')
+  async createUploadSession(
+    @CurrentBffClaims() claims: BffClaims,
+    @Body() body: CreateUploadSessionDto,
+  ) {
+    return this.documentService.createUploadSession(claims, body);
+  }
+
+  @Post('sync-canvas')
+  async syncFromCanvas(
+    @CurrentBffClaims() claims: BffClaims,
+    @Body() body: SyncCanvasDocumentsDto,
+  ) {
+    return this.canvasDocuments.syncFromCanvas(claims, body.courseId);
+  }
+
+  @Get('canvas-sync-status')
+  async getCanvasSyncStatus(
+    @CurrentBffClaims() claims: BffClaims,
+    @Query('courseId') courseId = '',
+  ) {
+    return this.canvasSyncStatus.status(claims, courseId);
   }
 
   @Get(':id')
@@ -47,7 +90,7 @@ export class DocumentController {
     return this.documentService.getDocumentChunks(
       claims,
       id,
-      page === undefined || page === '' ? undefined : Number(page),
+      parseOptionalInt(page, 'page'),
     );
   }
 
@@ -59,21 +102,6 @@ export class DocumentController {
     return this.documentService.getDocumentFileUrl(claims, id);
   }
 
-  @Post('upload-session')
-  async createUploadSession(
-    @CurrentBffClaims() claims: BffClaims,
-    @Body()
-    body: {
-      courseId: string;
-      title: string;
-      fileName: string;
-      mimeType?: string;
-      checksum?: string;
-    },
-  ) {
-    return this.documentService.createUploadSession(claims, body);
-  }
-
   @Post(':id/confirm-upload')
   async confirmUpload(
     @CurrentBffClaims() claims: BffClaims,
@@ -82,17 +110,22 @@ export class DocumentController {
     return this.documentService.confirmUpload(claims, id);
   }
 
+  @Patch(':id/placement')
+  async updatePlacement(
+    @CurrentBffClaims() claims: BffClaims,
+    @Param('id') id: string,
+    @Body() body: UpdateDocumentPlacementDto,
+  ) {
+    return this.canvasDocuments.updatePlacement(claims, id, {
+      role: body.role,
+      chapterCode: body.chapterCode,
+    });
+  }
+
   @Post()
   async registerAndProcess(
     @CurrentBffClaims() claims: BffClaims,
-    @Body()
-    body: {
-      title: string;
-      file_path: string;
-      mime_type?: string;
-      checksum?: string;
-      course_id: string;
-    },
+    @Body() body: RegisterDocumentDto,
   ) {
     return this.documentService.registerAndProcess(claims, body);
   }

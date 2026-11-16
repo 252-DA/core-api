@@ -3,6 +3,7 @@ import { ContentGenerationService } from './content-generation.service';
 import { BffJwtGuard } from '../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../auth/current-bff-claims.decorator';
 import type { BffClaims } from '../auth/bff-claims';
+import { CreateContentGenerationDto } from './dto/content-generation.dto';
 
 @Controller('api/content-generations')
 @UseGuards(BffJwtGuard)
@@ -12,7 +13,7 @@ export class ContentGenerationController {
   @Get()
   async list(
     @CurrentBffClaims() claims: BffClaims,
-    @Query('courseId') courseId: string,
+    @Query('courseId') courseId = '',
     @Query('limit') limit?: string,
     @Query('type') type?: string,
   ) {
@@ -22,12 +23,7 @@ export class ContentGenerationController {
   @Post()
   async create(
     @CurrentBffClaims() claims: BffClaims,
-    @Body()
-    body: {
-      courseId: string;
-      type: 'card' | 'quiz' | 'relations';
-      scope: Record<string, unknown>;
-    },
+    @Body() body: CreateContentGenerationDto,
   ) {
     return this.service.createRequest(claims, body);
   }

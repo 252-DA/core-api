@@ -3,6 +3,7 @@ import { CourseService } from './course.service';
 import { BffJwtGuard } from '../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../auth/current-bff-claims.decorator';
 import type { BffClaims } from '../auth/bff-claims';
+import { CreateCourseDto } from './dto/course.dto';
 
 @Controller('api/courses')
 @UseGuards(BffJwtGuard)
@@ -24,15 +25,10 @@ export class CourseController {
 
   @Post()
   async createCourse(
-    @Body()
-    body: {
-      code: string;
-      name: string;
-      description?: string;
-      lms_id?: string;
-    },
+    @CurrentBffClaims() claims: BffClaims,
+    @Body() body: CreateCourseDto,
   ) {
-    return this.courseService.createCourse(body);
+    return this.courseService.createCourse(claims, body);
   }
 
   @Get(':id/chapters')

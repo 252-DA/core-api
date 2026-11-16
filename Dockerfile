@@ -10,10 +10,9 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 
 COPY core-api/ .
 
-# core_api.proto là contract giữa core-api (server) và web (client) — hai repo
-# khác nhau — nên nó sống ở contracts/proto/ của da-platform, không thuộc repo
-# nào trong hai. grpc-server.service.ts resolve process.cwd()/proto/core_api.proto
-# nên file phải nằm đúng /app/proto.
+# Thư mục contracts/proto chứa llm_model_catalog.json dùng chung giữa ai-sdk
+# và core-api, sống ở da-platform. model-catalog.ts resolve
+# process.cwd()/proto/llm_model_catalog.json nên giữ đúng /app/proto.
 COPY contracts/proto ./proto
 
 RUN npx prisma generate
@@ -41,8 +40,8 @@ WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
-# Thiếu dòng này thì start:prod chết ngay khi dựng gRPC server: runtime đọc
-# proto theo đường dẫn tương đối với cwd, mà stage prod không có nó.
+# Thiếu dòng này thì start:prod chết ngay khi nạp catalog model: runtime đọc
+# proto/llm_model_catalog.json theo đường dẫn tương đối với cwd.
 COPY --from=build /app/proto ./proto
 # Chạy node trực tiếp (không qua pnpm) để SIGTERM của `docker stop` tới thẳng
 # process. Đầu ra nằm ở dist/src/main.js, không phải dist/main.js: tsc lấy

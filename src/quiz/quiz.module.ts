@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AgsModule } from '../ags/ags.module';
 import { QuizController } from './quiz.controller';
+import { QuizSetController } from './quiz-set.controller';
 import { QuizService } from './quiz.service';
 import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../prisma/prisma.module';
@@ -12,7 +13,7 @@ import { QuizGradingResultHandler } from './quiz-grading-result.handler';
 
 @Module({
   imports: [AuthModule, PrismaModule, CanvasModule, AgsModule, RosterModule],
-  controllers: [QuizController],
+  controllers: [QuizController, QuizSetController],
   providers: [
     QuizService,
     QuizSetService,

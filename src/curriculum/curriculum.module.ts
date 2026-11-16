@@ -6,6 +6,7 @@ import { CourseModule } from '../course/course.module';
 import { DocumentStorageService } from '../document/document-storage.service';
 import { LearningOutcomeController } from './learning-outcome.controller';
 import { ChapterController } from './chapter.controller';
+import { CurriculumImportController } from './curriculum-import.controller';
 import { CurriculumImportService } from './curriculum-import.service';
 import { CurriculumImportResultHandler } from './curriculum-import-result.handler';
 
@@ -16,7 +17,11 @@ import { CurriculumImportResultHandler } from './curriculum-import-result.handle
     CourseModule,
     BullModule.registerQueue({ name: 'document_processing' }),
   ],
-  controllers: [LearningOutcomeController, ChapterController],
+  controllers: [
+    LearningOutcomeController,
+    ChapterController,
+    CurriculumImportController,
+  ],
   providers: [
     CurriculumImportService,
     DocumentStorageService,

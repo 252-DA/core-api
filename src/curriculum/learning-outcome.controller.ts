@@ -3,6 +3,7 @@ import { CourseService } from '../course/course.service';
 import { BffJwtGuard } from '../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../auth/current-bff-claims.decorator';
 import type { BffClaims } from '../auth/bff-claims';
+import { requireQueryString } from '../common/query-params';
 
 @Controller('api/learning-outcomes')
 @UseGuards(BffJwtGuard)
@@ -12,8 +13,11 @@ export class LearningOutcomeController {
   @Get()
   async list(
     @CurrentBffClaims() claims: BffClaims,
-    @Query('courseId') courseId: string,
+    @Query('courseId') courseId?: string | string[],
   ) {
-    return this.courseService.getLearningOutcomes(claims, courseId);
+    return this.courseService.getLearningOutcomes(
+      claims,
+      requireQueryString(courseId, 'courseId'),
+    );
   }
 }

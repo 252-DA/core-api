@@ -7,9 +7,11 @@ import { MicroContentVideoService } from './micro-content-video.service';
 import { MicroContentAttemptService } from './micro-content-attempt.service';
 import { MicroContentGradingResultHandler } from './micro-content-grading-result.handler';
 import { MicroContentVideoResultHandler } from './micro-content-video-result.handler';
+import { MicroContentController } from './micro-content.controller';
 
 @Module({
   imports: [PrismaModule, AuthModule, DocumentModule],
+  controllers: [MicroContentController],
   providers: [MicroContentService, MicroContentVideoService, MicroContentAttemptService,
     MicroContentGradingResultHandler, MicroContentVideoResultHandler],
   exports: [MicroContentService, MicroContentVideoService, MicroContentAttemptService],
