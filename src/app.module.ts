@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
+import { LoggerModule } from 'nestjs-pino';
+import { buildLoggerModuleParams } from './logging/pino-config';
 import { PrismaModule } from './prisma/prisma.module';
 import { CourseModule } from './course/course.module';
 import { DocumentModule } from './document/document.module';
+import { CanvasSyncModule } from './canvas-sync/canvas-sync.module';
 import { ReviewModule } from './review/review.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { LtiModule } from './lti/lti.module';
@@ -46,12 +49,14 @@ const getRedisConnection = () => {
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    LoggerModule.forRoot(buildLoggerModuleParams()),
     BullModule.forRoot({
       connection: getRedisConnection(),
     }),
     PrismaModule,
     CourseModule,
     DocumentModule,
+    CanvasSyncModule,
     ReviewModule,
     OutboxModule,
     LtiModule,

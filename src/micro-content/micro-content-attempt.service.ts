@@ -8,8 +8,8 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
-import { gradeAnswer } from '../quiz/question-types';
-import { gradingInput, submissionScore } from '../quiz/answer-grading';
+import { gradeAnswer } from '../question/question-types';
+import { gradingInput, submissionScore } from '../question/answer-grading';
 
 export type SubmitAnswerInput = {
   questionId: string;

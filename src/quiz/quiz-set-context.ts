@@ -5,7 +5,7 @@ import { CanvasCourseService } from '../canvas/canvas-course.service';
 import {
   classifyModule,
   resolveChapterCode,
-} from '../document/canvas-placement';
+} from '../canvas-sync/canvas-placement';
 import { settingsView } from './quiz-set-exam';
 import type { QuizSnapshotItem } from './quiz-set.service';
 

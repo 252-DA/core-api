@@ -12,8 +12,9 @@ import { CourseController } from './course/course.controller';
 import { CourseService } from './course/course.service';
 import { CurriculumImportController } from './curriculum/curriculum-import.controller';
 import { CurriculumImportService } from './curriculum/curriculum-import.service';
-import { CanvasDocumentSyncService } from './document/canvas-document-sync.service';
-import { CanvasSyncStatusService } from './document/canvas-sync-status.service';
+import { CanvasDocumentSyncService } from './canvas-sync/canvas-document-sync.service';
+import { CanvasSyncController } from './canvas-sync/canvas-sync.controller';
+import { CanvasSyncStatusService } from './canvas-sync/canvas-sync-status.service';
 import { DocumentController } from './document/document.controller';
 import { DocumentService } from './document/document.service';
 import { EssayProcessorController } from './essay-processor/essay-processor.controller';
@@ -199,6 +200,7 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
         CourseController,
         CurriculumImportController,
         DocumentController,
+        CanvasSyncController,
         LessonController,
         ReviewController,
         ContentGenerationController,

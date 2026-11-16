@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Patch,
   Delete,
   Body,
   Param,
@@ -10,26 +9,16 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { DocumentService } from './document.service';
-import { CanvasDocumentSyncService } from './canvas-document-sync.service';
-import { CanvasSyncStatusService } from './canvas-sync-status.service';
 import { BffJwtGuard } from '../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../auth/current-bff-claims.decorator';
 import type { BffClaims } from '../auth/bff-claims';
 import { parseOptionalInt } from '../common/query-params';
-import {
-  CreateUploadSessionDto,
-  SyncCanvasDocumentsDto,
-  UpdateDocumentPlacementDto,
-} from './dto/document.dto';
+import { CreateUploadSessionDto } from './dto/document.dto';
 
 @Controller('api/documents')
 @UseGuards(BffJwtGuard)
 export class DocumentController {
-  constructor(
-    private readonly documentService: DocumentService,
-    private readonly canvasDocuments: CanvasDocumentSyncService,
-    private readonly canvasSyncStatus: CanvasSyncStatusService,
-  ) {}
+  constructor(private readonly documentService: DocumentService) {}
 
   @Get()
   async listDocuments(
@@ -52,22 +41,6 @@ export class DocumentController {
     @Body() body: CreateUploadSessionDto,
   ) {
     return this.documentService.createUploadSession(claims, body);
-  }
-
-  @Post('sync-canvas')
-  async syncFromCanvas(
-    @CurrentBffClaims() claims: BffClaims,
-    @Body() body: SyncCanvasDocumentsDto,
-  ) {
-    return this.canvasDocuments.syncFromCanvas(claims, body.courseId);
-  }
-
-  @Get('canvas-sync-status')
-  async getCanvasSyncStatus(
-    @CurrentBffClaims() claims: BffClaims,
-    @Query('courseId') courseId = '',
-  ) {
-    return this.canvasSyncStatus.status(claims, courseId);
   }
 
   @Get(':id')
@@ -105,18 +78,6 @@ export class DocumentController {
     @Param('id') id: string,
   ) {
     return this.documentService.confirmUpload(claims, id);
-  }
-
-  @Patch(':id/placement')
-  async updatePlacement(
-    @CurrentBffClaims() claims: BffClaims,
-    @Param('id') id: string,
-    @Body() body: UpdateDocumentPlacementDto,
-  ) {
-    return this.canvasDocuments.updatePlacement(claims, id, {
-      role: body.role,
-      chapterCode: body.chapterCode,
-    });
   }
 
   @Delete(':id')

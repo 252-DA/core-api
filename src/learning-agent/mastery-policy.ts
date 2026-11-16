@@ -1,4 +1,4 @@
-import type { QuestionType } from '../quiz/question-types';
+import type { QuestionType } from '../question/question-types';
 import {
   BKT_DEFAULTS,
   MASTERY_DEFAULTS,

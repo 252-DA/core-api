@@ -4,8 +4,17 @@ import {
   PayloadTooLargeException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import type { CanvasFile } from '../curriculum/syllabus-file';
 import { CanvasApiError, describeCanvasError } from './canvas-errors';
+
+export type CanvasFile = {
+  id: number | string;
+  display_name: string;
+  filename?: string;
+  'content-type'?: string;
+  size?: number;
+  url?: string;
+  updated_at?: string;
+};
 
 export type CanvasCourse = {
   id: number;

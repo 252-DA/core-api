@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { AGS_CONFIG, type AgsConfig } from '../ags/ags.config';
-import { DocumentStorageService } from '../document/document-storage.service';
+import { DocumentStorageService } from '../storage/document-storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   assetExtension,

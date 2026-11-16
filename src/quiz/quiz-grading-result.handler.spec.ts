@@ -6,7 +6,7 @@ import {
   parseQuizGradingResult,
   QuizGradingResultHandler,
 } from './quiz-grading-result.handler';
-import { submissionScore } from './answer-grading';
+import { submissionScore } from '../question/answer-grading';
 
 const COURSE = '33333333-3333-4333-8333-333333333333';
 const SUBMISSION = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

@@ -4,7 +4,7 @@ import {
   normalizeAnswerKey,
   TRUE_FALSE_OPTIONS,
   type QuestionType,
-} from '../quiz/question-types';
+} from '../question/question-types';
 import {
   clipCodePoints,
   isWithinCodePoints,

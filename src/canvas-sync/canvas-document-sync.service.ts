@@ -6,11 +6,17 @@ import type { documents } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
-import { CanvasApiClient, type CanvasModule } from '../canvas/canvas-api.client';
+import {
+  CanvasApiClient,
+  type CanvasFile,
+  type CanvasModule,
+} from '../canvas/canvas-api.client';
 import { CanvasCourseService } from '../canvas/canvas-course.service';
-import type { CanvasFile } from '../curriculum/syllabus-file';
-import { DocumentService, NEXT_PROCESSING_GENERATION } from './document.service';
-import { DocumentStorageService } from './document-storage.service';
+import {
+  DocumentService,
+  NEXT_PROCESSING_GENERATION,
+} from '../document/document.service';
+import { DocumentStorageService } from '../storage/document-storage.service';
 import { CanvasSyncJobsService, type SyncActor } from './canvas-sync-jobs.service';
 import {
   chapterRefFromFileName,

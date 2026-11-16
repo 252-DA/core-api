@@ -11,7 +11,7 @@ import {
   salvageAnswerIds,
   submissionScore,
   type AnswerGradeResult,
-} from '../quiz/answer-grading';
+} from '../question/answer-grading';
 import { runBestEffort } from '../worker-results/best-effort';
 import {
   InvalidWorkerResultError,

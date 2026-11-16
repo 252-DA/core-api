@@ -1,20 +1,46 @@
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import {
-  FastifyAdapter,
-  NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { Logger as PinoNestLogger, PinoLogger } from 'nestjs-pino';
+import pino from 'pino';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { HttpExceptionLoggingFilter } from './logging/http-exception-logging.filter';
+import {
+  buildPinoOptions,
+  createFastifyAdapter,
+} from './logging/pino-config';
 
 (BigInt.prototype as any).toJSON = function () {
   return Number(this);
 };
 
+function logCriticalAndExit(event: string, reason: unknown): void {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  const root =
+    PinoLogger.root ??
+    pino({ ...buildPinoOptions(), transport: undefined });
+  root.fatal({ logger: 'Bootstrap', err }, event);
+  root.flush(() => process.exit(1));
+  setTimeout(() => process.exit(1), 500).unref();
+}
+
+process.on('unhandledRejection', (reason) => {
+  logCriticalAndExit('Unhandled promise rejection', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  logCriticalAndExit('Uncaught exception', error);
+});
+
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ bodyLimit: 10 * 1024 * 1024 }),
+    createFastifyAdapter(),
+    { bufferLogs: true },
   );
+
+  app.useLogger(app.get(PinoNestLogger));
+  app.useGlobalFilters(new HttpExceptionLoggingFilter(app.getHttpAdapter()));
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -25,6 +51,6 @@ async function bootstrap() {
 
   const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
   await app.listen(port, '0.0.0.0');
-  console.log(`Core API running on: http://localhost:${port}`);
+  new Logger('Bootstrap').log(`Core API running on: http://localhost:${port}`);
 }
 bootstrap();

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
-import { DocumentModule } from '../document/document.module';
+import { StorageModule } from '../storage/storage.module';
 import { MicroContentService } from './micro-content.service';
 import { MicroContentVideoService } from './micro-content-video.service';
 import { MicroContentAttemptService } from './micro-content-attempt.service';
@@ -10,7 +10,7 @@ import { MicroContentVideoResultHandler } from './micro-content-video-result.han
 import { MicroContentController } from './micro-content.controller';
 
 @Module({
-  imports: [PrismaModule, AuthModule, DocumentModule],
+  imports: [PrismaModule, AuthModule, StorageModule],
   controllers: [MicroContentController],
   providers: [MicroContentService, MicroContentVideoService, MicroContentAttemptService,
     MicroContentGradingResultHandler, MicroContentVideoResultHandler],

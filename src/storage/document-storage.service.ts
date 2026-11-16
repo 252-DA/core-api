@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Client as MinioClient } from 'minio';
 
 const DEFAULT_BUCKET = process.env.MINIO__BUCKET_NAME || 'documents';
@@ -22,6 +22,7 @@ function createClient() {
 
 @Injectable()
 export class DocumentStorageService {
+  private readonly logger = new Logger(DocumentStorageService.name);
   private readonly client = createClient();
   private bucketReady?: Promise<void>;
 
@@ -80,7 +81,9 @@ export class DocumentStorageService {
     } catch (error: unknown) {
       // Another request may have created the bucket between the check and create.
       if (!(await this.client.bucketExists(DEFAULT_BUCKET))) {
-        console.warn('[storage] bucket check notice:', (error as Error)?.message || error);
+        this.logger.warn(
+          `[storage] bucket check notice: ${(error as Error)?.message || error}`,
+        );
       }
     }
   }

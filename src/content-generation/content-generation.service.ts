@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
-import { isQuestionType } from '../quiz/question-types';
+import { isQuestionType } from '../question/question-types';
 
 const DEFAULT_RECENT_LIMIT = 20;
 const MAX_RECENT_LIMIT = 100;

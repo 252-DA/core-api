@@ -38,7 +38,7 @@ import {
   type ItemOrder,
 } from './quiz-set-exam';
 import { parseBlueprint } from './quiz-blueprint';
-import { gradeAnswer } from './question-types';
+import { gradeAnswer } from '../question/question-types';
 import {
   answerGradingEvent,
   GRADING_STATUS,
@@ -46,7 +46,7 @@ import {
   rowAgsStatus,
   submissionScore,
   type GradingAnswer,
-} from './answer-grading';
+} from '../question/answer-grading';
 
 export type QuizSnapshotItem = {
   quiz_id: string;

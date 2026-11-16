@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { randomInt } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import type { QuizSnapshotItem } from './quiz-set.service';
-import { shufflesOptions } from './question-types';
+import { shufflesOptions } from '../question/question-types';
 
 export type QuizSetMode = 'practice' | 'exam';
 

@@ -17,7 +17,7 @@ import {
   releaseIfGraded,
   salvageAnswerIds,
   type AnswerGradeResult,
-} from './answer-grading';
+} from '../question/answer-grading';
 
 export type QuizGradingResult = {
   submissionId: string;
