@@ -18,7 +18,6 @@ import type { BffClaims } from '../auth/bff-claims';
 import { parseOptionalInt } from '../common/query-params';
 import {
   CreateUploadSessionDto,
-  RegisterDocumentDto,
   SyncCanvasDocumentsDto,
   UpdateDocumentPlacementDto,
 } from './dto/document.dto';
@@ -35,15 +34,13 @@ export class DocumentController {
   @Get()
   async listDocuments(
     @CurrentBffClaims() claims: BffClaims,
-    @Query('courseId') courseId?: string,
-    @Query('course_id') courseIdSnake?: string,
+    @Query('courseId') courseId = '',
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ) {
-    const resolvedCourseId = courseId ?? courseIdSnake ?? '';
     return this.documentService.listDocuments(
       claims,
-      resolvedCourseId,
+      courseId,
       parseOptionalInt(limit, 'limit'),
       parseOptionalInt(offset, 'offset'),
     );
@@ -120,14 +117,6 @@ export class DocumentController {
       role: body.role,
       chapterCode: body.chapterCode,
     });
-  }
-
-  @Post()
-  async registerAndProcess(
-    @CurrentBffClaims() claims: BffClaims,
-    @Body() body: RegisterDocumentDto,
-  ) {
-    return this.documentService.registerAndProcess(claims, body);
   }
 
   @Delete(':id')

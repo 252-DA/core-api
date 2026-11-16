@@ -20,26 +20,6 @@ export class CreateUploadSessionDto {
   checksum?: string;
 }
 
-export class RegisterDocumentDto {
-  @IsString()
-  title!: string;
-
-  @IsString()
-  file_path!: string;
-
-  @IsOptional()
-  @IsString()
-  mime_type?: string;
-
-  @IsOptional()
-  @IsString()
-  checksum?: string;
-
-  @IsString()
-  @IsNotEmpty()
-  course_id!: string;
-}
-
 export class SyncCanvasDocumentsDto {
   @IsString()
   @IsNotEmpty()

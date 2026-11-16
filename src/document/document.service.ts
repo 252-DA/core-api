@@ -288,53 +288,6 @@ export class DocumentService {
     };
   }
 
-  async registerAndProcess(
-    claims: BffClaims,
-    data: {
-      title: string;
-      file_path: string;
-      mime_type?: string;
-      checksum?: string;
-      course_id: string;
-    },
-  ) {
-    await this.authz.assertCourseAccess(claims, data.course_id, [
-      'instructor',
-      'ta',
-    ]);
-
-    const doc = await this.prisma.documents.create({
-      data: {
-        course_id: data.course_id,
-        title: data.title,
-        file_path: data.file_path,
-        mime_type: data.mime_type,
-        checksum: data.checksum,
-        status: 'QUEUED',
-        processing_generation: 1,
-        created_by: claims.sub,
-      },
-    });
-
-    const job = await this.processingQueue.add('process_document', {
-      document_id: doc.document_id,
-      storage_key: doc.file_path,
-      file_name: fileNameFromStorageKey(doc.file_path, doc.title),
-      metadata: {
-        course_id: doc.course_id,
-        owner_id: doc.created_by,
-        storage_key: doc.file_path,
-      },
-      processing_generation: doc.processing_generation,
-    });
-
-    return {
-      document_id: doc.document_id,
-      status: doc.status,
-      job_id: job.id,
-    };
-  }
-
   async deleteDocument(claims: BffClaims, documentId: string) {
     const doc = await this.prisma.documents.findFirst({
       where: { document_id: documentId, deleted_at: null },

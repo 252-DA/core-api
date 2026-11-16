@@ -1,12 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { CourseModule } from './course/course.module';
 import { DocumentModule } from './document/document.module';
-import { ContentModule } from './content/content.module';
 import { ReviewModule } from './review/review.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { LtiModule } from './lti/lti.module';
@@ -55,7 +52,6 @@ const getRedisConnection = () => {
     PrismaModule,
     CourseModule,
     DocumentModule,
-    ContentModule,
     ReviewModule,
     OutboxModule,
     LtiModule,
@@ -73,7 +69,5 @@ const getRedisConnection = () => {
     ChatModule,
     LearningAgentModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}

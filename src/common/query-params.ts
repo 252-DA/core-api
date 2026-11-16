@@ -17,18 +17,3 @@ export function parseOptionalInt(
   }
   return parsed;
 }
-
-/**
- * Đọc query param chuỗi bắt buộc; thiếu, rỗng, chỉ có khoảng trắng hoặc truyền
- * lặp thành mảng đều trả HTTP 400 thay vì đi tiếp vào Prisma với `undefined`.
- */
-export function requireQueryString(
-  value: string | string[] | undefined,
-  field: string,
-): string {
-  const trimmed = typeof value === 'string' ? value.trim() : '';
-  if (!trimmed) {
-    throw new BadRequestException(`${field} is required`);
-  }
-  return trimmed;
-}

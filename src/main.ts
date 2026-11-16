@@ -16,12 +16,6 @@ async function bootstrap() {
     new FastifyAdapter({ bodyLimit: 10 * 1024 * 1024 }),
   );
 
-  app.enableCors({
-    origin: '*',
-    allowedHeaders: 'Content-Type, Authorization',
-    methods: 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
-  });
-
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

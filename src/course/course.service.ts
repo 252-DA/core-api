@@ -48,26 +48,6 @@ export class CourseService {
     return course;
   }
 
-  async createCourse(
-    claims: BffClaims,
-    data: {
-      code: string;
-      name: string;
-      description?: string;
-      lms_id?: string;
-    },
-  ) {
-    await this.authz.assertPlatformAdmin(claims);
-    return this.prisma.courses.create({
-      data: {
-        code: data.code,
-        name: data.name,
-        description: data.description,
-        lms_id: data.lms_id,
-      },
-    });
-  }
-
   async getChapters(claims: BffClaims, courseId: string) {
     await this.getCourse(claims, courseId);
     return this.prisma.chapters.findMany({
@@ -99,13 +79,5 @@ export class CourseService {
           (a.chapters?.sort_order ?? Number.MAX_SAFE_INTEGER) -
           (b.chapters?.sort_order ?? Number.MAX_SAFE_INTEGER),
       );
-  }
-
-  async getAssessments(claims: BffClaims, courseId: string) {
-    await this.getCourse(claims, courseId);
-    return this.prisma.assessments.findMany({
-      where: { course_id: courseId, deleted_at: null },
-      orderBy: { sort_order: 'asc' },
-    });
   }
 }

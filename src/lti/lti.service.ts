@@ -57,7 +57,7 @@ interface AttemptsSeed {
   attempts: number;
 }
 
-/** Body LaunchSync đi qua gRPC không qua class-validator, nên kiểm tra lại ở đây. */
+/** Body LaunchSync đã qua LaunchSyncDto (class-validator); hàm này kiểm thêm dạng URL http(s). */
 function nrpsUrl(value: unknown) {
   const url = typeof value === 'string' ? value.trim() : '';
   return /^https?:\/\/\S+$/.test(url) && url.length <= 2048 ? url : undefined;

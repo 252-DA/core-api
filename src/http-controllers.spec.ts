@@ -6,16 +6,12 @@ import { BffJwtGuard } from './auth/bff-jwt.guard';
 import { BffJwtService } from './auth/bff-jwt.service';
 import { ChatController } from './chat/chat.controller';
 import { ChatService } from './chat/chat.service';
-import { ContentController } from './content/content.controller';
-import { ContentService } from './content/content.service';
 import { ContentGenerationController } from './content-generation/content-generation.controller';
 import { ContentGenerationService } from './content-generation/content-generation.service';
 import { CourseController } from './course/course.controller';
 import { CourseService } from './course/course.service';
-import { ChapterController } from './curriculum/chapter.controller';
 import { CurriculumImportController } from './curriculum/curriculum-import.controller';
 import { CurriculumImportService } from './curriculum/curriculum-import.service';
-import { LearningOutcomeController } from './curriculum/learning-outcome.controller';
 import { CanvasDocumentSyncService } from './document/canvas-document-sync.service';
 import { CanvasSyncStatusService } from './document/canvas-sync-status.service';
 import { DocumentController } from './document/document.controller';
@@ -83,10 +79,8 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
   const courseService = makeMockService([
     'listCourses',
     'getCourse',
-    'createCourse',
     'getChapters',
     'getLearningOutcomes',
-    'getAssessments',
   ]);
   const curriculumImports = makeMockService(['syncFromCanvas', 'listImports', 'applyImport']);
   const documentService = makeMockService([
@@ -96,7 +90,6 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     'getDocumentChunks',
     'getDocumentFileUrl',
     'confirmUpload',
-    'registerAndProcess',
     'deleteDocument',
   ]);
   const canvasDocuments = makeMockService(['syncFromCanvas', 'updatePlacement']);
@@ -112,7 +105,6 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     'rejectQuizItem',
     'updateQuizItem',
   ]);
-  const contentService = makeMockService(['getLessonCards', 'getLessonQuiz']);
   const contentGenService = makeMockService(['listRequests', 'createRequest']);
   const quizService = makeMockService(['submit', 'attempts']);
   const essayGrading = makeMockService(['list', 'grade', 'retry']);
@@ -205,13 +197,10 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
       controllers: [
         LtiController,
         CourseController,
-        ChapterController,
-        LearningOutcomeController,
         CurriculumImportController,
         DocumentController,
         LessonController,
         ReviewController,
-        ContentController,
         ContentGenerationController,
         QuizController,
         QuizSetController,
@@ -233,7 +222,6 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
         { provide: CanvasSyncStatusService, useValue: canvasSyncStatus },
         { provide: LessonService, useValue: lessonService },
         { provide: ReviewService, useValue: reviewService },
-        { provide: ContentService, useValue: contentService },
         { provide: ContentGenerationService, useValue: contentGenService },
         { provide: QuizService, useValue: quizService },
         { provide: EssayGradingService, useValue: essayGrading },
@@ -406,12 +394,12 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
   });
 
   it('validates integer query params and preserves @Allow JSON fields while stripping unknown properties', async () => {
-    const docSnake = await injectJson({
+    const docList = await injectJson({
       method: 'GET',
-      url: '/api/documents?course_id=c-snake&limit=10&offset=5',
+      url: '/api/documents?courseId=c1&limit=10&offset=5',
     });
-    expect(docSnake.statusCode).toBe(200);
-    expect(documentService.listDocuments).toHaveBeenCalledWith(claims, 'c-snake', 10, 5);
+    expect(docList.statusCode).toBe(200);
+    expect(documentService.listDocuments).toHaveBeenCalledWith(claims, 'c1', 10, 5);
 
     const badDocLimit = await injectJson({
       method: 'GET',
@@ -668,39 +656,5 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
       assetId: 'va-1',
       targetCourseId: 'c2',
     });
-  });
-
-  it('forwards claims to CourseController.createCourse and requires courseId on chapters and learning-outcomes', async () => {
-    const createOk = await injectJson({
-      method: 'POST',
-      url: '/api/courses',
-      payload: { code: 'CS101', name: 'Intro CS' },
-    });
-    expect(createOk.statusCode).toBe(201);
-    expect(courseService.createCourse).toHaveBeenCalledWith(claims, {
-      code: 'CS101',
-      name: 'Intro CS',
-    });
-
-    const createBlank = await injectJson({
-      method: 'POST',
-      url: '/api/courses',
-      payload: { code: '', name: 'Intro CS' },
-    });
-    expect(createBlank.statusCode).toBe(400);
-
-    for (const path of ['/api/chapters', '/api/learning-outcomes']) {
-      for (const badQuery of ['', '?courseId=', '?courseId=%20%20', '?courseId=a&courseId=b']) {
-        const res = await injectJson({ method: 'GET', url: `${path}${badQuery}` });
-        expect(res.statusCode).toBe(400);
-      }
-      const ok = await injectJson({ method: 'GET', url: `${path}?courseId=%20c1%20` });
-      expect(ok.statusCode).toBe(200);
-    }
-
-    expect(courseService.getChapters).toHaveBeenCalledTimes(1);
-    expect(courseService.getChapters).toHaveBeenCalledWith(claims, 'c1');
-    expect(courseService.getLearningOutcomes).toHaveBeenCalledTimes(1);
-    expect(courseService.getLearningOutcomes).toHaveBeenCalledWith(claims, 'c1');
   });
 });
