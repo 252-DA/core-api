@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { CourseService } from './course.service';
 import { BffJwtGuard } from '../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../auth/current-bff-claims.decorator';
@@ -22,19 +22,6 @@ export class CourseController {
     return this.courseService.getCourse(claims, id);
   }
 
-  @Post()
-  async createCourse(
-    @Body()
-    body: {
-      code: string;
-      name: string;
-      description?: string;
-      lms_id?: string;
-    },
-  ) {
-    return this.courseService.createCourse(body);
-  }
-
   @Get(':id/chapters')
   async getChapters(
     @CurrentBffClaims() claims: BffClaims,
@@ -49,13 +36,5 @@ export class CourseController {
     @Param('id') id: string,
   ) {
     return this.courseService.getLearningOutcomes(claims, id);
-  }
-
-  @Get(':id/assessments')
-  async getAssessments(
-    @CurrentBffClaims() claims: BffClaims,
-    @Param('id') id: string,
-  ) {
-    return this.courseService.getAssessments(claims, id);
   }
 }

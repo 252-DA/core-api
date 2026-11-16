@@ -28,6 +28,11 @@ export interface AgsConfig {
    * vào maxRetries — giảng viên có thể publish sau nhiều ngày.
    */
   unpublishedRetryMs: number;
+  /**
+   * Địa chỉ công khai của tool (web), để dựng URL trang xem bài làm gửi cho
+   * SpeedGrader. Thiếu thì điểm vẫn đẩy được, chỉ không kèm bài nộp.
+   */
+  toolUrl?: string;
 }
 
 function env(name: string): string | undefined {
@@ -72,6 +77,21 @@ export function resolveTokenUrl(): string {
   }
 }
 
+/**
+ * Origin công khai của tool: LTI_TOOL_URL, hoặc origin của LTI_REDIRECT_URI mà
+ * web dùng cho launch. Canvas tìm tool của bài nộp theo tên miền của URL này.
+ */
+export function resolveToolUrl(): string | undefined {
+  const raw = env('LTI_TOOL_URL') || env('LTI_REDIRECT_URI');
+  if (!raw) return undefined;
+  try {
+    const url = new URL(raw);
+    return /^https?:$/.test(url.protocol) ? url.origin : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function loadAgsConfig(): AgsConfig {
   const clientId = env('LTI_CLIENT_ID') || env('LTI_KEY_ID') || '';
   const tokenUrl = resolveTokenUrl();
@@ -99,6 +119,7 @@ export function loadAgsConfig(): AgsConfig {
     backoffBaseMs: intEnv('AGS_BACKOFF_BASE_MS', 30000),
     backoffMaxMs: intEnv('AGS_BACKOFF_MAX_MS', 900000),
     unpublishedRetryMs: intEnv('AGS_UNPUBLISHED_RETRY_MS', 120000),
+    toolUrl: resolveToolUrl(),
   };
 }
 

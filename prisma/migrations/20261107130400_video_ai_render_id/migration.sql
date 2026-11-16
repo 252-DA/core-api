@@ -1,0 +1,13 @@
+-- Kết quả render video AI do core-api ghi (MICRO_CONTENT_VIDEO_RESULT qua hàng
+-- đợi worker_results) thay cho worker ghi thẳng micro_contents/video_assets.
+--
+-- ai_render_id: lần render mà asset đang chờ (status PROCESSING) hoặc đã cho ra
+-- file hiện tại. requestRender sinh id mới mỗi lần bấm render và ghi vào đây cùng
+-- transaction với lệnh MICRO_CONTENT_RENDER_REQUESTED; handler chỉ áp dụng kết
+-- quả khi id trùng và asset còn PROCESSING. Vì sao cần: một asset AI được render
+-- lại nhiều lần, job render cũ retry (backoff) có thể xong sau job mới — không
+-- có id này thì kết quả cũ đè kết quả mới.
+--
+-- NULL với asset tải lên và asset AI render trước migration này (lệnh cũ không
+-- có render_id; worker mới từ chối lệnh như vậy, giảng viên bấm render lại).
+ALTER TABLE "video_assets" ADD COLUMN "ai_render_id" UUID;

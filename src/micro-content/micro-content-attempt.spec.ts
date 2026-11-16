@@ -38,9 +38,11 @@ describe('MicroContentAttemptService', () => {
       outbox_events: {
         create: jest.fn().mockResolvedValue({ id: 'evt-1' }),
       },
-      $transaction: jest.fn(async (cb) => {
-        return cb(prisma);
-      }),
+      $transaction: jest.fn(
+        async (cb: (tx: unknown) => Promise<unknown>): Promise<unknown> => {
+          return cb(prisma);
+        },
+      ),
     };
 
     const authz = {
@@ -75,7 +77,9 @@ describe('MicroContentAttemptService', () => {
         updated_at: fiveSecondsAgo,
       });
 
-      prisma.micro_content_progress.upsert.mockImplementation((args) => args.create);
+      prisma.micro_content_progress.upsert.mockImplementation(
+        (args: { create: unknown }) => args.create,
+      );
 
       // Client tua thẳng tới 90s (sau 5s thực tế)
       const res = await service.reportProgress(learnerClaims, {
@@ -83,10 +87,110 @@ describe('MicroContentAttemptService', () => {
         positionMs: 90000,
       });
 
-      // Increment chỉ được tối đa ~5000 * 1.5 = 7500ms, không thể nhảy vọt 80000ms!
-      expect(res.watchedMs).toBeLessThanOrEqual(18000);
+      // Increment chỉ được tối đa ~5000 * 2.2 = 11000ms, không thể nhảy vọt 80000ms!
+      expect(res.watchedMs).toBeLessThanOrEqual(22000);
       expect(res.maxPositionMs).toBe(90000);
       expect(res.unlocked).toBe(false); // Chưa đạt 90%
+    });
+
+    it('accumulates playedMs when learner seeks ahead (or clicks scene button) then rewinds to watch', async () => {
+      const { service, prisma } = setup();
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        video_duration_ms: 100000,
+        required_watch_percent: 90,
+      });
+
+      // Người học trước đó đã bấm nút cảnh nhảy tới 90s (max_position_ms=90000) nhưng mới xem 10s
+      const fifteenSecondsAgo = new Date(Date.now() - 15000);
+      prisma.micro_content_progress.findUnique.mockResolvedValue({
+        micro_content_id: microContentId,
+        user_id: learnerClaims.sub,
+        max_position_ms: 90000,
+        watched_ms: 80000,
+        updated_at: fifteenSecondsAgo,
+      });
+      prisma.micro_content_progress.upsert.mockImplementation(
+        (args: { create: unknown }) => args.create,
+      );
+
+      // Quay lại xem đoạn 20s -> 32s (positionMs < max_position_ms nhưng playedMs = 12000ms)
+      const res = await service.reportProgress(learnerClaims, {
+        microContentId,
+        positionMs: 32000,
+        playedMs: 12000,
+      });
+
+      expect(res.watchedMs).toBe(92000);
+      expect(res.maxPositionMs).toBe(90000);
+      expect(res.watchedPercent).toBe(92);
+      expect(res.unlocked).toBe(true);
+    });
+
+    it('supports 2x playback speed to reach full watch threshold without locking', async () => {
+      const { service, prisma } = setup();
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        video_duration_ms: 100000,
+        required_watch_percent: 90,
+      });
+
+      // Sau 10s thực tế ở tốc độ 2x -> phát được 20s video
+      const tenSecondsAgo = new Date(Date.now() - 10000);
+      prisma.micro_content_progress.findUnique.mockResolvedValue({
+        micro_content_id: microContentId,
+        user_id: learnerClaims.sub,
+        max_position_ms: 75000,
+        watched_ms: 75000,
+        updated_at: tenSecondsAgo,
+      });
+      prisma.micro_content_progress.upsert.mockImplementation(
+        (args: { create: unknown }) => args.create,
+      );
+
+      const res = await service.reportProgress(learnerClaims, {
+        microContentId,
+        positionMs: 95000,
+        playedMs: 20000,
+      });
+
+      expect(res.watchedMs).toBe(95000);
+      expect(res.watchedPercent).toBe(95);
+      expect(res.unlocked).toBe(true);
+    });
+
+    it('adds 0 watchedMs when playback position does not advance (paused/idle)', async () => {
+      const { service, prisma } = setup();
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        video_duration_ms: 100000,
+        required_watch_percent: 80,
+      });
+
+      const twoMinutesAgo = new Date(Date.now() - 120000);
+      prisma.micro_content_progress.findUnique.mockResolvedValue({
+        micro_content_id: microContentId,
+        user_id: learnerClaims.sub,
+        max_position_ms: 15000,
+        watched_ms: 15000,
+        updated_at: twoMinutesAgo,
+      });
+      prisma.micro_content_progress.upsert.mockImplementation(
+        (args: { create: unknown }) => args.create,
+      );
+
+      const res = await service.reportProgress(learnerClaims, {
+        microContentId,
+        positionMs: 15000,
+      });
+
+      expect(res.watchedMs).toBe(15000);
+      expect(res.maxPositionMs).toBe(15000);
+      expect(res.watchedPercent).toBe(15);
+      expect(res.unlocked).toBe(false);
     });
   });
 
@@ -237,6 +341,34 @@ describe('MicroContentAttemptService', () => {
       });
 
       expect(res.gradingStatus).toBe('PENDING');
+      // Lệnh chấm tự chứa: worker nhận đề lúc nộp và bài làm, không đọc micro_content_answers.
+      expect(prisma.outbox_events.create).toHaveBeenCalledWith({
+        data: {
+          event_type: 'MICRO_CONTENT_GRADING_REQUESTED',
+          aggregate_type: 'micro_content_attempt',
+          aggregate_id: 'attempt-essay',
+          payload: {
+            attempt_id: 'attempt-essay',
+            course_id: courseId,
+            micro_content_id: microContentId,
+            answer_ids: ['ans-1'],
+            answers: [
+              {
+                answer_id: 'ans-1',
+                grading_input: {
+                  type: 'SHORT_ANSWER',
+                  question: 'Nêu định nghĩa hàm thuần khiết.',
+                  correct_answer: {
+                    model_answer: 'Không tác dụng phụ.',
+                    rubric: ['Không tác dụng phụ', 'Trả cùng kết quả'],
+                  },
+                },
+                chosen_answer: 'Hàm thuần khiết không sinh side-effect.',
+              },
+            ],
+          },
+        },
+      });
       expect(prisma.micro_content_answers.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           grading_status: 'PENDING',

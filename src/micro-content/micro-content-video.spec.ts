@@ -30,6 +30,10 @@ describe('MicroContentVideoService', () => {
         findFirst: jest.fn(),
         update: jest.fn(),
       },
+      video_assets: {
+        create: jest.fn().mockResolvedValue({ asset_id: 'asset-1' }),
+        update: jest.fn(),
+      },
     };
 
     const authz = {
@@ -84,8 +88,19 @@ describe('MicroContentVideoService', () => {
       expect(prisma.micro_contents.update).toHaveBeenCalledWith({
         where: { micro_content_id: microContentId },
         data: expect.objectContaining({
+          video_asset_id: 'asset-1',
           video_status: 'UPLOADING',
           video_object_key: `micro-content/${courseId}/${microContentId}/video.mp4`,
+        }),
+      });
+      // Video tải lên cho bài cũng vào kho video của khoá học.
+      expect(prisma.video_assets.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          course_id: courseId,
+          owner_id: instructorClaims.sub,
+          visibility: 'COURSE',
+          status: 'UPLOADING',
+          usage_count: 1,
         }),
       });
     });
@@ -172,6 +187,78 @@ describe('MicroContentVideoService', () => {
 
       await expect(service.getVideoUrl(instructorClaims, { microContentId })).rejects.toThrow(
         BadRequestException,
+      );
+    });
+  });
+
+  describe('getSubtitlesUrl', () => {
+    it('returns presigned VTT URL, timeline, and transcript for learner when published', async () => {
+      const { service, prisma, storage, authz } = setup();
+      const timeline = [{ scene_index: 0, title: 'Mở đầu', start_ms: 0, end_ms: 5000 }];
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        status: 'PUBLISHED',
+        video_status: 'READY',
+        video_asset: {
+          vtt_subtitles_key: `micro-content/${courseId}/${microContentId}/sub.vtt`,
+          transcript_text: 'Nội dung phụ đề',
+          scene_timeline: timeline,
+        },
+      });
+
+      const res = await service.getSubtitlesUrl(learnerClaims, { microContentId });
+
+      expect(authz.assertCourseAccess).toHaveBeenCalledWith(learnerClaims, courseId, ['learner']);
+      expect(storage.createPresignedDownloadUrl).toHaveBeenCalledWith(
+        `micro-content/${courseId}/${microContentId}/sub.vtt`,
+        300,
+      );
+      expect(res).toEqual({
+        url: 'https://storage/download-url',
+        mimeType: 'text/vtt',
+        transcriptText: 'Nội dung phụ đề',
+        sceneTimeline: timeline,
+      });
+    });
+
+    it('returns url: null gracefully when vtt_subtitles_key is absent', async () => {
+      const { service, prisma, storage } = setup();
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        status: 'PUBLISHED',
+        video_status: 'READY',
+        video_asset: {
+          vtt_subtitles_key: null,
+          transcript_text: null,
+          scene_timeline: null,
+        },
+      });
+
+      const res = await service.getSubtitlesUrl(learnerClaims, { microContentId });
+
+      expect(storage.createPresignedDownloadUrl).not.toHaveBeenCalled();
+      expect(res).toEqual({
+        url: null,
+        mimeType: 'text/vtt',
+        transcriptText: null,
+        sceneTimeline: [],
+      });
+    });
+
+    it('rejects learner when micro content is DRAFT', async () => {
+      const { service, prisma } = setup();
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        status: 'DRAFT',
+        video_status: 'READY',
+        video_asset: null,
+      });
+
+      await expect(service.getSubtitlesUrl(learnerClaims, { microContentId })).rejects.toThrow(
+        NotFoundException,
       );
     });
   });

@@ -196,7 +196,15 @@ describe('EssayReportPublisherService', () => {
       error: null,
       error_code: null,
       result: RESULT,
-      essay_processors: { course_id: COURSE, visible_to_owner: true },
+      user_id: 'student-1',
+      essay_processors: {
+        course_id: COURSE,
+        visible_to_owner: true,
+        title: 'Tiểu luận',
+        instructions: 'Phân tích',
+        rubric: [{ criterion: 'Nội dung', description: '', points: 10 }],
+        max_score: '10.00',
+      },
       ...overrides,
     } as never;
   }
@@ -225,8 +233,28 @@ describe('EssayReportPublisherService', () => {
         assets: [expect.objectContaining({ storage_key: `essay-submissions/${ESSAY}/a1.pdf`, content_type: 'application/pdf' })],
       }),
     });
+    // Lệnh tự chứa: đề, rubric, điểm tối đa và khoá MinIO đi kèm, worker không đọc essay_submissions.
     expect(prisma.outbox_events.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ event_type: 'ESSAY_GRADING_REQUESTED', payload: { essay_submission_id: ESSAY, course_id: COURSE } }),
+      data: expect.objectContaining({
+        event_type: 'ESSAY_GRADING_REQUESTED',
+        payload: {
+          essay_submission_id: ESSAY,
+          course_id: COURSE,
+          user_id: 'student-1',
+          title: 'Tiểu luận',
+          instructions: 'Phân tích',
+          rubric: [{ criterion: 'Nội dung', description: '', points: 10 }],
+          max_score: 10,
+          assets: [
+            {
+              asset_id: 'a1',
+              title: 'bai.pdf',
+              content_type: 'application/pdf',
+              storage_key: `essay-submissions/${ESSAY}/a1.pdf`,
+            },
+          ],
+        },
+      }),
     });
   });
 
@@ -276,5 +304,33 @@ describe('EssayReportPublisherService', () => {
       expect.objectContaining({ processingProgress: 'Failed', errorCode: 'UNSUPPORTED_ASSET_TYPE' }),
     );
     expect(prisma.essay_submissions.update.mock.calls[0][0].data).toMatchObject({ reported_at: expect.any(Date) });
+  });
+
+  it('tick bỏ qua bài nộp nếu replica khác đã giành lease trước (updateMany count === 0)', async () => {
+    const { publisher, prisma, storage, client } = setup();
+    const dueRow = row({ status: 'RECEIVED', next_attempt_at: null });
+    prisma.essay_submissions.findMany
+      .mockResolvedValueOnce([dueRow])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    (prisma.essay_submissions as Record<string, unknown>).updateMany = jest
+      .fn()
+      .mockResolvedValue({ count: 0 });
+
+    await publisher.tick();
+
+    expect((prisma.essay_submissions as Record<string, jest.Mock>).updateMany).toHaveBeenCalledWith({
+      where: {
+        essay_submission_id: ESSAY,
+        status: 'RECEIVED',
+        next_attempt_at: null,
+      },
+      data: {
+        next_attempt_at: expect.any(Date),
+        updated_at: expect.any(Date),
+      },
+    });
+    expect(client.downloadAsset).not.toHaveBeenCalled();
+    expect(storage.putObject).not.toHaveBeenCalled();
   });
 });

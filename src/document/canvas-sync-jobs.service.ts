@@ -10,6 +10,8 @@ import {
 export const CANVAS_SYNC_QUEUE = 'canvas_sync';
 export const CANVAS_SYNC_COURSE = 'sync_course';
 export const CANVAS_SYNC_SWEEP = 'sweep_courses';
+/** Đồng bộ danh sách lớp (NRPS) của một khóa; cùng hàng đợi, khác job với sync_course. */
+export const CANVAS_ROSTER_SYNC = 'sync_roster';
 const SCHEDULER_ID = 'canvas-course-sweep';
 
 export type SyncActor = { kind: 'system' } | { kind: 'user'; userId: string };
@@ -17,6 +19,8 @@ export type SyncCourseJob = {
   courseId: string;
   actor: SyncActor;
   trigger: 'manual' | 'launch' | 'schedule';
+  /** Dòng canvas_sync_runs của job này; các lần BullMQ thử lại dùng chung một dòng. */
+  runId?: string;
 };
 
 @Injectable()
@@ -77,6 +81,27 @@ export class CanvasSyncJobsService implements OnModuleInit {
     return { job_id: jobId, status: 'QUEUED' as const };
   }
 
+  /** Job danh sách lớp: id riêng nên không chặn và không bị chặn bởi job tài liệu. */
+  async enqueueRoster(
+    courseId: string,
+    actor: SyncActor,
+    trigger: SyncCourseJob['trigger'],
+  ) {
+    const jobId = `canvas-roster-${courseId}`;
+    await this.queue.add(
+      CANVAS_ROSTER_SYNC,
+      { courseId, actor, trigger } satisfies SyncCourseJob,
+      {
+        jobId,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    );
+    return { job_id: jobId, status: 'QUEUED' as const };
+  }
+
   async triggerLaunch(courseId: string, lmsType: string, courseRole: string) {
     if (
       !this.config.enabled ||
@@ -94,6 +119,44 @@ export class CanvasSyncJobsService implements OnModuleInit {
         `Could not enqueue Canvas launch sync for ${courseId}: ${String(error)}`,
       );
     }
+  }
+
+  /**
+   * Giảng viên, trợ giảng hoặc admin mở DA thì đọc lại danh sách lớp. Cooldown
+   * riêng (khóa Redis khác) để việc này không bị chặn bởi đồng bộ tài liệu đang
+   * chạy lâu, và ngược lại.
+   */
+  async triggerRosterLaunch(
+    courseId: string,
+    lmsType: string,
+    courseRole: string,
+    platformRole?: string,
+  ) {
+    if (
+      !this.config.enabled ||
+      lmsType !== 'canvas' ||
+      !(
+        ['instructor', 'ta'].includes(courseRole) ||
+        platformRole === 'administrator'
+      )
+    )
+      return;
+    try {
+      const redis = await this.queue.client;
+      if (await redis.get(this.rosterCooldownKey(courseId))) return;
+      await this.enqueueRoster(courseId, { kind: 'system' }, 'launch');
+    } catch (error) {
+      this.logger.warn(
+        `Could not enqueue Canvas roster sync for ${courseId}: ${String(error)}`,
+      );
+    }
+  }
+
+  async markRosterAttempt(courseId: string) {
+    const redis = await this.queue.client;
+    await redis.set(this.rosterCooldownKey(courseId), String(Date.now()), {
+      PX: this.config.launchCooldownMs,
+    });
   }
 
   async markSyncAttempt(courseId: string) {
@@ -122,6 +185,8 @@ export class CanvasSyncJobsService implements OnModuleInit {
         ...(cursor ? { cursor: { course_id: cursor }, skip: 1 } : {}),
       });
       for (const course of courses) {
+        // Danh sách lớp nhanh nên vào hàng trước; đồng bộ tài liệu có thể chạy lâu.
+        await this.enqueueRoster(course.course_id, { kind: 'system' }, 'schedule');
         await this.enqueue(course.course_id, { kind: 'system' }, 'schedule');
         count++;
       }
@@ -133,5 +198,9 @@ export class CanvasSyncJobsService implements OnModuleInit {
 
   private cooldownKey(courseId: string) {
     return this.queue.toKey(`launch-cooldown:${courseId}`);
+  }
+
+  private rosterCooldownKey(courseId: string) {
+    return this.queue.toKey(`roster-cooldown:${courseId}`);
   }
 }

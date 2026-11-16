@@ -6,17 +6,15 @@ import {
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 
+(BigInt.prototype as any).toJSON = function () {
+  return Number(this);
+};
+
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    new FastifyAdapter({ bodyLimit: 10 * 1024 * 1024 }),
   );
-
-  app.enableCors({
-    origin: '*',
-    allowedHeaders: 'Content-Type, Authorization',
-    methods: 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
-  });
 
   app.useGlobalPipes(
     new ValidationPipe({

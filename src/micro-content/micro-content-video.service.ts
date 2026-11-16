@@ -40,9 +40,25 @@ export class MicroContentVideoService {
     const objectKey = `micro-content/${item.course_id}/${item.micro_content_id}/video${ext}`;
     const uploadUrl = await this.storage.createPresignedUploadUrl(objectKey, 15 * 60);
 
+    const asset = await this.prisma.video_assets.create({
+      data: {
+        title: input.filename || item.title,
+        course_id: item.course_id,
+        owner_id: claims.sub,
+        object_key: objectKey,
+        visibility: 'COURSE',
+        source_type: 'USER_UPLOAD',
+        status: 'UPLOADING',
+        transcript_status: 'PENDING',
+        mime_type: input.mimeType || (ext === '.webm' ? 'video/webm' : 'video/mp4'),
+        usage_count: 1,
+      },
+    });
+
     await this.prisma.micro_contents.update({
       where: { micro_content_id: item.micro_content_id },
       data: {
+        video_asset_id: asset.asset_id,
         video_source: 'UPLOAD',
         video_status: 'UPLOADING',
         video_object_key: objectKey,
@@ -85,6 +101,19 @@ export class MicroContentVideoService {
       },
     });
 
+    if (item.video_asset_id) {
+      await this.prisma.video_assets.update({
+        where: { asset_id: item.video_asset_id },
+        data: {
+          status: 'READY',
+          size_bytes: input.sizeBytes ? BigInt(input.sizeBytes) : undefined,
+          duration_ms: input.durationMs && input.durationMs > 0 ? input.durationMs : 60000,
+          error_message: null,
+          updated_at: new Date(),
+        },
+      });
+    }
+
     return {
       id: updated.micro_content_id,
       videoStatus: updated.video_status,
@@ -92,13 +121,18 @@ export class MicroContentVideoService {
     };
   }
 
-  /**
-   * Lấy presigned GET URL ngắn hạn để stream video.
-   * Kiểm tra quyền truy cập theo vai trò (Learner chỉ xem được nội dung PUBLISHED).
-   */
-  async getVideoUrl(claims: BffClaims, input: { microContentId: string }) {
+  private async findAuthorizedItem(claims: BffClaims, microContentId: string) {
     const item = await this.prisma.micro_contents.findFirst({
-      where: { micro_content_id: input.microContentId, deleted_at: null },
+      where: { micro_content_id: microContentId, deleted_at: null },
+      include: {
+        video_asset: {
+          select: {
+            vtt_subtitles_key: true,
+            transcript_text: true,
+            scene_timeline: true,
+          },
+        },
+      },
     });
     if (!item) {
       throw new NotFoundException('Micro content not found');
@@ -116,6 +150,15 @@ export class MicroContentVideoService {
     } else {
       await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
     }
+    return item;
+  }
+
+  /**
+   * Lấy presigned GET URL ngắn hạn để stream video.
+   * Kiểm tra quyền truy cập theo vai trò (Learner chỉ xem được nội dung PUBLISHED).
+   */
+  async getVideoUrl(claims: BffClaims, input: { microContentId: string }) {
+    const item = await this.findAuthorizedItem(claims, input.microContentId);
 
     if (!item.video_object_key || item.video_status !== 'READY') {
       throw new BadRequestException('Video chưa sẵn sàng để phát.');
@@ -128,6 +171,26 @@ export class MicroContentVideoService {
       mimeType: item.video_mime_type || 'video/mp4',
       durationMs: item.video_duration_ms,
       title: item.title,
+    };
+  }
+
+  /**
+   * Lấy presigned URL tệp phụ đề WebVTT (nếu có) cùng timeline chuyển cảnh.
+   */
+  async getSubtitlesUrl(claims: BffClaims, input: { microContentId: string }) {
+    const item = await this.findAuthorizedItem(claims, input.microContentId);
+    const vttKey = item.video_asset?.vtt_subtitles_key;
+    const url = vttKey
+      ? await this.storage.createPresignedDownloadUrl(vttKey, 5 * 60)
+      : null;
+
+    return {
+      url,
+      mimeType: 'text/vtt',
+      transcriptText: item.video_asset?.transcript_text ?? null,
+      sceneTimeline: Array.isArray(item.video_asset?.scene_timeline)
+        ? item.video_asset.scene_timeline
+        : [],
     };
   }
 }

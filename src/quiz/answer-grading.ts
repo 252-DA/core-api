@@ -1,5 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { AGS_STATUS } from '../ags/ags-status';
+import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
+import { isWithinCodePoints } from '../worker-results/text-length';
 
 /**
  * `quiz_attempts.grading_status`: xem migration 20261004120000_question_types
@@ -23,7 +25,8 @@ export const ANSWER_GRADING_QUEUE = 'answer_grading';
 /**
  * Lượt nộp còn tự luận chờ chấm thì giữ cả lượt ở AWAITING_GRADE thay vì
  * PENDING: AgsPublisherService chỉ nhặt PENDING, nên không gửi lên LMS một
- * điểm tính khi tự luận còn là 0. Worker chấm xong sẽ chuyển sang PENDING.
+ * điểm tính khi tự luận còn là 0. QuizGradingResultHandler áp dụng kết quả
+ * chấm xong sẽ chuyển sang PENDING.
  */
 export function rowAgsStatus(agsStatus: string, awaitingGrade: boolean) {
   return awaitingGrade && agsStatus === AGS_STATUS.pending
@@ -49,15 +52,26 @@ export function gradingInput(item: {
   };
 }
 
+/** Một câu tự luận giao worker chấm: đủ dữ liệu để worker không đọc bảng bài làm. */
+export type GradingAnswer = {
+  attemptId: string;
+  /** Đề lúc nộp (gradingInput()), đúng bản đã ghi vào cột grading_input. */
+  gradingInput: Prisma.InputJsonValue;
+  chosenAnswer: Prisma.InputJsonValue | null;
+};
+
 /**
- * Giao việc chấm cho worker. `attempt_ids` là mọi câu của lượt nộp (để mở
- * khoá AGS cho cả lượt sau khi chấm), `essay_attempt_ids` là các câu cần chấm.
+ * Giao việc chấm cho worker (contracts/integration-events/v1/answer-grading-requested.json).
+ * Lệnh tự chứa: `answers` mang đề lúc nộp và bài làm, worker không đọc
+ * quiz_attempts. `attempt_ids`/`essay_attempt_ids` worker mới không dùng nữa
+ * (handler tự gom lượt nộp bằng lockAwaitingGroup); giữ để worker bản cũ còn
+ * chạy được trong lúc deploy lệch nhau.
  */
 export function answerGradingEvent(input: {
   submissionId: string;
   courseId: string;
   attemptIds: string[];
-  essayAttemptIds: string[];
+  answers: GradingAnswer[];
 }) {
   return {
     event_type: ANSWER_GRADING_REQUESTED,
@@ -67,12 +81,21 @@ export function answerGradingEvent(input: {
       submission_id: input.submissionId,
       course_id: input.courseId,
       attempt_ids: input.attemptIds,
-      essay_attempt_ids: input.essayAttemptIds,
+      essay_attempt_ids: input.answers.map((a) => a.attemptId),
+      answers: input.answers.map((a) => ({
+        attempt_id: a.attemptId,
+        grading_input: a.gradingInput,
+        chosen_answer: a.chosenAnswer,
+      })),
     } as Prisma.InputJsonValue,
   };
 }
 
-/** Điểm lượt nộp = trung bình điểm từng câu; tự luận chấm theo ý nên có điểm lẻ. */
+/**
+ * Điểm lượt nộp = trung bình điểm từng câu; tự luận chấm theo ý nên có điểm lẻ.
+ * Nơi duy nhất có công thức này (kể cả micro-content): worker không tính tổng.
+ * Math.round làm tròn .5 lên (50.5 → 51), khác round() của Python.
+ */
 export function submissionScore(scores: number[]) {
   return scores.length
     ? Math.round(scores.reduce((sum, s) => sum + s, 0) / scores.length)
@@ -92,9 +115,9 @@ type AttemptRef = {
  * gom các dòng PENDING của lesson quiz thành một điểm.
  */
 export async function lockAwaitingGroup(tx: Prisma.TransactionClient, attempt: AttemptRef) {
-  // Khoá các dòng trước khi đếm: worker chấm câu khác của cùng lượt nộp cũng
-  // khoá chúng (release_graded_attempts), nên hai bên không cùng thấy "còn câu
-  // chưa chấm" rồi bỏ lượt nộp kẹt ở AWAITING_GRADE.
+  // Khoá các dòng trước khi đếm: giảng viên chấm tay và QuizGradingResultHandler
+  // (kết quả của worker) cùng khoá chúng theo một thứ tự, nên hai bên không
+  // cùng thấy "còn câu chưa chấm" rồi bỏ lượt nộp kẹt ở AWAITING_GRADE.
   const rows = attempt.submission_id
     ? await tx.$queryRaw<Array<{ attempt_id: string }>>`
         SELECT attempt_id FROM quiz_attempts
@@ -130,4 +153,158 @@ export async function releaseIfGraded(tx: Prisma.TransactionClient, attemptIds: 
     data: { ags_status: AGS_STATUS.pending },
   });
   return count;
+}
+
+/** Lý do worker trả NEEDS_REVIEW (quiz-grading-result.json, micro-content-grading-result.json). */
+export const NEEDS_REVIEW_REASONS = [
+  'MODEL_ERROR',
+  'NO_GRADING_INPUT',
+  'LEGACY_COMMAND',
+] as const;
+
+/** Kết quả chấm một câu do worker gửi, đã kiểm. `id` là attempt_id hoặc answer_id. */
+export type AnswerGradeResult =
+  | {
+      id: string;
+      status: typeof GRADING_STATUS.graded;
+      score: number;
+      isCorrect: boolean;
+      feedback: string | null;
+      graderModel: string | null;
+    }
+  | {
+      id: string;
+      status: typeof GRADING_STATUS.needsReview;
+      reason: (typeof NEEDS_REVIEW_REASONS)[number];
+      feedback: string | null;
+      graderModel: string | null;
+    };
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Khớp maxLength trong schema (đếm code point, xem text-length.ts); worker cắt trước khi gửi. */
+export const MAX_GRADE_FEEDBACK = 4000;
+const MAX_GRADER_MODEL = 200;
+
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function isUuid(value: unknown): value is string {
+  return typeof value === 'string' && UUID_PATTERN.test(value);
+}
+
+function nullableText(value: unknown, max: number) {
+  return value === null || (typeof value === 'string' && isWithinCodePoints(value, max));
+}
+
+/**
+ * Kiểm `answers` của QUIZ_GRADING_RESULT / MICRO_CONTENT_GRADING_RESULT theo
+ * schema: GRADED có điểm nguyên 0–100 và is_correct; NEEDS_REVIEW không có
+ * điểm (lỗi model không được thành điểm 0). Sai dạng → InvalidWorkerResultError
+ * (không retry): gửi lại cũng sai y như vậy.
+ */
+export function parseAnswerGrades(
+  value: unknown,
+  idKey: 'attempt_id' | 'answer_id',
+  label: string,
+): AnswerGradeResult[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new InvalidWorkerResultError(`${label}: answers must be a non-empty array`);
+  }
+  const seen = new Set<string>();
+  return value.map((raw, index) => {
+    const where = `${label}: answers[${index}]`;
+    if (!isPlainObject(raw)) throw new InvalidWorkerResultError(`${where} must be an object`);
+    const id = raw[idKey];
+    if (!isUuid(id)) throw new InvalidWorkerResultError(`${where}.${idKey} must be a uuid`);
+    if (seen.has(id)) throw new InvalidWorkerResultError(`${where}: duplicate ${idKey} ${id}`);
+    seen.add(id);
+    const { status, feedback, grader_model: graderModel } = raw;
+    const allowed =
+      status === GRADING_STATUS.graded
+        ? [idKey, 'status', 'score', 'is_correct', 'feedback', 'grader_model']
+        : [idKey, 'status', 'reason', 'feedback', 'grader_model'];
+    const problems = Object.keys(raw)
+      .filter((key) => !allowed.includes(key))
+      .map((key) => `unexpected field ${key}`);
+    if (!('feedback' in raw) || !nullableText(feedback, MAX_GRADE_FEEDBACK)) {
+      problems.push(`feedback must be a string (≤ ${MAX_GRADE_FEEDBACK}) or null`);
+    }
+    if (!('grader_model' in raw) || !nullableText(graderModel, MAX_GRADER_MODEL)) {
+      problems.push('grader_model must be a short string or null');
+    }
+    if (status === GRADING_STATUS.graded) {
+      const { score, is_correct: isCorrect } = raw;
+      if (typeof score !== 'number' || !Number.isInteger(score) || score < 0 || score > 100) {
+        problems.push('score must be an integer in [0, 100]');
+      }
+      if (typeof isCorrect !== 'boolean') problems.push('is_correct must be a boolean');
+      if (problems.length) throw new InvalidWorkerResultError(`${where}: ${problems.join('; ')}`);
+      return {
+        id,
+        status: GRADING_STATUS.graded,
+        score: score as number,
+        isCorrect: isCorrect as boolean,
+        feedback: feedback as string | null,
+        graderModel: graderModel as string | null,
+      };
+    }
+    if (status === GRADING_STATUS.needsReview) {
+      const reason = raw.reason;
+      if (!(NEEDS_REVIEW_REASONS as readonly unknown[]).includes(reason)) {
+        problems.push(`reason must be one of ${NEEDS_REVIEW_REASONS.join(', ')}`);
+      }
+      if (problems.length) throw new InvalidWorkerResultError(`${where}: ${problems.join('; ')}`);
+      return {
+        id,
+        status: GRADING_STATUS.needsReview,
+        reason: reason as (typeof NEEDS_REVIEW_REASONS)[number],
+        feedback: feedback as string | null,
+        graderModel: graderModel as string | null,
+      };
+    }
+    throw new InvalidWorkerResultError(
+      `${where}: status must be ${GRADING_STATUS.graded} or ${GRADING_STATUS.needsReview}`,
+    );
+  });
+}
+
+/**
+ * Feedback đặt cho câu tự luận mà kết quả chấm không áp dụng được (hook
+ * onFinalFailure của QUIZ_GRADING_RESULT / MICRO_CONTENT_GRADING_RESULT): câu
+ * chuyển sang NEEDS_REVIEW để giảng viên chấm tay hoặc cho AI chấm lại.
+ */
+export const GRADING_UNAPPLIED_FEEDBACK =
+  'Hệ thống không lưu được kết quả chấm của AI cho câu này. Giảng viên sẽ chấm, điểm cập nhật sau.';
+
+/**
+ * Các id (attempt_id hoặc answer_id) hợp lệ trong `answers` của một payload CHƯA
+ * kiểm — cho hook onFinalFailure, nơi payload có thể sai dạng. Bỏ phần tử rác và
+ * id trùng; không phải mảng thì trả mảng rỗng.
+ */
+export function salvageAnswerIds(
+  answers: unknown,
+  idKey: 'attempt_id' | 'answer_id',
+): string[] {
+  if (!Array.isArray(answers)) return [];
+  const ids = new Set<string>();
+  for (const raw of answers as unknown[]) {
+    if (isPlainObject(raw) && isUuid(raw[idKey])) ids.add(raw[idKey].toLowerCase());
+  }
+  return [...ids];
+}
+
+/** Dữ liệu ghi vào một dòng câu trả lời (quiz_attempts hoặc micro_content_answers). */
+export function answerGradeData(grade: AnswerGradeResult) {
+  // NEEDS_REVIEW không đụng score: giá trị tạm lúc nộp, chưa bao giờ lên sổ
+  // điểm vì lượt nộp còn khoá; giảng viên chấm tay hoặc cho AI chấm lại.
+  return grade.status === GRADING_STATUS.graded
+    ? {
+        score: grade.score,
+        is_correct: grade.isCorrect,
+        feedback: grade.feedback,
+        grading_status: GRADING_STATUS.graded,
+      }
+    : { feedback: grade.feedback, grading_status: GRADING_STATUS.needsReview };
 }

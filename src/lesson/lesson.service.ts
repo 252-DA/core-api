@@ -3,6 +3,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
 
+/**
+ * Hồ sơ kiểm chứng của judge (cột verification_*) là thông tin cho giảng viên
+ * duyệt, không phải cho người học. Đường `status === 'PUBLISHED'` không đòi quyền
+ * giảng viên (người học đọc bài đã xuất bản), nên bỏ hai cột này khỏi kết quả:
+ * evidence có cả lý do judge nghi ngờ và đoạn nguồn.
+ */
+const LEARNER_OMIT = {
+  verification_status: true,
+  verification_evidence: true,
+} as const;
+
 @Injectable()
 export class LessonService {
   constructor(
@@ -59,6 +70,7 @@ export class LessonService {
         ...(status ? { status } : {}),
       },
       orderBy: [{ position: 'asc' }, { created_at: 'asc' }],
+      ...(status === 'PUBLISHED' ? { omit: LEARNER_OMIT } : {}),
     });
   }
 
@@ -77,6 +89,7 @@ export class LessonService {
         ...(status ? { status } : {}),
       },
       orderBy: { created_at: 'asc' },
+      ...(status === 'PUBLISHED' ? { omit: LEARNER_OMIT } : {}),
     });
   }
 

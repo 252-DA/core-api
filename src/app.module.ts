@@ -1,12 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
 import { CourseModule } from './course/course.module';
 import { DocumentModule } from './document/document.module';
-import { ContentModule } from './content/content.module';
 import { ReviewModule } from './review/review.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { LtiModule } from './lti/lti.module';
@@ -15,9 +12,14 @@ import { LessonModule } from './lesson/lesson.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
 import { QuizModule } from './quiz/quiz.module';
 import { ContentGenerationModule } from './content-generation/content-generation.module';
-import { GrpcModule } from './grpc/grpc.module';
 import { AgsModule } from './ags/ags.module';
 import { MicroContentModule } from './micro-content/micro-content.module';
+import { VideoAssetModule } from './video-asset/video-asset.module';
+import { WorkerResultsModule } from './worker-results/worker-results.module';
+import { ModelSettingsModule } from './model-settings/model-settings.module';
+import { EssayProcessorModule } from './essay-processor/essay-processor.module';
+import { ChatModule } from './chat/chat.module';
+import { LearningAgentModule } from './learning-agent/learning-agent.module';
 
 // Parse Redis URL for BullMQ connection
 const getRedisConnection = () => {
@@ -50,7 +52,6 @@ const getRedisConnection = () => {
     PrismaModule,
     CourseModule,
     DocumentModule,
-    ContentModule,
     ReviewModule,
     OutboxModule,
     LtiModule,
@@ -59,11 +60,14 @@ const getRedisConnection = () => {
     CurriculumModule,
     QuizModule,
     ContentGenerationModule,
-    GrpcModule,
     AgsModule,
     MicroContentModule,
+    VideoAssetModule,
+    WorkerResultsModule,
+    ModelSettingsModule,
+    EssayProcessorModule,
+    ChatModule,
+    LearningAgentModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}

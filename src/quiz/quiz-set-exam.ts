@@ -18,10 +18,51 @@ export interface QuizSetSettings {
   due_at: Date | null;
 }
 
-type SettingsRow = Omit<QuizSetSettings, 'points_possible' | 'mode'> & {
+export type SettingsRow = Omit<QuizSetSettings, 'points_possible' | 'mode'> & {
   mode: string;
   points_possible: Prisma.Decimal | number;
 };
+
+/**
+ * Phần của resource link (và line item của nó) mà Canvas làm chủ. Cột ngày và
+ * số lần làm được ghi ở mỗi launch từ Assignment (LtiService.syncLaunch).
+ */
+export interface CanvasLinkSettings {
+  assignment_synced_at: Date | null;
+  assignment_due_at: Date | null;
+  assignment_unlock_at: Date | null;
+  assignment_lock_at: Date | null;
+  assignment_allowed_attempts: number | null;
+  lti_line_items?: { score_maximum: Prisma.Decimal | number } | null;
+}
+
+/**
+ * Cài đặt hiệu lực của một bài tập Canvas: điểm tối đa là điểm của Canvas, và
+ * với bài kiểm tra thì hạn, giờ mở/đóng và số lần làm cũng là của Canvas khi
+ * đã đọc được ít nhất một lần (assignment_synced_at). Cột null sau lần đọc đó
+ * là "Canvas không đặt", không phải "dùng giá trị cũ của DA". Thời gian làm
+ * bài, xáo đề và chế độ vẫn là của DA vì Canvas không có chỗ cho chúng.
+ * Luyện tập không có cửa sổ thời gian hay giới hạn lần làm nên chỉ nhận điểm.
+ */
+export function withCanvasSettings<T extends SettingsRow>(
+  set: T,
+  link?: CanvasLinkSettings | null,
+): T {
+  if (!link) return set;
+  const overrides: Partial<SettingsRow> = {};
+  const points = link.lti_line_items
+    ? Number(link.lti_line_items.score_maximum)
+    : null;
+  if (points !== null && Number.isFinite(points) && points > 0)
+    overrides.points_possible = points;
+  if (set.mode === 'exam' && link.assignment_synced_at) {
+    overrides.available_from = link.assignment_unlock_at;
+    overrides.available_until = link.assignment_lock_at;
+    overrides.due_at = link.assignment_due_at;
+    overrides.max_attempts = link.assignment_allowed_attempts;
+  }
+  return { ...set, ...overrides };
+}
 
 /** Nộp trễ do mạng/độ trễ đồng hồ vẫn được nhận trong khoảng này. */
 export const SUBMIT_GRACE_MS = 60_000;

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { documents } from '@prisma/client';
@@ -9,7 +9,7 @@ import { AuthzService } from '../auth/authz.service';
 import { CanvasApiClient, type CanvasModule } from '../canvas/canvas-api.client';
 import { CanvasCourseService } from '../canvas/canvas-course.service';
 import type { CanvasFile } from '../curriculum/syllabus-file';
-import { DocumentService } from './document.service';
+import { DocumentService, NEXT_PROCESSING_GENERATION } from './document.service';
 import { DocumentStorageService } from './document-storage.service';
 import { CanvasSyncJobsService, type SyncActor } from './canvas-sync-jobs.service';
 import {
@@ -63,6 +63,8 @@ function collectEntries(modules: CanvasModule[]): Map<string, Entry> {
 
 @Injectable()
 export class CanvasDocumentSyncService {
+  private readonly logger = new Logger(CanvasDocumentSyncService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly authz: AuthzService,
@@ -84,7 +86,15 @@ export class CanvasDocumentSyncService {
     // Validate the course before accepting the manual request. No downloads in
     // the request path; all three triggers share the same per-course job.
     await this.canvasCourses.contextId(courseId);
-    return this.syncJobs.enqueue(courseId, { kind: 'user', userId: claims.sub }, 'manual');
+    const job = await this.syncJobs.enqueue(courseId, { kind: 'user', userId: claims.sub }, 'manual');
+    // Nút "Đồng bộ từ Canvas" đọc luôn danh sách lớp. Việc này là phần kèm theo:
+    // không để nó làm hỏng yêu cầu đồng bộ tài liệu.
+    try {
+      await this.syncJobs.enqueueRoster(courseId, { kind: 'user', userId: claims.sub }, 'manual');
+    } catch (error) {
+      this.logger.warn(`Không xếp được job danh sách lớp cho ${courseId}: ${String(error)}`);
+    }
+    return job;
   }
 
   /** Internal worker entry point. System imports deliberately have no user owner. */
@@ -151,11 +161,12 @@ export class CanvasDocumentSyncService {
         const changed = await this.refreshPlacement(current, entry, hint);
         if (current.status === 'ERROR') {
           // Lần trước xử lý lỗi (parser, dịch vụ tạm hỏng): xử lý lại từ file đã lưu.
-          await this.prisma.documents.update({
+          // Lượt xử lý mới: kết quả đến trễ của lượt lỗi trước bị bỏ.
+          const requeued = await this.prisma.documents.update({
             where: { document_id: current.document_id },
-            data: { status: 'QUEUED' },
+            data: { status: 'QUEUED', ...NEXT_PROCESSING_GENERATION },
           });
-          await this.enqueueProcessingOrMarkError(current);
+          await this.enqueueProcessingOrMarkError(requeued);
           summary.retried.push(name);
         } else if (changed) summary.updated.push(name);
         else summary.unchanged += 1;
@@ -350,6 +361,7 @@ export class CanvasDocumentSyncService {
         mime_type: mimeType,
         checksum: createHash('sha256').update(content).digest('hex'),
         status: 'QUEUED',
+        processing_generation: 1,
         created_by: actor.kind === 'user' ? actor.userId : null,
         source: 'canvas',
         lms_file_id: entry.fileId,
@@ -363,7 +375,7 @@ export class CanvasDocumentSyncService {
     await this.enqueueProcessingOrMarkError(doc);
   }
 
-  private async enqueueProcessingOrMarkError(doc: Pick<documents, 'document_id' | 'course_id' | 'created_by' | 'file_path'>) {
+  private async enqueueProcessingOrMarkError(doc: Pick<documents, 'document_id' | 'course_id' | 'created_by' | 'file_path' | 'processing_generation'>) {
     try {
       await this.enqueueProcessing(doc);
     } catch (error) {
@@ -373,7 +385,7 @@ export class CanvasDocumentSyncService {
     }
   }
 
-  private async enqueueProcessing(doc: Pick<documents, 'document_id' | 'course_id' | 'created_by' | 'file_path'>) {
+  private async enqueueProcessing(doc: Pick<documents, 'document_id' | 'course_id' | 'created_by' | 'file_path' | 'processing_generation'>) {
     await this.processingQueue.add(
       'process_document',
       {
@@ -386,6 +398,7 @@ export class CanvasDocumentSyncService {
           owner_id: doc.created_by,
           storage_key: doc.file_path,
         },
+        processing_generation: doc.processing_generation,
       },
       { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
     );

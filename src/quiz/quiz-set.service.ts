@@ -12,11 +12,12 @@ import type { BffClaims } from '../auth/bff-claims';
 import { CanvasApiClient } from '../canvas/canvas-api.client';
 import { CanvasCourseService } from '../canvas/canvas-course.service';
 import {
-  classifyModule,
-  resolveChapterCode,
-} from '../document/canvas-placement';
+  loadCanvasQuizContext,
+  loadQuizBuilderContext,
+} from './quiz-set-context';
 import { AGS_STATUS } from '../ags/ags-status';
 import { AgsPublisherService } from '../ags/ags-publisher.service';
+import { CourseRosterRepository } from '../roster/course-roster.repository';
 import {
   groupSubmissions,
   learnerResults,
@@ -32,6 +33,8 @@ import {
   settingsView,
   SUBMIT_GRACE_MS,
   windowState,
+  withCanvasSettings,
+  type CanvasLinkSettings,
   type ItemOrder,
 } from './quiz-set-exam';
 import { parseBlueprint } from './quiz-blueprint';
@@ -42,6 +45,7 @@ import {
   gradingInput,
   rowAgsStatus,
   submissionScore,
+  type GradingAnswer,
 } from './answer-grading';
 
 export type QuizSnapshotItem = {
@@ -71,6 +75,7 @@ export class QuizSetService {
     private readonly canvas: CanvasApiClient,
     private readonly canvasCourses: CanvasCourseService,
     private readonly ags: AgsPublisherService,
+    private readonly roster: CourseRosterRepository,
   ) {}
 
   private async access(claims: BffClaims, courseId: string, roles?: string[]) {
@@ -83,116 +88,33 @@ export class QuizSetService {
     await this.authz.assertCourseAccess(claims, courseId, roles);
   }
 
+  /** Giảng viên/trợ giảng của khóa học, hoặc token quản trị. */
+  private async isStaff(claims: BffClaims, courseId: string) {
+    if (claims.scope === 'admin') return true;
+    return (
+      (await this.prisma.course_memberships.count({
+        where: {
+          user_id: claims.sub,
+          course_id: courseId,
+          role: { in: ['instructor', 'ta'] },
+        },
+      })) > 0
+    );
+  }
+
   async context(
     claims: BffClaims,
-    body: { courseId: string; moduleId: string; chapterId?: string },
+    body: { courseId: string; moduleId?: string | null; chapterId?: string },
   ) {
     await this.access(claims, body.courseId, ['instructor', 'ta']);
-    if (!/^\d+$/.test(body.moduleId || ''))
-      throw new BadRequestException('Thiếu module Canvas.');
-    const [modules, chapters, sessions] = await Promise.all([
-      this.canvas.listModules(
-        await this.canvasCourses.contextId(body.courseId),
-      ),
-      this.prisma.chapters.findMany({
-        where: { course_id: body.courseId, deleted_at: null },
-        orderBy: { sort_order: 'asc' },
-        include: { chapter_los: { include: { learning_outcomes: true } } },
-      }),
-      this.prisma.course_sessions.findMany({
-        where: { course_id: body.courseId },
-        include: { chapters: true },
-      }),
-    ]);
-    const module = modules.find((item) => String(item.id) === body.moduleId);
-    if (!module)
-      throw new NotFoundException('Module không thuộc khóa Canvas hiện tại.');
-    const ref = classifyModule(module.name).chapterRef;
-    const code =
-      ref &&
-      resolveChapterCode(
-        ref,
-        sessions.map((s) => ({
-          session_no: s.session_no,
-          chapter_code: s.chapters?.code ?? null,
-        })),
-        new Set(chapters.map((c) => c.code)),
-      );
-    const chapter = body.chapterId
-      ? chapters.find((c) => c.chapter_id === body.chapterId)
-      : chapters.find((c) => c.code === code);
-    if (body.chapterId && !chapter)
-      throw new BadRequestException('Chương không thuộc khóa học.');
-    const learningOutcomes = (chapter?.chapter_los ?? [])
-      .map((l) => l.learning_outcomes)
-      .filter((l) => !l.deleted_at)
-      .sort((a, b) =>
-        a.code.localeCompare(b.code, undefined, { numeric: true }),
-      );
-    const [quizItems, documents] = chapter
-      ? await Promise.all([
-          this.prisma.quiz_items.findMany({
-            where: {
-              course_id: body.courseId,
-              lo_id: { in: learningOutcomes.map((l) => l.lo_id) },
-              deleted_at: null,
-            },
-            include: { learning_outcomes: { select: { code: true } } },
-            orderBy: { created_at: 'desc' },
-            take: 200,
-          }),
-          this.prisma.documents.findMany({
-            where: {
-              course_id: body.courseId,
-              chapter_code: chapter.code,
-              role: 'lecture',
-              deleted_at: null,
-            },
-            select: { document_id: true, title: true, status: true },
-          }),
-        ])
-      : [[], []];
-    // Dùng lại được mọi đề của khóa: đề giữa kỳ nhiều chương thường được thêm
-    // vào một module riêng, không khớp chương nào. Đề của chương đang mở lên đầu.
-    const sets = await this.prisma.quiz_sets.findMany({
-      where: { course_id: body.courseId, deleted_at: null },
-      orderBy: { created_at: 'desc' },
-      take: 50,
-    });
-    const chapterCode = new Map(chapters.map((c) => [c.chapter_id, c.code]));
-    const covers = (set: { chapter_ids: string[] }) =>
-      Boolean(chapter && set.chapter_ids.includes(chapter.chapter_id));
-    return {
-      module: { id: String(module.id), name: module.name },
-      chapters: chapters.map(({ chapter_id, code, title }) => ({
-        chapter_id,
-        code,
-        title,
-      })),
-      chapter: chapter
-        ? {
-            chapter_id: chapter.chapter_id,
-            code: chapter.code,
-            title: chapter.title,
-          }
-        : null,
-      learningOutcomes,
-      quizItems,
-      documents,
-      quizSets: [...sets.filter(covers), ...sets.filter((s) => !covers(s))].map(
-        (set) => ({
-          quiz_set_id: set.quiz_set_id,
-          title: set.title,
-          created_at: set.created_at,
-          questionCount: (set.items as unknown as QuizSnapshotItem[]).length,
-          settings: settingsView(set),
-          chapterCodes: set.chapter_ids.flatMap((id) => {
-            const code = chapterCode.get(id);
-            return code ? [code] : [];
-          }),
-        }),
-      ),
-    };
+    return loadCanvasQuizContext(
+      {
+        prisma: this.prisma,
+        canvas: this.canvas,
+        canvasCourses: this.canvasCourses,
+      },
+      body,
+    );
   }
 
   /**
@@ -204,73 +126,7 @@ export class QuizSetService {
     body: { courseId: string; loIds?: string[] },
   ) {
     await this.access(claims, body.courseId, ['instructor', 'ta']);
-    const loIds = Array.isArray(body.loIds) ? body.loIds.filter(uuid).slice(0, 200) : [];
-    const [chapters, documents, sets, quizItems] = await Promise.all([
-      this.prisma.chapters.findMany({
-        where: { course_id: body.courseId, deleted_at: null },
-        orderBy: { sort_order: 'asc' },
-        include: { chapter_los: { include: { learning_outcomes: true } } },
-      }),
-      this.prisma.documents.findMany({
-        where: { course_id: body.courseId, deleted_at: null },
-        select: {
-          document_id: true,
-          title: true,
-          role: true,
-          chapter_code: true,
-          status: true,
-          _count: { select: { chunks: { where: { deleted_at: null } } } },
-        },
-        orderBy: [{ chapter_code: 'asc' }, { title: 'asc' }],
-      }),
-      this.prisma.quiz_sets.findMany({
-        where: { course_id: body.courseId, deleted_at: null },
-        orderBy: { created_at: 'desc' },
-        take: 50,
-      }),
-      loIds.length
-        ? this.prisma.quiz_items.findMany({
-            where: { course_id: body.courseId, lo_id: { in: loIds }, deleted_at: null },
-            include: { learning_outcomes: { select: { code: true } } },
-            orderBy: { created_at: 'desc' },
-            take: 500,
-          })
-        : Promise.resolve([]),
-    ]);
-    const chapterCode = new Map(chapters.map((c) => [c.chapter_id, c.code]));
-    return {
-      chapters: chapters.map((c) => ({
-        chapter_id: c.chapter_id,
-        code: c.code,
-        title: c.title,
-        learningOutcomes: c.chapter_los
-          .map((l) => l.learning_outcomes)
-          .filter((lo) => !lo.deleted_at)
-          .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
-          .map((lo) => ({
-            lo_id: lo.lo_id,
-            code: lo.code,
-            statement_vi: lo.statement_vi,
-            bloom_level: lo.bloom_level,
-          })),
-      })),
-      documents: documents.map(({ _count, ...doc }) => ({
-        ...doc,
-        ready: _count.chunks > 0,
-      })),
-      quizItems,
-      quizSets: sets.map((set) => ({
-        quiz_set_id: set.quiz_set_id,
-        title: set.title,
-        created_at: set.created_at,
-        questionCount: (set.items as unknown as QuizSnapshotItem[]).length,
-        settings: settingsView(set),
-        chapterCodes: set.chapter_ids.flatMap((id) => {
-          const code = chapterCode.get(id);
-          return code ? [code] : [];
-        }),
-      })),
-    };
+    return loadQuizBuilderContext(this.prisma, body);
   }
 
   async create(
@@ -428,8 +284,33 @@ export class QuizSetService {
     return { ...set, items: set.items as unknown as QuizSnapshotItem[] };
   }
 
-  async get(claims: BffClaims, id: string) {
-    const set = await this.snapshot(claims, id);
+  /**
+   * Cài đặt Canvas của đúng resource link người dùng đang mở. Link không khớp
+   * quiz/khóa học (hoặc không gửi) thì bỏ qua, quay về cài đặt của quiz set.
+   */
+  private async linkSettings(
+    set: { quiz_set_id: string; course_id: string },
+    resourceLinkId: unknown,
+  ): Promise<CanvasLinkSettings | null> {
+    if (!uuid(resourceLinkId)) return null;
+    return this.prisma.lti_resource_links.findFirst({
+      where: {
+        resource_link_id: resourceLinkId,
+        target_kind: 'quiz_set',
+        target_id: set.quiz_set_id,
+        deleted_at: null,
+        lms_course_ref: { course_id: set.course_id, deleted_at: null },
+      },
+      include: { lti_line_items: true },
+    });
+  }
+
+  async get(claims: BffClaims, id: string, resourceLinkId?: string) {
+    const found = await this.snapshot(claims, id);
+    const set = withCanvasSettings(
+      found,
+      await this.linkSettings(found, resourceLinkId),
+    );
     // Never serialize answers or explanations before submission. Đề kiểm tra
     // chỉ trả về khi bắt đầu một lượt (start), để mở trang chưa xem được đề.
     return {
@@ -466,6 +347,7 @@ export class QuizSetService {
         lms_course_ref: { course_id: set.course_id, deleted_at: null },
         lti_line_items: { is: { deleted_at: null } },
       },
+      include: { lti_line_items: true },
     });
     if (!link)
       throw new ForbiddenException(
@@ -510,10 +392,12 @@ export class QuizSetService {
     claims: BffClaims,
     body: { quizSetId: string; resourceLinkId: string },
   ) {
-    const set = await this.snapshot(claims, body.quizSetId, ['learner']);
-    if (set.mode !== 'exam')
+    const found = await this.snapshot(claims, body.quizSetId, ['learner']);
+    if (found.mode !== 'exam')
       throw new BadRequestException('Quiz luyện tập không cần bắt đầu lượt làm.');
-    const link = await this.quizLink(set, body.resourceLinkId);
+    const link = await this.quizLink(found, body.resourceLinkId);
+    // Hạn, giờ mở/đóng và số lần làm theo Assignment hiện tại của Canvas.
+    const set = withCanvasSettings(found, link);
     const scope = {
       quiz_set_id: set.quiz_set_id,
       user_id: claims.sub,
@@ -569,25 +453,26 @@ export class QuizSetService {
    * bộ đáp án, thống kê theo câu/LO và trạng thái điểm Canvas của từng sinh
    * viên; người học chỉ thấy các lượt nộp của chính mình, không kèm đáp án.
    */
-  async results(claims: BffClaims, body: { quizSetId: string }) {
-    const set = await this.snapshot(claims, body.quizSetId);
-    const staff =
-      claims.scope === 'admin' ||
-      (await this.prisma.course_memberships.count({
-        where: {
-          user_id: claims.sub,
-          course_id: set.course_id,
-          role: { in: ['instructor', 'ta'] },
-        },
-      })) > 0;
+  async results(
+    claims: BffClaims,
+    body: { quizSetId: string; resourceLinkId?: string },
+  ) {
+    const found = await this.snapshot(claims, body.quizSetId);
+    const staff = await this.isStaff(claims, found.course_id);
     const links = await this.prisma.lti_resource_links.findMany({
       where: {
         target_kind: 'quiz_set',
-        target_id: set.quiz_set_id,
+        target_id: found.quiz_set_id,
         deleted_at: null,
       },
-      select: { resource_link_id: true },
+      include: { lti_line_items: true },
     });
+    // Cài đặt theo Assignment người dùng đang mở; chỉ có một Assignment dùng
+    // quiz này thì cũng đủ rõ để dùng cài đặt của nó.
+    const current =
+      links.find((l) => l.resource_link_id === body.resourceLinkId) ??
+      (links.length === 1 ? links[0] : null);
+    const set = withCanvasSettings(found, current);
     const rows = links.length
       ? await this.prisma.quiz_attempts.findMany({
           where: {
@@ -660,10 +545,15 @@ export class QuizSetService {
     const loIds = [
       ...new Set(set.items.flatMap((i) => (i.lo_id ? [i.lo_id] : []))),
     ];
+    // Mẫu số "cả lớp": sinh viên đang học theo danh sách lớp Canvas, không chỉ
+    // người đã làm bài.
+    const classLearnerIds = await this.roster.activeLearnerIds(set.course_id);
     const [users, los] = await Promise.all([
       this.prisma.lms_user_mappings.findMany({
         where: {
-          internal_user_id: { in: [...new Set(submissions.map((s) => s.userId))] },
+          internal_user_id: {
+            in: [...new Set([...classLearnerIds, ...submissions.map((s) => s.userId)])],
+          },
         },
         select: { internal_user_id: true, display_name: true },
       }),
@@ -679,10 +569,105 @@ export class QuizSetService {
         items: set.items,
         submissions,
         names: new Map(users.map((u) => [u.internal_user_id, u.display_name])),
+        classLearnerIds,
         los: new Map(
           los.map((lo) => [lo.lo_id, { code: lo.code, statement: lo.statement_vi }]),
         ),
       }),
+    };
+  }
+
+  /**
+   * Bài làm của một lượt nộp, cho SpeedGrader: điểm gửi về Canvas mang URL của
+   * trang này (AgsPublisherService, extension .../lti/submission) và Canvas mở
+   * lại nó khi giảng viên chấm. Chỉ giảng viên/trợ giảng của khóa xem được; lượt
+   * nộp phải thuộc quiz này và một Assignment của nó trong khóa.
+   */
+  async submissionDetail(
+    claims: BffClaims,
+    body: { quizSetId: string; submissionId: string },
+  ) {
+    if (!uuid(body.submissionId))
+      throw new BadRequestException('Bài làm không hợp lệ.');
+    const found = await this.snapshot(claims, body.quizSetId, ['instructor', 'ta']);
+    const links = await this.prisma.lti_resource_links.findMany({
+      where: {
+        target_kind: 'quiz_set',
+        target_id: found.quiz_set_id,
+        deleted_at: null,
+        lms_course_ref: { course_id: found.course_id, deleted_at: null },
+      },
+      include: { lti_line_items: true },
+    });
+    const linkIds = links.map((l) => l.resource_link_id);
+    const rows = linkIds.length
+      ? await this.prisma.quiz_attempts.findMany({
+          where: {
+            submission_id: body.submissionId,
+            resource_link_id: { in: linkIds },
+            quiz_id: { in: found.items.map((i) => i.quiz_id) },
+            deleted_at: null,
+          },
+          select: {
+            submission_id: true,
+            user_id: true,
+            quiz_id: true,
+            is_correct: true,
+            score: true,
+            attempted_at: true,
+            ags_status: true,
+            resource_link_id: true,
+            chosen_answer: true,
+            grading_status: true,
+            feedback: true,
+          },
+        })
+      : [];
+    if (!rows.length) throw new NotFoundException('Không tìm thấy bài làm.');
+    const [submission] = groupSubmissions(rows, (id) =>
+      this.ags.isWaitingForPublish(id),
+    );
+    const userId = rows[0].user_id;
+    const link = links.find((l) => l.resource_link_id === rows[0].resource_link_id);
+    const set = withCanvasSettings(found, link);
+    const [student, mine] = await Promise.all([
+      this.prisma.lms_user_mappings.findUnique({
+        where: { internal_user_id: userId },
+        select: { display_name: true },
+      }),
+      this.prisma.quiz_attempts.groupBy({
+        by: ['submission_id'],
+        where: {
+          user_id: userId,
+          resource_link_id: { in: linkIds },
+          submission_id: { not: null },
+          deleted_at: null,
+        },
+        _min: { attempted_at: true },
+      }),
+    ]);
+    const order = mine
+      .map((row) => ({
+        id: row.submission_id,
+        at: row._min.attempted_at?.getTime() ?? 0,
+      }))
+      .sort((a, b) => a.at - b.at);
+    const pointsPossible = Number(set.points_possible);
+    return {
+      quiz_set_id: set.quiz_set_id,
+      title: set.title,
+      mode: set.mode,
+      submissionId: submission.submissionId,
+      student: { userId, name: student?.display_name ?? 'Sinh viên' },
+      attemptedAt: submission.attemptedAt,
+      attemptNumber: order.findIndex((o) => o.id === submission.submissionId) + 1,
+      attemptCount: order.length,
+      score: submission.score,
+      pointsPossible,
+      scoreGiven: Math.round(submission.score * pointsPossible) / 100,
+      sync: submission.sync,
+      // Giảng viên xem đủ đáp án đúng và giải thích, kể cả khi bài chưa đóng.
+      review: reviewOf(found.items, rows, submission.submissionId),
     };
   }
 
@@ -695,8 +680,9 @@ export class QuizSetService {
       sessionId?: string;
     },
   ) {
-    const set = await this.snapshot(claims, body.quizSetId, ['learner']);
-    const link = await this.quizLink(set, body.resourceLinkId);
+    const found = await this.snapshot(claims, body.quizSetId, ['learner']);
+    const link = await this.quizLink(found, body.resourceLinkId);
+    const set = withCanvasSettings(found, link);
     const exam = set.mode === 'exam';
     // Bài kiểm tra cho nộp khi còn câu bỏ trống (hết giờ tự nộp); câu bỏ trống
     // tính sai. Luyện tập vẫn yêu cầu trả lời đủ.
@@ -781,7 +767,18 @@ export class QuizSetService {
       attempted_at: attemptedAt,
       ags_status: agsStatus,
     }));
-    const essays = rows.filter((row) => row.grading_status === GRADING_STATUS.pending);
+    // Lệnh chấm tự chứa: đề lúc nộp và bài làm đi kèm, worker không đọc quiz_attempts.
+    const essays: GradingAnswer[] = rows.flatMap((row, index) =>
+      perItem[index].pending
+        ? [
+            {
+              attemptId: row.attempt_id,
+              gradingInput: gradingInput(set.items[index]),
+              chosenAnswer: perItem[index].chosenAnswer ?? null,
+            },
+          ]
+        : [],
+    );
     const sessionId = session?.session_id;
     await this.prisma.$transaction(async (tx) => {
       if (sessionId) {
@@ -800,7 +797,7 @@ export class QuizSetService {
             submissionId,
             courseId: set.course_id,
             attemptIds: rows.map((row) => row.attempt_id),
-            essayAttemptIds: essays.map((row) => row.attempt_id),
+            answers: essays,
           }),
         });
       }

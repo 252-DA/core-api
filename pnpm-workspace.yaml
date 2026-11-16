@@ -1,7 +1,7 @@
+verifyDepsBeforeRun: false
 allowBuilds:
-  '@nestjs/core': set this to true or false
-  '@prisma/engines': set this to true or false
-  msgpackr-extract: set this to true or false
-  prisma: set this to true or false
-  protobufjs: set this to true or false
-  unrs-resolver: set this to true or false
+  '@nestjs/core': false
+  '@prisma/engines': true
+  msgpackr-extract: true
+  prisma: true
+  unrs-resolver: false

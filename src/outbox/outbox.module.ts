@@ -19,6 +19,10 @@ import { OutboxService } from './outbox.service';
     BullModule.registerQueue({
       name: 'micro_content_video',
     }),
+    // COURSE_CHUNK_LO_REMAP_REQUESTED → document worker.
+    BullModule.registerQueue({
+      name: 'document_processing',
+    }),
   ],
   providers: [OutboxService],
   exports: [OutboxService],

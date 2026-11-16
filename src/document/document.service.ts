@@ -19,6 +19,17 @@ function fileNameFromStorageKey(storageKey: string, fallback: string) {
   return storageKey.split('/').filter(Boolean).pop() || fallback;
 }
 
+/**
+ * Mỗi lần đưa tài liệu vào hàng đợi xử lý là một lượt mới: tăng lượt và về 0
+ * thứ tự kết quả. Worker gửi lượt kèm mọi kết quả trạng thái; handler
+ * DOCUMENT_PROCESSING_RESULT bỏ kết quả của lượt khác (kết quả đến trễ không
+ * đè lần xử lý lại). Dùng cùng câu UPDATE đặt status = 'QUEUED'.
+ */
+export const NEXT_PROCESSING_GENERATION = {
+  processing_generation: { increment: 1 },
+  processing_seq: 0,
+} as const;
+
 /** Nguồn, vai trò và chương của tài liệu — cho màn hình tài liệu của giảng viên. */
 function placementFields(doc: documents) {
   return {
@@ -33,6 +44,14 @@ function placementFields(doc: documents) {
     chapter_reason: doc.chapter_reason,
   };
 }
+
+/**
+ * Số chunk của tài liệu chỉ đếm chunk còn dùng: chunk bị xoá mềm (worker chunk
+ * lại tài liệu) không còn được tìm kiếm, nên không được tính vào "đã có N chunk".
+ */
+const CHUNK_COUNT = {
+  _count: { select: { chunks: { where: { deleted_at: null } } } },
+} as const;
 
 @Injectable()
 export class DocumentService {
@@ -55,12 +74,19 @@ export class DocumentService {
       'observer',
     ]);
 
+    // Observer cũng vào được đây nhưng không phải nhân sự: tài liệu đã ẩn trên LMS
+    // (lms_published = false) chỉ giảng viên/trợ giảng/admin được liệt kê.
+    const staff = await this.authz.isCourseStaff(claims, courseId);
     const docs = await this.prisma.documents.findMany({
-      where: { course_id: courseId, deleted_at: null },
+      where: {
+        course_id: courseId,
+        deleted_at: null,
+        ...(staff ? {} : { OR: [{ lms_published: null }, { lms_published: true }] }),
+      },
       take: limit,
       skip: offset,
       orderBy: { created_at: 'desc' },
-      include: { _count: { select: { chunks: true } } },
+      include: CHUNK_COUNT,
     });
 
     return docs.map((doc) => ({
@@ -78,12 +104,25 @@ export class DocumentService {
     }));
   }
 
+  /**
+   * Mọi đường đọc nội dung/file một tài liệu (chunks, file-url) đều qua đây.
+   * Tài liệu bị ẩn trên LMS (lms_published = false; null = không đến từ Canvas
+   * nên vẫn hiện) chỉ nhân sự của khoá đọc được; người khác nhận 404 như thể
+   * tài liệu không tồn tại. Kiểm tra trước assertCourseAccess để người ngoài
+   * khoá cũng không phân biệt được tài liệu ẩn với tài liệu không có.
+   */
   async getDocument(claims: BffClaims, documentId: string) {
     const doc = await this.prisma.documents.findFirst({
       where: { document_id: documentId, deleted_at: null },
-      include: { _count: { select: { chunks: true } } },
+      include: CHUNK_COUNT,
     });
     if (!doc) {
+      throw new NotFoundException(`Document not found: ${documentId}`);
+    }
+    if (
+      doc.lms_published === false &&
+      !(await this.authz.isCourseStaff(claims, doc.course_id))
+    ) {
       throw new NotFoundException(`Document not found: ${documentId}`);
     }
     await this.authz.assertCourseAccess(claims, doc.course_id);
@@ -216,9 +255,10 @@ export class DocumentService {
       );
     }
 
+    // Lượt xử lý mới: kết quả trạng thái của lượt trước (nếu có) bị bỏ.
     const updated = await this.prisma.documents.update({
       where: { document_id: documentId },
-      data: { status: 'QUEUED' },
+      data: { status: 'QUEUED', ...NEXT_PROCESSING_GENERATION },
     });
 
     const job = await this.processingQueue.add(
@@ -233,6 +273,7 @@ export class DocumentService {
           owner_id: updated.created_by,
           storage_key: updated.file_path,
         },
+        processing_generation: updated.processing_generation,
       },
       {
         attempts: 3,
@@ -243,51 +284,6 @@ export class DocumentService {
     return {
       document_id: updated.document_id,
       status: updated.status,
-      job_id: job.id,
-    };
-  }
-
-  async registerAndProcess(
-    claims: BffClaims,
-    data: {
-      title: string;
-      file_path: string;
-      mime_type?: string;
-      checksum?: string;
-      course_id: string;
-    },
-  ) {
-    await this.authz.assertCourseAccess(claims, data.course_id, [
-      'instructor',
-      'ta',
-    ]);
-
-    const doc = await this.prisma.documents.create({
-      data: {
-        course_id: data.course_id,
-        title: data.title,
-        file_path: data.file_path,
-        mime_type: data.mime_type,
-        checksum: data.checksum,
-        status: 'QUEUED',
-        created_by: claims.sub,
-      },
-    });
-
-    const job = await this.processingQueue.add('process_document', {
-      document_id: doc.document_id,
-      storage_key: doc.file_path,
-      file_name: fileNameFromStorageKey(doc.file_path, doc.title),
-      metadata: {
-        course_id: doc.course_id,
-        owner_id: doc.created_by,
-        storage_key: doc.file_path,
-      },
-    });
-
-    return {
-      document_id: doc.document_id,
-      status: doc.status,
       job_id: job.id,
     };
   }

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
@@ -21,7 +25,8 @@ export class CourseService {
     const memberships = await this.prisma.course_memberships.findMany({
       where: { user_id: claims.sub },
       include: { courses: true },
-      orderBy: { last_seen_at: 'desc' },
+      // Người mới thấy qua danh sách lớp chưa mở DA lần nào (last_seen_at rỗng): xếp cuối.
+      orderBy: { last_seen_at: { sort: 'desc', nulls: 'last' } },
     });
 
     return memberships
@@ -30,6 +35,9 @@ export class CourseService {
   }
 
   async getCourse(claims: BffClaims, courseId: string) {
+    if (!courseId?.trim()) {
+      throw new BadRequestException('courseId is required');
+    }
     await this.authz.assertCourseAccess(claims, courseId);
     const course = await this.prisma.courses.findFirst({
       where: { course_id: courseId, deleted_at: null },
@@ -38,22 +46,6 @@ export class CourseService {
       throw new NotFoundException(`Course not found: ${courseId}`);
     }
     return course;
-  }
-
-  async createCourse(data: {
-    code: string;
-    name: string;
-    description?: string;
-    lms_id?: string;
-  }) {
-    return this.prisma.courses.create({
-      data: {
-        code: data.code,
-        name: data.name,
-        description: data.description,
-        lms_id: data.lms_id,
-      },
-    });
   }
 
   async getChapters(claims: BffClaims, courseId: string) {
@@ -87,13 +79,5 @@ export class CourseService {
           (a.chapters?.sort_order ?? Number.MAX_SAFE_INTEGER) -
           (b.chapters?.sort_order ?? Number.MAX_SAFE_INTEGER),
       );
-  }
-
-  async getAssessments(claims: BffClaims, courseId: string) {
-    await this.getCourse(claims, courseId);
-    return this.prisma.assessments.findMany({
-      where: { course_id: courseId, deleted_at: null },
-      orderBy: { sort_order: 'asc' },
-    });
   }
 }

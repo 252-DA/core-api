@@ -186,4 +186,85 @@ describe('AgsClientService', () => {
     expect(result).toMatchObject({ ok: false, retryable: false });
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  describe('bài nộp cho SpeedGrader', () => {
+    const submission = {
+      url: 'https://tool.example/learn/quizzes/set-1/submissions/sub-1',
+      submittedAt: '2026-08-25T09:59:30.000Z',
+    };
+    const EXTENSION = 'https://canvas.instructure.com/lti/submission';
+
+    it('gửi extension basic_lti_launch với URL bài làm và lúc nộp', async () => {
+      const { service } = setup();
+      const fetchMock = jest
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('', { status: 200 }));
+
+      await service.postScore('https://canvas.test/line_items/9', {
+        ...payload,
+        comment: 'Đúng 3/4 câu.',
+        submission,
+      });
+
+      const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
+      expect(body).toMatchObject({
+        comment: 'Đúng 3/4 câu.',
+        submission: { submittedAt: submission.submittedAt },
+        [EXTENSION]: {
+          submission_type: 'basic_lti_launch',
+          submission_data: submission.url,
+          submitted_at: submission.submittedAt,
+        },
+      });
+      expect(body[EXTENSION]).not.toHaveProperty('new_submission');
+    });
+
+    it('không thêm extension khi không có bài làm', async () => {
+      const { service } = setup();
+      const fetchMock = jest
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('', { status: 200 }));
+      await service.postScore('https://canvas.test/line_items/9', payload);
+      const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
+      expect(body).not.toHaveProperty(EXTENSION);
+      expect(body).not.toHaveProperty('submission');
+    });
+
+    it('hết số lần nộp của Assignment thì ghi điểm lại không tạo bài nộp mới', async () => {
+      const { service } = setup();
+      const fetchMock = jest
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(
+          new Response(
+            '{"errors":{"message":"The maximum number of allowed attempts has been reached for this submission"}}',
+            { status: 422 },
+          ),
+        )
+        .mockResolvedValueOnce(new Response('', { status: 200 }));
+
+      const result = await service.postScore('https://canvas.test/line_items/9', {
+        ...payload,
+        submission,
+      });
+
+      expect(result).toEqual({ ok: true });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const retry = JSON.parse(fetchMock.mock.calls[1][1]?.body as string);
+      expect(retry[EXTENSION]).toMatchObject({ new_submission: false });
+      expect(retry.scoreGiven).toBe(80);
+    });
+
+    it('lỗi 422 khác không bị gửi lại', async () => {
+      const { service } = setup();
+      const fetchMock = jest
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('{"errors":"boom"}', { status: 422 }));
+      const result = await service.postScore('https://canvas.test/line_items/9', {
+        ...payload,
+        submission,
+      });
+      expect(result).toMatchObject({ ok: false, retryable: false });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
 });

@@ -3,6 +3,12 @@ import { ReviewService } from './review.service';
 import { BffJwtGuard } from '../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../auth/current-bff-claims.decorator';
 import type { BffClaims } from '../auth/bff-claims';
+import {
+  ApproveQuizBatchDto,
+  RejectReasonDto,
+  UpdateCardDto,
+  UpdateQuizItemDto,
+} from './dto/review.dto';
 
 @Controller('api/review')
 @UseGuards(BffJwtGuard)
@@ -12,7 +18,7 @@ export class ReviewController {
   @Get('drafts')
   async listDrafts(
     @CurrentBffClaims() claims: BffClaims,
-    @Query('courseId') courseId: string,
+    @Query('courseId') courseId = '',
     @Query('kind') kind?: 'card' | 'quiz',
   ) {
     return this.reviewService.listDrafts(claims, courseId, kind);
@@ -30,18 +36,26 @@ export class ReviewController {
   async rejectCard(
     @CurrentBffClaims() claims: BffClaims,
     @Param('id') id: string,
-    @Body() body: { reason?: string },
+    @Body() body: RejectReasonDto = {},
   ) {
-    return this.reviewService.rejectCard(claims, id, body.reason);
+    return this.reviewService.rejectCard(claims, id, body?.reason);
   }
 
   @Patch('cards/:id')
   async updateCard(
     @CurrentBffClaims() claims: BffClaims,
     @Param('id') id: string,
-    @Body() body: { content: unknown },
+    @Body() body: UpdateCardDto,
   ) {
     return this.reviewService.updateCard(claims, id, body.content);
+  }
+
+  @Post('quiz-items/approve-batch')
+  async approveQuizItems(
+    @CurrentBffClaims() claims: BffClaims,
+    @Body() body: ApproveQuizBatchDto,
+  ) {
+    return this.reviewService.approveQuizItems(claims, body.quizIds);
   }
 
   @Post('quiz-items/:id/approve')
@@ -56,22 +70,16 @@ export class ReviewController {
   async rejectQuizItem(
     @CurrentBffClaims() claims: BffClaims,
     @Param('id') id: string,
-    @Body() body: { reason?: string },
+    @Body() body: RejectReasonDto = {},
   ) {
-    return this.reviewService.rejectQuizItem(claims, id, body.reason);
+    return this.reviewService.rejectQuizItem(claims, id, body?.reason);
   }
 
   @Patch('quiz-items/:id')
   async updateQuizItem(
     @CurrentBffClaims() claims: BffClaims,
     @Param('id') id: string,
-    @Body()
-    body: {
-      question?: string;
-      options?: unknown;
-      correct_answer?: unknown;
-      explanation?: string;
-    },
+    @Body() body: UpdateQuizItemDto,
   ) {
     return this.reviewService.updateQuizItem(claims, id, body);
   }
