@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
-import type { NormalizedCurriculum } from './curriculum-payload';
-import { curriculumIds, stableUuid } from './stable-uuid';
+import type { NormalizedCurriculum } from '../handlers/curriculum-payload';
+import { curriculumIds, stableUuid } from '../domain/stable-uuid';
 
 /**
  * Ghi đề cương đã duyệt vào 9 bảng: courses, chapters, learning_outcomes,

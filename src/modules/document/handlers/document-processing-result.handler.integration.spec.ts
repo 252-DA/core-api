@@ -1,15 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
-import type { BffClaims } from '../../auth/bff-claims';
-import { EnrichmentContentResultHandler } from '../content-generation/enrichment-content-result.handler';
-import type { WorkerResultEnvelope } from '../../messaging/worker-results/worker-result-envelope';
-import type { WorkerResultKind } from '../../messaging/worker-results/worker-results.constants';
+import type { BffClaims } from '../../../auth/bff-claims';
+import { EnrichmentContentResultHandler } from '../../content-generation/handlers/enrichment-content-result.handler';
+import type { WorkerResultEnvelope } from '../../../messaging/worker-results/worker-result-envelope';
+import type { WorkerResultKind } from '../../../messaging/worker-results/worker-results.constants';
 import { DocumentProcessingResultHandler } from './document-processing-result.handler';
 import {
   DocumentService,
   NEXT_PROCESSING_GENERATION,
-} from './document.service';
+} from '../document.service';
 
 /**
  * Chạy thật trên PostgreSQL đã áp đủ migration: trạng thái tài liệu và học liệu

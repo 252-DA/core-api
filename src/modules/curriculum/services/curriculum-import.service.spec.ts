@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { CurriculumImportService } from './curriculum-import.service';
-import { CO3011_CURRICULUM } from './testdata/co3011';
+import { CO3011_CURRICULUM } from '../testdata/co3011';
 
 describe('CurriculumImportService', () => {
   const courseId = '01900000-0000-7000-8000-000000000001';

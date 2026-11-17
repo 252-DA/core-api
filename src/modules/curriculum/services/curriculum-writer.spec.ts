@@ -1,17 +1,17 @@
-import type { NormalizedCurriculum } from './curriculum-payload';
+import type { NormalizedCurriculum } from '../handlers/curriculum-payload';
 import {
   assessmentType,
   buildCurriculumRows,
   writeCurriculum,
 } from './curriculum-writer';
-import { curriculumIds, stableUuid, uuid5Url } from './stable-uuid';
+import { curriculumIds, stableUuid, uuid5Url } from '../domain/stable-uuid';
 import {
   CO3011_CURRICULUM,
   GOLDEN_COURSE_ID,
   PYTHON_ROWS,
   rowsAsDump,
   sortDump,
-} from './testdata/co3011';
+} from '../testdata/co3011';
 
 function clone(): NormalizedCurriculum {
   return JSON.parse(JSON.stringify(CO3011_CURRICULUM));

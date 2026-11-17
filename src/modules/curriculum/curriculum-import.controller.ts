@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { CurriculumImportService } from './curriculum-import.service';
+import { CurriculumImportService } from './services/curriculum-import.service';
 import { BffJwtGuard } from '../../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../../auth/current-bff-claims.decorator';
 import type { BffClaims } from '../../auth/bff-claims';

@@ -1,17 +1,17 @@
 import { Prisma } from '@prisma/client';
-import { errorMessage } from '../../common/utils/errors';
+import { errorMessage } from '../../../common/utils/errors';
 import {
   clipCodePoints,
   isWithinCodePoints,
-} from '../../common/utils/text-length';
-import { isPlainObject } from '../../common/utils/type-guards';
-import { isUuid } from '../../common/utils/uuid';
+} from '../../../common/utils/text-length';
+import { isPlainObject } from '../../../common/utils/type-guards';
+import { isUuid } from '../../../common/utils/uuid';
 import {
   isQuestionType,
   normalizeAnswerKey,
   TRUE_FALSE_OPTIONS,
   type QuestionType,
-} from '../question/question-types';
+} from '../../question/question-types';
 
 /**
  * Học liệu AI sinh ra (quiz_items, lesson_cards) do worker gửi về: kiểm dạng

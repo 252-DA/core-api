@@ -1,4 +1,4 @@
-import type { CanvasFile } from '../../integrations/canvas/canvas-api.client';
+import type { CanvasFile } from '../../../integrations/canvas/canvas-api.client';
 import {
   fileIdsInSyllabus,
   isSupportedSyllabusFile,

@@ -14,6 +14,7 @@ import { AuthzService } from '../../auth/authz.service';
 import { DocumentStorageService } from '../../infra/storage/document-storage.service';
 import { DOCUMENT_DELETED } from '../../messaging/event-types';
 import { DOCUMENT_PROCESSING_QUEUE } from '../../messaging/queues';
+import { toDocumentView } from './document.mapper';
 
 function fileNameFromStorageKey(storageKey: string, fallback: string) {
   return storageKey.split('/').filter(Boolean).pop() || fallback;
@@ -29,21 +30,6 @@ export const NEXT_PROCESSING_GENERATION = {
   processing_generation: { increment: 1 },
   processing_seq: 0,
 } as const;
-
-/** Nguồn, vai trò và chương của tài liệu — cho màn hình tài liệu của giảng viên. */
-function placementFields(doc: documents) {
-  return {
-    source: doc.source,
-    lms_module: doc.lms_module,
-    lms_published: doc.lms_published,
-    role: doc.role,
-    role_provenance: doc.role_provenance,
-    chapter_code: doc.chapter_code,
-    chapter_provenance: doc.chapter_provenance,
-    chapter_confidence: doc.chapter_confidence === null ? null : Number(doc.chapter_confidence),
-    chapter_reason: doc.chapter_reason,
-  };
-}
 
 /**
  * Số chunk của tài liệu chỉ đếm chunk còn dùng: chunk bị xoá mềm (worker chunk
@@ -89,19 +75,7 @@ export class DocumentService {
       include: CHUNK_COUNT,
     });
 
-    return docs.map((doc) => ({
-      document_id: doc.document_id,
-      title: doc.title,
-      file_path: doc.file_path,
-      mime_type: doc.mime_type,
-      checksum: doc.checksum,
-      course_id: doc.course_id,
-      status: doc.status,
-      created_by: doc.created_by,
-      created_at: doc.created_at,
-      chunks_count: doc._count.chunks,
-      ...placementFields(doc),
-    }));
+    return docs.map(toDocumentView);
   }
 
   /**
@@ -126,19 +100,7 @@ export class DocumentService {
       throw new NotFoundException(`Document not found: ${documentId}`);
     }
     await this.authz.assertCourseAccess(claims, doc.course_id);
-    return {
-      document_id: doc.document_id,
-      title: doc.title,
-      file_path: doc.file_path,
-      mime_type: doc.mime_type,
-      checksum: doc.checksum,
-      course_id: doc.course_id,
-      status: doc.status,
-      created_by: doc.created_by,
-      created_at: doc.created_at,
-      chunks_count: doc._count.chunks,
-      ...placementFields(doc),
-    };
+    return toDocumentView(doc);
   }
 
   /**

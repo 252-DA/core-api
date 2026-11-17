@@ -1,7 +1,7 @@
-import { isWithinCodePoints } from '../../common/utils/text-length';
-import { isPlainObject } from '../../common/utils/type-guards';
-import { isUuid } from '../../common/utils/uuid';
-import { InvalidWorkerResultError } from '../../messaging/worker-results/worker-result-envelope';
+import { isWithinCodePoints } from '../../../common/utils/text-length';
+import { isPlainObject } from '../../../common/utils/type-guards';
+import { isUuid } from '../../../common/utils/uuid';
+import { InvalidWorkerResultError } from '../../../messaging/worker-results/worker-result-envelope';
 import {
   checkKeys,
   parseGeneratedLessonCards,
@@ -10,7 +10,7 @@ import {
   type GeneratedLessonCard,
   type GeneratedQuizItem,
   type VerificationStatus,
-} from './generated-content';
+} from '../domain/generated-content';
 
 /**
  * Payload của CONTENT_GENERATION_RESULT, đúng

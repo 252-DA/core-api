@@ -10,26 +10,26 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Prisma } from '@prisma/client';
 import { Queue } from 'bullmq';
-import { STAFF_ROLES } from '../../common/constants/course-roles';
-import { errorNameAndMessage } from '../../common/utils/errors';
-import { safeFileName } from '../../common/utils/file-name';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import type { BffClaims } from '../../auth/bff-claims';
-import { AuthzService } from '../../auth/authz.service';
-import { DocumentStorageService } from '../../infra/storage/document-storage.service';
-import { CanvasApiClient, type CanvasFile } from '../../integrations/canvas/canvas-api.client';
-import { CanvasCourseService } from '../../integrations/canvas/canvas-course.service';
-import { COURSE_CHUNK_LO_REMAP_REQUESTED } from '../../messaging/event-types';
-import { DOCUMENT_PROCESSING_QUEUE } from '../../messaging/queues';
+import { STAFF_ROLES } from '../../../common/constants/course-roles';
+import { errorNameAndMessage } from '../../../common/utils/errors';
+import { safeFileName } from '../../../common/utils/file-name';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
+import type { BffClaims } from '../../../auth/bff-claims';
+import { AuthzService } from '../../../auth/authz.service';
+import { DocumentStorageService } from '../../../infra/storage/document-storage.service';
+import { CanvasApiClient, type CanvasFile } from '../../../integrations/canvas/canvas-api.client';
+import { CanvasCourseService } from '../../../integrations/canvas/canvas-course.service';
+import { COURSE_CHUNK_LO_REMAP_REQUESTED } from '../../../messaging/event-types';
+import { DOCUMENT_PROCESSING_QUEUE } from '../../../messaging/queues';
 import {
   fileIdsInSyllabus,
   pickSyllabusFile,
-} from './syllabus-file';
+} from '../domain/syllabus-file';
 import {
   curriculumProblems,
   hasBlockingIssues,
   type NormalizedCurriculum,
-} from './curriculum-payload';
+} from '../handlers/curriculum-payload';
 import { writeCurriculum } from './curriculum-writer';
 
 /** Job xếp thẳng (không qua outbox) khi tạo một lần nạp đề cương. */

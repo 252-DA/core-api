@@ -1,19 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { STAFF_ROLES } from '../../common/constants/course-roles';
-import { runBestEffort } from '../../common/utils/best-effort';
+import { STAFF_ROLES } from '../../../common/constants/course-roles';
+import { runBestEffort } from '../../../common/utils/best-effort';
 import {
   clipCodePoints,
   isWithinCodePoints,
-} from '../../common/utils/text-length';
-import { isPlainObject } from '../../common/utils/type-guards';
-import { isUuid } from '../../common/utils/uuid';
-import { PrismaService } from '../../infra/prisma/prisma.service';
+} from '../../../common/utils/text-length';
+import { isPlainObject } from '../../../common/utils/type-guards';
+import { isUuid } from '../../../common/utils/uuid';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
-} from '../../messaging/worker-results/worker-result-envelope';
-import { WorkerResultHandler } from '../../messaging/worker-results/worker-result-handler';
+} from '../../../messaging/worker-results/worker-result-envelope';
+import { WorkerResultHandler } from '../../../messaging/worker-results/worker-result-handler';
 import {
   MAX_ERROR_CHARS,
   parseContentGenerationResult,
@@ -27,7 +27,7 @@ import {
   upsertGeneratedQuizItems,
   type UpsertCount,
   type VerificationStatus,
-} from './generated-content';
+} from '../domain/generated-content';
 
 /** Request còn chờ: chỉ những dòng này nhận kết quả. */
 const ACTIVE_STATUSES = ['QUEUED', 'RUNNING'];

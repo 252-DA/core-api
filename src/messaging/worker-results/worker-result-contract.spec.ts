@@ -1,10 +1,10 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { CONTRACTS_DIR } from '../../testing/repo-paths';
-import { parseContentGenerationResult } from '../../modules/content-generation/content-generation-result.payload';
-import { parseEnrichmentContentPayload } from '../../modules/content-generation/enrichment-content-result.handler';
-import { parseCurriculumImportEnvelope } from '../../modules/curriculum/curriculum-import-result.handler';
-import { parseDocumentProcessingPayload } from '../../modules/document/document-processing-result.handler';
+import { parseContentGenerationResult } from '../../modules/content-generation/handlers/content-generation-result.payload';
+import { parseEnrichmentContentPayload } from '../../modules/content-generation/handlers/enrichment-content-result.handler';
+import { parseCurriculumImportEnvelope } from '../../modules/curriculum/handlers/curriculum-import-result.handler';
+import { parseDocumentProcessingPayload } from '../../modules/document/handlers/document-processing-result.handler';
 import { parseEssayGradingResult } from '../../modules/essay-processor/essay-grading-result.handler';
 import { parseMicroContentGradingResult } from '../../modules/micro-content/handlers/micro-content-grading-result.handler';
 import { parseMicroContentVideoPayload } from '../../modules/micro-content/handlers/micro-content-video-result.handler';

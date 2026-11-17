@@ -11,7 +11,7 @@ import { ContentGenerationService } from './modules/content-generation/content-g
 import { CourseController } from './modules/course/course.controller';
 import { CourseService } from './modules/course/course.service';
 import { CurriculumImportController } from './modules/curriculum/curriculum-import.controller';
-import { CurriculumImportService } from './modules/curriculum/curriculum-import.service';
+import { CurriculumImportService } from './modules/curriculum/services/curriculum-import.service';
 import { CanvasDocumentSyncService } from './modules/canvas-sync/canvas-document-sync.service';
 import { CanvasSyncController } from './modules/canvas-sync/canvas-sync.controller';
 import { CanvasSyncStatusService } from './modules/canvas-sync/canvas-sync-status.service';

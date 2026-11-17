@@ -5,11 +5,11 @@ import {
 } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
-import { CurriculumImportResultHandler } from './curriculum-import-result.handler';
+import { CurriculumImportResultHandler } from '../handlers/curriculum-import-result.handler';
 import { CurriculumImportService } from './curriculum-import.service';
-import type { NormalizedCurriculum } from './curriculum-payload';
+import type { NormalizedCurriculum } from '../handlers/curriculum-payload';
 import { writeCurriculum } from './curriculum-writer';
-import { curriculumIds } from './stable-uuid';
+import { curriculumIds } from '../domain/stable-uuid';
 import {
   CO3011_CURRICULUM,
   CO3011_ENVELOPE,
@@ -18,7 +18,7 @@ import {
   PYTHON_ROWS,
   sortDump,
   type TableDump,
-} from './testdata/co3011';
+} from '../testdata/co3011';
 
 /**
  * Chạy thật trên PostgreSQL đã áp đủ migration. Bỏ qua khi không đặt

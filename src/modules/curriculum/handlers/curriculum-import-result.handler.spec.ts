@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
-import { CONTRACTS_DIR } from '../../testing/repo-paths';
-import { InvalidWorkerResultError } from '../../messaging/worker-results/worker-result-envelope';
+import { CONTRACTS_DIR } from '../../../testing/repo-paths';
+import { InvalidWorkerResultError } from '../../../messaging/worker-results/worker-result-envelope';
 import { CurriculumImportResultHandler } from './curriculum-import-result.handler';
 
 const FIXTURES = join(CONTRACTS_DIR, 'fixtures', 'v1');

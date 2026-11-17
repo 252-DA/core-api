@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CONTRACTS_DIR } from '../../../testing/repo-paths';
-import type { NormalizedCurriculum } from '../curriculum-payload';
-import type { CurriculumRows } from '../curriculum-writer';
+import type { NormalizedCurriculum } from '../handlers/curriculum-payload';
+import type { CurriculumRows } from '../services/curriculum-writer';
 
 /**
  * Dữ liệu chung cho test đề cương (chỉ spec import; không phải code chạy thật):
