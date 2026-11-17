@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
-import type { Params } from 'nestjs-pino';
+import { Logger as PinoNestLogger, type Params, PinoLogger } from 'nestjs-pino';
 import pino, { type DestinationStream, type LoggerOptions } from 'pino';
 
 export const REQUEST_ID_HEADER = 'x-request-id';
@@ -168,6 +168,7 @@ export function buildLoggerModuleParams(
       res: { statusCode: number },
       val: { duration_ms?: number },
     ) => ({
+      logger: 'HttpAccess',
       method: req.method,
       url: getRequestUrl(req as RequestLike),
       status: res.statusCode,
@@ -179,6 +180,7 @@ export function buildLoggerModuleParams(
       _error: Error,
       val: { duration_ms?: number },
     ) => ({
+      logger: 'HttpAccess',
       method: req.method,
       url: getRequestUrl(req as RequestLike),
       status: res.statusCode,
@@ -199,6 +201,29 @@ export function buildLoggerModuleParams(
     assignResponse: true,
     pinoHttp: stream ? [pinoHttpOptions, stream] : pinoHttpOptions,
   };
+}
+
+let sharedLoggerModuleParams: Params | undefined;
+
+/**
+ * Trả về cùng một object cấu hình LoggerModule cho toàn bộ vòng đời process.
+ * nestjs-pino khởi tạo root logger duy nhất ở lần dựng PinoLogger đầu tiên và
+ * bỏ qua tham số ở các lần sau, nên logger khởi động và LoggerModule phải dùng
+ * chung một object tham số này.
+ */
+export function getSharedLoggerModuleParams(): Params {
+  sharedLoggerModuleParams ??= buildLoggerModuleParams();
+  return sharedLoggerModuleParams;
+}
+
+/**
+ * Dựng LoggerService từ nestjs-pino trước khi NestFactory tạo DI container,
+ * giúp các dòng khởi động và lỗi DI/constructor xuất đúng định dạng ngay từ đầu.
+ */
+export function createBootstrapLogger(
+  params: Params = getSharedLoggerModuleParams(),
+): PinoNestLogger {
+  return new PinoNestLogger(new PinoLogger(params), params);
 }
 
 /**

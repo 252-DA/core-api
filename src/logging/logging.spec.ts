@@ -55,6 +55,51 @@ class LoggingTestController {
   boom() {
     throw new Error('unexpected failure');
   }
+
+  @Get('invalid-uuid')
+  invalidUuid() {
+    throw Object.assign(
+      new Error('invalid input syntax for type uuid: "bad-input-value-xyz"'),
+      {
+        name: 'PrismaClientKnownRequestError',
+        code: 'P2007',
+        clientVersion: '7.8.0',
+        meta: {
+          modelName: 'documents',
+          driverAdapterError: {
+            name: 'DriverAdapterError',
+            cause: {
+              originalCode: '22P02',
+              originalMessage:
+                'invalid input syntax for type uuid: "bad-input-value-xyz"',
+              kind: 'InvalidInputValue',
+              message:
+                'invalid input syntax for type uuid: "bad-input-value-xyz"',
+            },
+          },
+        },
+      },
+    );
+  }
+
+  @Get('invalid-byte')
+  invalidByte() {
+    throw Object.assign(
+      new Error('invalid byte sequence for encoding "UTF8": 0x00'),
+      {
+        name: 'DriverAdapterError',
+        clientVersion: '7.8.0',
+        cause: {
+          originalCode: '22021',
+          originalMessage: 'invalid byte sequence for encoding "UTF8": 0x00',
+          kind: 'postgres',
+          code: '22021',
+          severity: 'ERROR',
+          message: 'invalid byte sequence for encoding "UTF8": 0x00',
+        },
+      },
+    );
+  }
 }
 
 function createCaptureStream() {
@@ -309,6 +354,7 @@ describe('Logging config & HTTP integration', () => {
 
       const accessLog = lines.find((l) => l.event === 'request completed');
       expect(accessLog).toBeDefined();
+      expect(accessLog?.logger).toBe('HttpAccess');
       expect(accessLog?.level).toBe('info');
       expect(accessLog?.request_id).toBe('req-valid-123456');
       expect(accessLog?.method).toBe('GET');
@@ -342,6 +388,7 @@ describe('Logging config & HTTP integration', () => {
       const accessLog = capture
         .parseLines()
         .find((l) => l.event === 'request completed');
+      expect(accessLog?.logger).toBe('HttpAccess');
       expect(accessLog?.request_id).toBe(reqId);
       expect(accessLog?.user_id).toBe('admin-1');
       expect(accessLog?.course_id).toBeUndefined();
@@ -366,6 +413,7 @@ describe('Logging config & HTTP integration', () => {
       expect(warn401?.message).toBe('Missing or invalid Authorization header');
 
       const access401 = lines401.find((l) => l.event === 'request completed');
+      expect(access401?.logger).toBe('HttpAccess');
       expect(access401?.level).toBe('warning');
       expect(access401?.status).toBe(401);
       expect(access401?.request_id).toBe(unauthReqId);
@@ -389,6 +437,7 @@ describe('Logging config & HTTP integration', () => {
       expect((warn400?.message as string[]).length).toBeGreaterThan(0);
 
       const access400 = lines400.find((l) => l.event === 'request completed');
+      expect(access400?.logger).toBe('HttpAccess');
       expect(access400?.level).toBe('warning');
       expect(access400?.status).toBe(400);
     });
@@ -414,9 +463,79 @@ describe('Logging config & HTTP integration', () => {
 
       const accessLog = lines.find((l) => l.event === 'request errored');
       expect(accessLog).toBeDefined();
+      expect(accessLog?.logger).toBe('HttpAccess');
       expect(accessLog?.level).toBe('error');
       expect(accessLog?.status).toBe(500);
       expect(accessLog?.request_id).toBe('boom-req-0001');
+    });
+
+    it('maps Prisma 22P02 input error to 400 warning without leaking invalid value', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/logging-test/invalid-uuid',
+        headers: { 'x-request-id': 'bad-uuid-req-0001' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body)).toEqual({
+        statusCode: 400,
+        message: 'Tham số không hợp lệ.',
+        error: 'Bad Request',
+      });
+
+      const lines = capture.parseLines();
+      expect(
+        lines.filter((l) => l.logger === 'ExceptionsHandler'),
+      ).toHaveLength(0);
+
+      const warnings = lines.filter(
+        (l) =>
+          l.logger === 'HttpExceptionLoggingFilter' && l.level === 'warning',
+      );
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({
+        status: 400,
+        db_code: '22P02',
+        model: 'documents',
+        request_id: 'bad-uuid-req-0001',
+        message: 'Tham số không hợp lệ.',
+      });
+
+      expect(capture.rawText()).not.toContain('bad-input-value-xyz');
+    });
+
+    it('maps bare DriverAdapterError 22021 to 400 warning without leaking postgres message', async () => {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/logging-test/invalid-byte',
+        headers: { 'x-request-id': 'bad-byte-req-0001' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body)).toEqual({
+        statusCode: 400,
+        message: 'Tham số không hợp lệ.',
+        error: 'Bad Request',
+      });
+
+      const lines = capture.parseLines();
+      expect(
+        lines.filter((l) => l.logger === 'ExceptionsHandler'),
+      ).toHaveLength(0);
+
+      const warnings = lines.filter(
+        (l) =>
+          l.logger === 'HttpExceptionLoggingFilter' && l.level === 'warning',
+      );
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchObject({
+        status: 400,
+        db_code: '22021',
+        request_id: 'bad-byte-req-0001',
+        message: 'Tham số không hợp lệ.',
+      });
+      expect(warnings[0]?.model).toBeUndefined();
+      expect(capture.rawText()).not.toContain('0x00');
     });
 
     it('skips access logs for GET /metrics', async () => {

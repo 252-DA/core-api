@@ -7,6 +7,7 @@ import { AppModule } from './app.module';
 import { HttpExceptionLoggingFilter } from './logging/http-exception-logging.filter';
 import {
   buildPinoOptions,
+  createBootstrapLogger,
   createFastifyAdapter,
 } from './logging/pino-config';
 
@@ -33,10 +34,11 @@ process.on('uncaughtException', (error) => {
 });
 
 async function bootstrap() {
+  const logger = createBootstrapLogger();
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     createFastifyAdapter(),
-    { bufferLogs: true },
+    { logger },
   );
 
   app.useLogger(app.get(PinoNestLogger));
