@@ -7,9 +7,13 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { COURSE_ROLES, STAFF_ROLES } from '../common/constants/course-roles';
 import { isUuid } from '../common/utils/uuid';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
+import {
+  CONTENT_GENERATION_REQUESTED,
+  MICRO_CONTENT_RENDER_REQUESTED,
+} from '../messaging/event-types';
 import { isQuestionType, normalizeAnswerKey } from '../question/question-types';
 import type {
   CreateMicroContentInput,
@@ -659,7 +663,7 @@ export class MicroContentService {
 
       await tx.outbox_events.create({
         data: {
-          event_type: 'CONTENT_GENERATION_REQUESTED',
+          event_type: CONTENT_GENERATION_REQUESTED,
           aggregate_type: 'content_generation_request',
           aggregate_id: req.request_id,
           payload: {
@@ -808,7 +812,7 @@ export class MicroContentService {
 
       await tx.outbox_events.create({
         data: {
-          event_type: 'CONTENT_GENERATION_REQUESTED',
+          event_type: CONTENT_GENERATION_REQUESTED,
           aggregate_type: 'content_generation_request',
           aggregate_id: created.request_id,
           payload: {
@@ -913,7 +917,7 @@ export class MicroContentService {
 
       await tx.outbox_events.create({
         data: {
-          event_type: 'CONTENT_GENERATION_REQUESTED',
+          event_type: CONTENT_GENERATION_REQUESTED,
           aggregate_type: 'content_generation_request',
           aggregate_id: created.request_id,
           payload: {
@@ -1066,7 +1070,7 @@ export class MicroContentService {
       // bắt được, còn worker kiểm uuid dạng chuẩn và từ chối lệnh.
       await tx.outbox_events.create({
         data: {
-          event_type: 'MICRO_CONTENT_RENDER_REQUESTED',
+          event_type: MICRO_CONTENT_RENDER_REQUESTED,
           aggregate_type: 'micro_content',
           aggregate_id: item.micro_content_id,
           payload: {

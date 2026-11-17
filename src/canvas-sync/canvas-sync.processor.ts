@@ -1,11 +1,11 @@
 import { Logger } from '@nestjs/common';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job, UnrecoverableError } from 'bullmq';
-import { describeCanvasError } from '../canvas/canvas-errors';
+import { describeCanvasError } from '../integrations/canvas/canvas-errors';
+import { CANVAS_SYNC_QUEUE } from '../messaging/queues';
 import { RosterSyncService } from '../roster/roster-sync.service';
 import { CanvasDocumentSyncService } from './canvas-document-sync.service';
 import {
-  CANVAS_SYNC_QUEUE,
   CANVAS_SYNC_COURSE,
   CANVAS_SYNC_SWEEP,
   CANVAS_ROSTER_SYNC,

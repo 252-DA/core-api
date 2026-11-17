@@ -8,10 +8,12 @@ import { Queue } from 'bullmq';
 import type { documents } from '@prisma/client';
 import { STAFF_ROLES } from '../common/constants/course-roles';
 import { safeFileName } from '../common/utils/file-name';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
-import { DocumentStorageService } from '../storage/document-storage.service';
+import { DocumentStorageService } from '../infra/storage/document-storage.service';
+import { DOCUMENT_DELETED } from '../messaging/event-types';
+import { DOCUMENT_PROCESSING_QUEUE } from '../messaging/queues';
 
 function fileNameFromStorageKey(storageKey: string, fallback: string) {
   return storageKey.split('/').filter(Boolean).pop() || fallback;
@@ -56,7 +58,8 @@ export class DocumentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authz: AuthzService,
-    @InjectQueue('document_processing') private readonly processingQueue: Queue,
+    @InjectQueue(DOCUMENT_PROCESSING_QUEUE)
+    private readonly processingQueue: Queue,
     private readonly storage: DocumentStorageService,
   ) {}
 
@@ -311,7 +314,7 @@ export class DocumentService {
       });
       await tx.outbox_events.create({
         data: {
-          event_type: 'DOCUMENT_DELETED',
+          event_type: DOCUMENT_DELETED,
           aggregate_type: 'document',
           aggregate_id: documentId,
           payload: { document_id: documentId, course_id: doc.course_id },

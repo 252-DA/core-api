@@ -13,27 +13,27 @@ import { Queue } from 'bullmq';
 import { STAFF_ROLES } from '../common/constants/course-roles';
 import { errorNameAndMessage } from '../common/utils/errors';
 import { safeFileName } from '../common/utils/file-name';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
-import { DocumentStorageService } from '../storage/document-storage.service';
-import { CanvasApiClient, type CanvasFile } from '../canvas/canvas-api.client';
-import { CanvasCourseService } from '../canvas/canvas-course.service';
+import { DocumentStorageService } from '../infra/storage/document-storage.service';
+import { CanvasApiClient, type CanvasFile } from '../integrations/canvas/canvas-api.client';
+import { CanvasCourseService } from '../integrations/canvas/canvas-course.service';
+import { COURSE_CHUNK_LO_REMAP_REQUESTED } from '../messaging/event-types';
+import { DOCUMENT_PROCESSING_QUEUE } from '../messaging/queues';
 import {
   fileIdsInSyllabus,
   pickSyllabusFile,
 } from './syllabus-file';
-import {
-  COURSE_CHUNK_LO_REMAP_REQUESTED,
-  CURRICULUM_PREVIEW_JOB,
-  DOCUMENT_PROCESSING_QUEUE,
-} from './curriculum-events';
 import {
   curriculumProblems,
   hasBlockingIssues,
   type NormalizedCurriculum,
 } from './curriculum-payload';
 import { writeCurriculum } from './curriculum-writer';
+
+/** Job xếp thẳng (không qua outbox) khi tạo một lần nạp đề cương. */
+export const CURRICULUM_PREVIEW_JOB = 'curriculum_preview';
 
 const MANAGE_ROLES = STAFF_ROLES;
 // Worker trích xuất bằng luật, cùng file cho cùng kết quả: đồng bộ lại mà file

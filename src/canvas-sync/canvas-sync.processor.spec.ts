@@ -1,5 +1,5 @@
 import { BadGatewayException } from '@nestjs/common';
-import { CanvasApiError } from '../canvas/canvas-errors';
+import { CanvasApiError } from '../integrations/canvas/canvas-errors';
 import { CanvasSyncProcessor } from './canvas-sync.processor';
 import {
   CANVAS_ROSTER_SYNC,

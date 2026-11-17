@@ -4,12 +4,12 @@ import {
   PayloadTooLargeException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { errorMessage } from '../common/utils/errors';
-import { hostOf } from '../common/utils/url';
+import { errorMessage } from '../../common/utils/errors';
+import { hostOf } from '../../common/utils/url';
 import {
   loadCanvasApiConfig,
   loadCanvasApiEnv,
-} from '../config/canvas-api.config';
+} from '../../config/canvas-api.config';
 import { CanvasApiError, describeCanvasError } from './canvas-errors';
 
 export type CanvasFile = {

@@ -1,7 +1,7 @@
 import { isWithinCodePoints } from '../common/utils/text-length';
 import { isPlainObject } from '../common/utils/type-guards';
 import { isUuid } from '../common/utils/uuid';
-import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
+import { InvalidWorkerResultError } from '../messaging/worker-results/worker-result-envelope';
 import {
   checkKeys,
   parseGeneratedLessonCards,

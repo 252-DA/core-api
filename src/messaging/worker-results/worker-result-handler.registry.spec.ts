@@ -18,7 +18,7 @@ import {
   workerResultHandlerMetadata,
 } from './worker-result-handler';
 import { WORKER_RESULT_KINDS } from './worker-results.constants';
-import { AppModule } from '../app.module';
+import { AppModule } from '../../app.module';
 
 @Injectable()
 @WorkerResultHandler('QUIZ_GRADING_RESULT')

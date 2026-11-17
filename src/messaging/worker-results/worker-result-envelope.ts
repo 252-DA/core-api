@@ -1,6 +1,6 @@
 import { UnrecoverableError } from 'bullmq';
-import { isPlainObject } from '../common/utils/type-guards';
-import { isWithinCodePoints } from '../common/utils/text-length';
+import { isPlainObject } from '../../common/utils/type-guards';
+import { isWithinCodePoints } from '../../common/utils/text-length';
 import {
   isWorkerResultKind,
   type WorkerResultKind,

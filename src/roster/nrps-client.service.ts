@@ -5,7 +5,7 @@ import {
   resolvePlatformUrl,
   type AgsConfig,
 } from '../config/ags.config';
-import { AgsTokenService, AgsTokenError } from '../ags/ags-token.service';
+import { AgsTokenService, AgsTokenError } from '../integrations/lti-platform/ags-token.service';
 
 export const NRPS_SCOPE =
   'https://purl.imsglobal.org/spec/lti-nrps/scope/contextmembership.readonly';

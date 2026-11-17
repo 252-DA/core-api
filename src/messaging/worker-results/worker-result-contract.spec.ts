@@ -1,14 +1,14 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { CONTRACTS_DIR } from '../testing/repo-paths';
-import { parseContentGenerationResult } from '../content-generation/content-generation-result.payload';
-import { parseEnrichmentContentPayload } from '../content-generation/enrichment-content-result.handler';
-import { parseCurriculumImportEnvelope } from '../curriculum/curriculum-import-result.handler';
-import { parseDocumentProcessingPayload } from '../document/document-processing-result.handler';
-import { parseEssayGradingResult } from '../essay-processor/essay-grading-result.handler';
-import { parseMicroContentGradingResult } from '../micro-content/micro-content-grading-result.handler';
-import { parseMicroContentVideoPayload } from '../micro-content/micro-content-video-result.handler';
-import { parseQuizGradingResult } from '../quiz/quiz-grading-result.handler';
+import { CONTRACTS_DIR } from '../../testing/repo-paths';
+import { parseContentGenerationResult } from '../../content-generation/content-generation-result.payload';
+import { parseEnrichmentContentPayload } from '../../content-generation/enrichment-content-result.handler';
+import { parseCurriculumImportEnvelope } from '../../curriculum/curriculum-import-result.handler';
+import { parseDocumentProcessingPayload } from '../../document/document-processing-result.handler';
+import { parseEssayGradingResult } from '../../essay-processor/essay-grading-result.handler';
+import { parseMicroContentGradingResult } from '../../micro-content/micro-content-grading-result.handler';
+import { parseMicroContentVideoPayload } from '../../micro-content/micro-content-video-result.handler';
+import { parseQuizGradingResult } from '../../quiz/quiz-grading-result.handler';
 import {
   InvalidWorkerResultError,
   parseWorkerResultEnvelope,

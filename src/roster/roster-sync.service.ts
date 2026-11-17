@@ -1,8 +1,8 @@
 import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { COURSE_ROLES } from '../common/constants/course-roles';
 import { resolvePlatformUrl } from '../config/ags.config';
-import { CanvasApiClient } from '../canvas/canvas-api.client';
-import { PrismaService } from '../prisma/prisma.service';
+import { CanvasApiClient } from '../integrations/canvas/canvas-api.client';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import {
   CourseRosterRepository,
   canvasNumericId,

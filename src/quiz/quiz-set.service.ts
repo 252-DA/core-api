@@ -9,11 +9,11 @@ import { randomUUID } from 'node:crypto';
 import { AGS_STATUS } from '../common/constants/ags-status';
 import { COURSE_ROLES, STAFF_ROLES } from '../common/constants/course-roles';
 import { isUuid } from '../common/utils/uuid';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
-import { CanvasApiClient } from '../canvas/canvas-api.client';
-import { CanvasCourseService } from '../canvas/canvas-course.service';
+import { CanvasApiClient } from '../integrations/canvas/canvas-api.client';
+import { CanvasCourseService } from '../integrations/canvas/canvas-course.service';
 import {
   loadCanvasQuizContext,
   loadQuizBuilderContext,

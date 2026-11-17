@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { UnrecoverableError } from 'bullmq';
-import { CONTRACTS_DIR } from '../testing/repo-paths';
+import { CONTRACTS_DIR } from '../../testing/repo-paths';
 import {
   InvalidWorkerResultError,
   RESULT_ID_PATTERN,

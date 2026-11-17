@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { AGS_STATUS } from '../common/constants/ags-status';
 import { COURSE_ROLES } from '../common/constants/course-roles';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { gradeAnswer } from '../question/question-types';

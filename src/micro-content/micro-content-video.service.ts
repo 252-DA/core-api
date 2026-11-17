@@ -5,9 +5,9 @@ import {
 } from '@nestjs/common';
 import { extname } from 'node:path';
 import { COURSE_ROLES, STAFF_ROLES } from '../common/constants/course-roles';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
-import { DocumentStorageService } from '../storage/document-storage.service';
+import { DocumentStorageService } from '../infra/storage/document-storage.service';
 import type { BffClaims } from '../auth/bff-claims';
 
 const MC_STAFF_ROLES = [...STAFF_ROLES, 'admin'];

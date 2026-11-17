@@ -3,8 +3,8 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import type { BffClaims } from '../auth/bff-claims';
 import { EnrichmentContentResultHandler } from '../content-generation/enrichment-content-result.handler';
-import type { WorkerResultEnvelope } from '../worker-results/worker-result-envelope';
-import type { WorkerResultKind } from '../worker-results/worker-results.constants';
+import type { WorkerResultEnvelope } from '../messaging/worker-results/worker-result-envelope';
+import type { WorkerResultKind } from '../messaging/worker-results/worker-results.constants';
 import { DocumentProcessingResultHandler } from './document-processing-result.handler';
 import {
   DocumentService,

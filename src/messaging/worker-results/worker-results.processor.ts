@@ -1,12 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, UnrecoverableError } from 'bullmq';
-import { errorMessage } from '../common/utils/errors';
-import { isPlainObject } from '../common/utils/type-guards';
-import {
-  WORKER_RESULTS_QUEUE,
-  isWorkerResultKind,
-} from './worker-results.constants';
+import { errorMessage } from '../../common/utils/errors';
+import { isPlainObject } from '../../common/utils/type-guards';
+import { WORKER_RESULTS_QUEUE } from '../queues';
+import { isWorkerResultKind } from './worker-results.constants';
 import {
   parseWorkerResultEnvelope,
   type WorkerResultEnvelope,

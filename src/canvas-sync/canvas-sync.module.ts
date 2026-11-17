@@ -1,16 +1,15 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
-import { CanvasModule } from '../canvas/canvas.module';
+import { CanvasModule } from '../integrations/canvas/canvas.module';
 import { DocumentModule } from '../document/document.module';
 import { RosterModule } from '../roster/roster.module';
-import { StorageModule } from '../storage/storage.module';
+import { StorageModule } from '../infra/storage/storage.module';
 import {
   CANVAS_SYNC_CONFIG,
   canvasSyncConfig,
 } from '../config/canvas-sync.config';
 import { CanvasDocumentSyncService } from './canvas-document-sync.service';
-import { CANVAS_SYNC_QUEUE, CanvasSyncJobsService } from './canvas-sync-jobs.service';
+import { CanvasSyncJobsService } from './canvas-sync-jobs.service';
 import { CanvasSyncRunsService } from './canvas-sync-runs.service';
 import { CanvasSyncStatusService } from './canvas-sync-status.service';
 import { CanvasSyncController } from './canvas-sync.controller';
@@ -19,10 +18,6 @@ import { CanvasTokenStatusService } from './canvas-token-status.service';
 
 @Module({
   imports: [
-    BullModule.registerQueue(
-      { name: 'document_processing' },
-      { name: CANVAS_SYNC_QUEUE },
-    ),
     AuthModule,
     CanvasModule,
     RosterModule,

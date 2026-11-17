@@ -6,9 +6,10 @@ import {
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { COURSE_ROLES, STAFF_ROLES } from '../common/constants/course-roles';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
+import { MICRO_CONTENT_GRADING_REQUESTED } from '../messaging/event-types';
 import { gradeAnswer } from '../question/question-types';
 import { gradingInput, submissionScore } from '../question/answer-grading';
 
@@ -19,9 +20,6 @@ export type SubmitAnswerInput = {
   questionId: string;
   chosenAnswer: unknown;
 };
-
-/** Outbox chuyển sự kiện này sang hàng đợi `answer_grading` của worker. */
-export const MICRO_CONTENT_GRADING_REQUESTED = 'MICRO_CONTENT_GRADING_REQUESTED';
 
 /**
  * Giao câu tự luận của một lượt nộp cho worker

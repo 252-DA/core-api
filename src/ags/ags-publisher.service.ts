@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { AGS_STATUS } from '../common/constants/ags-status';
 import { AGS_CONFIG, type AgsConfig } from '../config/ags.config';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { AgsClientService } from './ags-client.service';
 import { buildScoreComment } from './ags-score-comment';
 

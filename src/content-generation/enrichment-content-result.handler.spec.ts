@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Logger } from '@nestjs/common';
 import { CONTRACTS_DIR } from '../testing/repo-paths';
-import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
+import { InvalidWorkerResultError } from '../messaging/worker-results/worker-result-envelope';
 import {
   EnrichmentContentResultHandler,
   parseEnrichmentContentPayload,

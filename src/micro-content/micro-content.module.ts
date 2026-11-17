@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { PrismaModule } from '../prisma/prisma.module';
+import { PrismaModule } from '../infra/prisma/prisma.module';
 import { AuthModule } from '../auth/auth.module';
-import { StorageModule } from '../storage/storage.module';
+import { StorageModule } from '../infra/storage/storage.module';
 import { MicroContentService } from './micro-content.service';
 import { MicroContentVideoService } from './micro-content-video.service';
 import { MicroContentAttemptService } from './micro-content-attempt.service';

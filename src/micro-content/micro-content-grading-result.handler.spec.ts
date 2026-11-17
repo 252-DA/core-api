@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { Logger } from '@nestjs/common';
 import { resolve } from 'node:path';
 import { CONTRACTS_DIR } from '../testing/repo-paths';
-import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
+import { InvalidWorkerResultError } from '../messaging/worker-results/worker-result-envelope';
 import {
   attemptGradingStatus,
   MicroContentGradingResultHandler,

@@ -8,12 +8,12 @@ import {
 } from '../common/utils/text-length';
 import { isPlainObject } from '../common/utils/type-guards';
 import { isUuid } from '../common/utils/uuid';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
-} from '../worker-results/worker-result-envelope';
-import { WorkerResultHandler } from '../worker-results/worker-result-handler';
+} from '../messaging/worker-results/worker-result-envelope';
+import { WorkerResultHandler } from '../messaging/worker-results/worker-result-handler';
 import {
   MAX_ERROR_CHARS,
   parseContentGenerationResult,

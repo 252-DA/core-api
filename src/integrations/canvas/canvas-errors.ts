@@ -1,5 +1,5 @@
 import { BadGatewayException } from '@nestjs/common';
-import { errorMessage } from '../common/utils/errors';
+import { errorMessage } from '../../common/utils/errors';
 
 /** Lỗi khi gọi REST API của Canvas; `canvasStatus` rỗng nếu không nhận được phản hồi HTTP. */
 export class CanvasApiError extends BadGatewayException {

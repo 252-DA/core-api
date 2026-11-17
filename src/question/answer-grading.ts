@@ -3,7 +3,8 @@ import { AGS_STATUS } from '../common/constants/ags-status';
 import { isWithinCodePoints } from '../common/utils/text-length';
 import { isPlainObject } from '../common/utils/type-guards';
 import { isUuid } from '../common/utils/uuid';
-import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
+import { ANSWER_GRADING_REQUESTED } from '../messaging/event-types';
+import { InvalidWorkerResultError } from '../messaging/worker-results/worker-result-envelope';
 
 /**
  * `quiz_attempts.grading_status`: xem migration 20261004120000_question_types
@@ -19,10 +20,6 @@ export const GRADING_STATUS = {
   pending: 'PENDING',
   needsReview: 'NEEDS_REVIEW',
 } as const;
-
-/** Outbox chuyển sự kiện này sang hàng đợi `answer_grading` của worker. */
-export const ANSWER_GRADING_REQUESTED = 'ANSWER_GRADING_REQUESTED';
-export const ANSWER_GRADING_QUEUE = 'answer_grading';
 
 /**
  * Lượt nộp còn tự luận chờ chấm thì giữ cả lượt ở AWAITING_GRADE thay vì

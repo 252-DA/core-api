@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { loadModelCatalog } from './model-catalog';
 
 /** Khớp _BINDING_TTL_SECONDS ở worker/container.py: lâu nhất chừng này giây thì job mới dùng model mới. */

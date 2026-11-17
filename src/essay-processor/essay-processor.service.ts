@@ -12,7 +12,7 @@ import { isUuid } from '../common/utils/uuid';
 import { AGS_CONFIG, type AgsConfig } from '../config/ags.config';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { ESSAY_STATUS, type EssayAsset, normalizeProcessorInput } from './essay-grading';
 import { asGatewayError, LtiServicesClient } from './lti-services.client';
 

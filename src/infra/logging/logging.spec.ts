@@ -15,9 +15,9 @@ import { Test } from '@nestjs/testing';
 import { IsString } from 'class-validator';
 import { Logger as PinoNestLogger, LoggerModule } from 'nestjs-pino';
 import pino from 'pino';
-import { BffClaims } from '../auth/bff-claims';
-import { BffJwtGuard } from '../auth/bff-jwt.guard';
-import { BffJwtService } from '../auth/bff-jwt.service';
+import { BffClaims } from '../../auth/bff-claims';
+import { BffJwtGuard } from '../../auth/bff-jwt.guard';
+import { BffJwtService } from '../../auth/bff-jwt.service';
 import { HttpExceptionLoggingFilter } from './http-exception-logging.filter';
 import {
   buildLoggerModuleParams,

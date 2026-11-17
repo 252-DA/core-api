@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { AgsModule } from '../ags/ags.module';
-import { CanvasModule } from '../canvas/canvas.module';
-import { PrismaModule } from '../prisma/prisma.module';
+import { PrismaModule } from '../infra/prisma/prisma.module';
+import { CanvasModule } from '../integrations/canvas/canvas.module';
+import { LtiPlatformModule } from '../integrations/lti-platform/lti-platform.module';
 import { CourseRosterRepository } from './course-roster.repository';
 import { NrpsClientService } from './nrps-client.service';
 import { RosterSyncService } from './roster-sync.service';
@@ -12,7 +12,7 @@ import { RosterSyncService } from './roster-sync.service';
  * nằm ở đó, và nó gọi sang module này.
  */
 @Module({
-  imports: [PrismaModule, AgsModule, CanvasModule],
+  imports: [PrismaModule, LtiPlatformModule, CanvasModule],
   providers: [CourseRosterRepository, NrpsClientService, RosterSyncService],
   exports: [CourseRosterRepository, NrpsClientService, RosterSyncService],
 })

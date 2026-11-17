@@ -4,7 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { STAFF_ROLES } from '../common/constants/course-roles';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 
 /**
  * Ba chế độ truy xuất của chatbot (docs/chatbot-ba-che-do-ke-hoach.md):

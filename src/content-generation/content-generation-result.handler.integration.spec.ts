@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
-} from '../worker-results/worker-result-envelope';
+} from '../messaging/worker-results/worker-result-envelope';
 import { ContentGenerationResultHandler } from './content-generation-result.handler';
 
 /**

@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { LtiService } from './lti.service';
-import { CanvasApiError } from '../canvas/canvas-errors';
+import { CanvasApiError } from '../integrations/canvas/canvas-errors';
 import { LaunchSyncDto } from './dto/launch-sync.dto';
 
 describe('LtiService document sync trigger', () => {

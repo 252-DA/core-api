@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 
 export type SyncRunTrigger = 'launch' | 'sweep' | 'manual';
 export type SyncRunStatus = 'running' | 'success' | 'error';

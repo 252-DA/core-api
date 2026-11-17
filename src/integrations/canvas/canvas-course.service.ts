@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../../infra/prisma/prisma.service';
 
 const CANVAS_LMS_PREFIX = 'canvas:';
 

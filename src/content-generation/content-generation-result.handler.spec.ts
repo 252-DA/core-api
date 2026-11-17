@@ -2,8 +2,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
 import { CONTRACTS_DIR } from '../testing/repo-paths';
-import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
-import type { WorkerResultEnvelope } from '../worker-results/worker-result-envelope';
+import { InvalidWorkerResultError } from '../messaging/worker-results/worker-result-envelope';
+import type { WorkerResultEnvelope } from '../messaging/worker-results/worker-result-envelope';
 import {
   ContentGenerationResultHandler,
   verificationSummary,

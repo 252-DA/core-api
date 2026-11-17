@@ -1,7 +1,5 @@
 import { Module } from '@nestjs/common';
 import { DiscoveryModule } from '@nestjs/core';
-import { BullModule } from '@nestjs/bullmq';
-import { WORKER_RESULTS_QUEUE } from './worker-results.constants';
 import { WorkerResultHandlerRegistry } from './worker-result-handler.registry';
 import { WorkerResultsProcessor } from './worker-results.processor';
 
@@ -10,10 +8,7 @@ import { WorkerResultsProcessor } from './worker-results.processor';
  * DiscoveryService, nên không có phụ thuộc vòng và thêm luồng không sửa ở đây.
  */
 @Module({
-  imports: [
-    DiscoveryModule,
-    BullModule.registerQueue({ name: WORKER_RESULTS_QUEUE }),
-  ],
+  imports: [DiscoveryModule],
   providers: [WorkerResultHandlerRegistry, WorkerResultsProcessor],
 })
 export class WorkerResultsModule {}

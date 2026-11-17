@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { STAFF_ROLES } from '../common/constants/course-roles';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
-import type { CanvasTokenCheck } from '../canvas/canvas-api.client';
+import type { CanvasTokenCheck } from '../integrations/canvas/canvas-api.client';
 import { CourseRosterRepository } from '../roster/course-roster.repository';
 import {
   CanvasSyncRunsService,

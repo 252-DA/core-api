@@ -1,5 +1,5 @@
 import { BadGatewayException, Inject, Injectable } from '@nestjs/common';
-import { AgsTokenService } from '../ags/ags-token.service';
+import { AgsTokenService } from '../integrations/lti-platform/ags-token.service';
 import { errorMessage } from '../common/utils/errors';
 import {
   AGS_CONFIG,

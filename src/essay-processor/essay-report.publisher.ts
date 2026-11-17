@@ -3,8 +3,8 @@ import type { Prisma } from '@prisma/client';
 import { errorMessage } from '../common/utils/errors';
 import { AGS_CONFIG, type AgsConfig } from '../config/ags.config';
 import { loadEssayConfig } from '../config/essay.config';
-import { DocumentStorageService } from '../storage/document-storage.service';
-import { PrismaService } from '../prisma/prisma.service';
+import { DocumentStorageService } from '../infra/storage/document-storage.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import {
   assetExtension,
   ESSAY_STATUS,

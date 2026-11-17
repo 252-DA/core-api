@@ -6,9 +6,9 @@ import {
   CANVAS_SYNC_CONFIG,
   type CanvasSyncConfig,
 } from '../config/canvas-sync.config';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { CANVAS_SYNC_QUEUE } from '../messaging/queues';
 
-export const CANVAS_SYNC_QUEUE = 'canvas_sync';
 export const CANVAS_SYNC_COURSE = 'sync_course';
 export const CANVAS_SYNC_SWEEP = 'sweep_courses';
 /** Đồng bộ danh sách lớp (NRPS) của một khóa; cùng hàng đợi, khác job với sync_course. */

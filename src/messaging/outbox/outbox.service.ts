@@ -9,21 +9,25 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { hostname } from 'node:os';
-import { errorMessage } from '../common/utils/errors';
-import { PrismaService } from '../prisma/prisma.service';
+import { errorMessage } from '../../common/utils/errors';
+import { PrismaService } from '../../infra/prisma/prisma.service';
+import {
+  ANSWER_GRADING_REQUESTED,
+  CONTENT_GENERATION_REQUESTED,
+  COURSE_CHUNK_LO_REMAP_REQUESTED,
+  ESSAY_GRADING_REQUESTED,
+  MICRO_CONTENT_GRADING_REQUESTED,
+  MICRO_CONTENT_RENDER_REQUESTED,
+  MICRO_CONTENT_SCRIPT_REQUESTED,
+} from '../event-types';
 import {
   ANSWER_GRADING_QUEUE,
-  ANSWER_GRADING_REQUESTED,
-} from '../question/answer-grading';
-import {
-  ESSAY_GRADING_QUEUE,
-  ESSAY_GRADING_REQUESTED,
-} from '../essay-processor/essay-grading';
-import {
-  COURSE_CHUNK_LO_REMAP_REQUESTED,
+  CONTENT_GENERATION_QUEUE,
   DOCUMENT_PROCESSING_QUEUE,
-} from '../curriculum/curriculum-events';
-import { MICRO_CONTENT_GRADING_REQUESTED } from '../micro-content/micro-content-attempt.service';
+  ESSAY_GRADING_QUEUE,
+  MICRO_CONTENT_VIDEO_QUEUE,
+  OUTBOX_RELAY_QUEUE,
+} from '../queues';
 import {
   createPgListenClient,
   OutboxListener,
@@ -101,14 +105,14 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly prisma: PrismaService,
-    @InjectQueue('outbox_relay') private readonly outboxRelayQueue: Queue,
-    @InjectQueue('content_generation')
+    @InjectQueue(OUTBOX_RELAY_QUEUE) private readonly outboxRelayQueue: Queue,
+    @InjectQueue(CONTENT_GENERATION_QUEUE)
     private readonly contentGenerationQueue: Queue,
     @InjectQueue(ANSWER_GRADING_QUEUE)
     private readonly answerGradingQueue: Queue,
     @InjectQueue(ESSAY_GRADING_QUEUE)
     private readonly essayGradingQueue: Queue,
-    @InjectQueue('micro_content_video')
+    @InjectQueue(MICRO_CONTENT_VIDEO_QUEUE)
     private readonly microContentVideoQueue?: Queue,
     @Optional()
     @Inject(OUTBOX_LISTEN_CLIENT_FACTORY)
@@ -327,7 +331,7 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
   private queueFor(eventType: string): Queue {
     // Hàng đợi riêng cho chấm tự luận: sinh nội dung chạy lâu, người học
     // không phải chờ sau các yêu cầu sinh quiz của giảng viên.
-    if (eventType === 'CONTENT_GENERATION_REQUESTED')
+    if (eventType === CONTENT_GENERATION_REQUESTED)
       return this.contentGenerationQueue;
     if (
       eventType === ANSWER_GRADING_REQUESTED ||
@@ -346,8 +350,8 @@ export class OutboxService implements OnModuleInit, OnModuleDestroy {
       return this.documentProcessingQueue;
     }
     if (
-      (eventType === 'MICRO_CONTENT_SCRIPT_REQUESTED' ||
-        eventType === 'MICRO_CONTENT_RENDER_REQUESTED') &&
+      (eventType === MICRO_CONTENT_SCRIPT_REQUESTED ||
+        eventType === MICRO_CONTENT_RENDER_REQUESTED) &&
       this.microContentVideoQueue
     ) {
       return this.microContentVideoQueue;

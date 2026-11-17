@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { COURSE_ROLES } from '../common/constants/course-roles';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 
 /** Dòng lms_course_ref cùng các cột Canvas mới. */
 export type CourseRefRow = {

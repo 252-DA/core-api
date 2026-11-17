@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
-import { errorMessage } from '../common/utils/errors';
-import { loadDatabaseConfig } from '../config/database.config';
+import { errorMessage } from '../../common/utils/errors';
+import { loadDatabaseConfig } from '../../config/database.config';
 
 /**
  * Phần của `pg.Client` mà listener dùng. Tách thành interface để test thay

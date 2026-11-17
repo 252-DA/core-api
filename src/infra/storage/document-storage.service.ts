@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Client as MinioClient } from 'minio';
-import { loadStorageConfig } from '../config/storage.config';
+import { loadStorageConfig } from '../../config/storage.config';
 
 @Injectable()
 export class DocumentStorageService {

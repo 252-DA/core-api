@@ -5,20 +5,21 @@ import { Queue } from 'bullmq';
 import type { documents } from '@prisma/client';
 import { STAFF_ROLES } from '../common/constants/course-roles';
 import { safeFileName } from '../common/utils/file-name';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
 import {
   CanvasApiClient,
   type CanvasFile,
   type CanvasModule,
-} from '../canvas/canvas-api.client';
-import { CanvasCourseService } from '../canvas/canvas-course.service';
+} from '../integrations/canvas/canvas-api.client';
+import { CanvasCourseService } from '../integrations/canvas/canvas-course.service';
 import {
   DocumentService,
   NEXT_PROCESSING_GENERATION,
 } from '../document/document.service';
-import { DocumentStorageService } from '../storage/document-storage.service';
+import { DocumentStorageService } from '../infra/storage/document-storage.service';
+import { DOCUMENT_PROCESSING_QUEUE } from '../messaging/queues';
 import { CanvasSyncJobsService, type SyncActor } from './canvas-sync-jobs.service';
 import {
   chapterRefFromFileName,
@@ -29,7 +30,7 @@ import {
   type DocumentRole,
   type ModuleClass,
   type SessionRow,
-} from './canvas-placement';
+} from '../integrations/canvas/canvas-placement';
 
 const MANAGE_ROLES = STAFF_ROLES;
 const ROLES: DocumentRole[] = ['lecture', 'reference', 'exercise'];
@@ -76,7 +77,8 @@ export class CanvasDocumentSyncService {
     private readonly canvasCourses: CanvasCourseService,
     private readonly storage: DocumentStorageService,
     private readonly documents: DocumentService,
-    @InjectQueue('document_processing') private readonly processingQueue: Queue,
+    @InjectQueue(DOCUMENT_PROCESSING_QUEUE)
+    private readonly processingQueue: Queue,
     private readonly syncJobs: CanvasSyncJobsService,
   ) {}
 

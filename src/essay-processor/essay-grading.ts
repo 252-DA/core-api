@@ -1,15 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { ESSAY_GRADING_REQUESTED } from '../messaging/event-types';
 
 /**
  * Chấm bài luận nộp file qua LTI Asset Processor ("Document Processor" trong
  * Canvas). Xem docs/essay-asset-processor.md và migration
  * 20261014160000_essay_asset_processor.
  */
-
-/** Outbox chuyển sự kiện này sang hàng đợi `essay_grading` của worker. */
-export const ESSAY_GRADING_REQUESTED = 'ESSAY_GRADING_REQUESTED';
-export const ESSAY_GRADING_QUEUE = 'essay_grading';
 
 export const ESSAY_STATUS = {
   received: 'RECEIVED',

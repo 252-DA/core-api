@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { errorMessage } from '../common/utils/errors';
 import { withoutTrailingSlash } from '../common/utils/url';
 import { AGS_CONFIG, AGS_SCORE_SCOPE, type AgsConfig } from '../config/ags.config';
-import { AgsTokenService } from './ags-token.service';
+import { AgsTokenService } from '../integrations/lti-platform/ags-token.service';
 
 const SCORE_CONTENT_TYPE = 'application/vnd.ims.lis.v1.score+json';
 /** Phần mở rộng của Canvas: loại bài nộp mà SpeedGrader hiện cho giảng viên. */

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { decodeJwt, decodeProtectedHeader } from 'jose';
 import { AgsTokenService } from './ags-token.service';
-import { AGS_SCORE_SCOPE, type AgsConfig } from '../config/ags.config';
+import { AGS_SCORE_SCOPE, type AgsConfig } from '../../config/ags.config';
 
 const TOKEN_URL = 'https://canvas.test/login/oauth2/token';
 

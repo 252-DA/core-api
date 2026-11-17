@@ -4,12 +4,12 @@ import { runBestEffort } from '../common/utils/best-effort';
 import { isWithinCodePoints } from '../common/utils/text-length';
 import { extraKeys, isIntIn, isPlainObject } from '../common/utils/type-guards';
 import { isUuid } from '../common/utils/uuid';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
-} from '../worker-results/worker-result-envelope';
-import { WorkerResultHandler } from '../worker-results/worker-result-handler';
+} from '../messaging/worker-results/worker-result-envelope';
+import { WorkerResultHandler } from '../messaging/worker-results/worker-result-handler';
 
 export type DocumentProcessingStage = 'processing' | 'enrichment';
 

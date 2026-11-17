@@ -1,4 +1,4 @@
-import { AgsTokenError } from '../ags/ags-token.service';
+import { AgsTokenError } from '../integrations/lti-platform/ags-token.service';
 import type { AgsConfig } from '../config/ags.config';
 import {
   NRPS_SCOPE,

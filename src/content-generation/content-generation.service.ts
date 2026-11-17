@@ -2,9 +2,10 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { STAFF_ROLES } from '../common/constants/course-roles';
 import { isUuid } from '../common/utils/uuid';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
+import { CONTENT_GENERATION_REQUESTED } from '../messaging/event-types';
 import { isQuestionType } from '../question/question-types';
 
 const DEFAULT_RECENT_LIMIT = 20;
@@ -177,7 +178,7 @@ export class ContentGenerationService {
 
       await tx.outbox_events.create({
         data: {
-          event_type: 'CONTENT_GENERATION_REQUESTED',
+          event_type: CONTENT_GENERATION_REQUESTED,
           aggregate_type: 'content_generation_request',
           aggregate_id: request.request_id,
           payload: {
@@ -217,7 +218,7 @@ export class ContentGenerationService {
 
         await tx.outbox_events.create({
           data: {
-            event_type: 'CONTENT_GENERATION_REQUESTED',
+            event_type: CONTENT_GENERATION_REQUESTED,
             aggregate_type: 'content_generation_request',
             aggregate_id: request.request_id,
             payload: {

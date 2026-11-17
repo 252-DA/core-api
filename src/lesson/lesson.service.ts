@@ -1,8 +1,9 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { STAFF_ROLES } from '../common/constants/course-roles';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
+import { LESSON_PUBLISHED } from '../messaging/event-types';
 
 /**
  * Hồ sơ kiểm chứng của judge (cột verification_*) là thông tin cho giảng viên
@@ -135,7 +136,7 @@ export class LessonService {
 
       await tx.outbox_events.create({
         data: {
-          event_type: 'LESSON_PUBLISHED',
+          event_type: LESSON_PUBLISHED,
           aggregate_type: 'lesson',
           aggregate_id: lessonId,
           payload: {

@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { LMS_ADMIN_ROLE, STAFF_ROLES } from '../common/constants/course-roles';
 import { isUuid } from '../common/utils/uuid';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import type { BffClaims } from './bff-claims';
 
 @Injectable()

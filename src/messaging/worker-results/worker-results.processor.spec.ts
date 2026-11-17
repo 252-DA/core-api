@@ -7,10 +7,8 @@ import {
   type WorkerResultHandler,
 } from './worker-result-handler';
 import { InvalidWorkerResultError } from './worker-result-envelope';
-import {
-  WORKER_RESULTS_QUEUE,
-  type WorkerResultKind,
-} from './worker-results.constants';
+import { WORKER_RESULTS_QUEUE } from '../queues';
+import { type WorkerResultKind } from './worker-results.constants';
 
 /** Stub như của đợt 0, không phụ thuộc handler thật của domain nào. */
 class StubResultHandler implements WorkerResultHandler {

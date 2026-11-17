@@ -3,12 +3,12 @@ import { Prisma } from '@prisma/client';
 import { runBestEffort } from '../common/utils/best-effort';
 import { clipCodePoints } from '../common/utils/text-length';
 import { isUuid } from '../common/utils/uuid';
-import { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
-} from '../worker-results/worker-result-envelope';
-import { WorkerResultHandler } from '../worker-results/worker-result-handler';
+} from '../messaging/worker-results/worker-result-envelope';
+import { WorkerResultHandler } from '../messaging/worker-results/worker-result-handler';
 import {
   parseCurriculumImportResult,
   type CurriculumImportResultPayload,

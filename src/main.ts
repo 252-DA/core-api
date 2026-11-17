@@ -5,12 +5,12 @@ import { Logger as PinoNestLogger, PinoLogger } from 'nestjs-pino';
 import pino from 'pino';
 import { AppModule } from './app.module';
 import { loadAppConfig } from './config/app.config';
-import { HttpExceptionLoggingFilter } from './logging/http-exception-logging.filter';
+import { HttpExceptionLoggingFilter } from './infra/logging/http-exception-logging.filter';
 import {
   buildPinoOptions,
   createBootstrapLogger,
   createFastifyAdapter,
-} from './logging/pino-config';
+} from './infra/logging/pino-config';
 
 (BigInt.prototype as any).toJSON = function () {
   return Number(this);

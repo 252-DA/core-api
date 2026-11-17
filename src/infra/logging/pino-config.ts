@@ -3,7 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Logger as PinoNestLogger, type Params, PinoLogger } from 'nestjs-pino';
 import pino, { type DestinationStream, type LoggerOptions } from 'pino';
-import { loadLoggingConfig } from '../config/logging.config';
+import { loadLoggingConfig } from '../../config/logging.config';
 
 export const REQUEST_ID_HEADER = 'x-request-id';
 export const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
