@@ -1,13 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { runBestEffort } from '../common/utils/best-effort';
+import { clipCodePoints } from '../common/utils/text-length';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
 } from '../worker-results/worker-result-envelope';
 import { WorkerResultHandler } from '../worker-results/worker-result-handler';
-import { runBestEffort } from '../worker-results/best-effort';
-import { clipCodePoints } from '../worker-results/text-length';
 import {
   parseCurriculumImportResult,
   type CurriculumImportResultPayload,
@@ -27,7 +28,6 @@ const AWAITING_FAILURE = [...AWAITING_PREVIEW, 'APPLYING'];
 const MAX_ERROR = 2000;
 // Phần lỗi kỹ thuật kèm trong thông báo cho giảng viên.
 const MAX_CAUSE = 300;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** result_id = CURRICULUM_IMPORT_RESULT.<import_id>[.<lần>]: kết quả thuộc lần nạp nào. */
 function resultBelongsToImport(resultId: string, importId: string): boolean {
@@ -147,7 +147,7 @@ export class CurriculumImportResultHandler implements WorkerResultHandler {
           typeof payload === 'object' && payload !== null
             ? (payload as Record<string, unknown>).import_id
             : undefined;
-        if (typeof importId !== 'string' || !UUID.test(importId)) return;
+        if (!isUuid(importId)) return;
         if (!resultBelongsToImport(envelope.result_id, importId)) return;
         const { count } = await this.prisma.curriculum_imports.updateMany({
           where: { import_id: importId, status: { in: AWAITING_PREVIEW } },

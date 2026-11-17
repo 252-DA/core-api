@@ -1,5 +1,5 @@
+import { AGS_STATUS } from '../common/constants/ags-status';
 import { AgsPublisherService } from './ags-publisher.service';
-import { AGS_STATUS } from './ags-status';
 import type { AgsConfig } from './ags.config';
 import type { AgsScorePayload } from './ags-client.service';
 

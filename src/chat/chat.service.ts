@@ -3,6 +3,7 @@ import { createHash } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
+import { STAFF_ROLES } from '../common/constants/course-roles';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -358,7 +359,7 @@ export class ChatService {
   async stats(claims: BffClaims, body: { courseId?: unknown; source?: unknown }) {
     const courseId = asText(body.courseId, 64);
     if (courseId) {
-      await this.authz.assertCourseAccess(claims, courseId, ['instructor', 'ta']);
+      await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
     } else {
       await this.authz.assertPlatformAdmin(claims);
     }

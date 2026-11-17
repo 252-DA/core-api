@@ -1,16 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { runBestEffort } from '../common/utils/best-effort';
+import {
+  clipCodePoints,
+  isWithinCodePoints,
+} from '../common/utils/text-length';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
 } from '../worker-results/worker-result-envelope';
 import { WorkerResultHandler } from '../worker-results/worker-result-handler';
-import { runBestEffort } from '../worker-results/best-effort';
-import {
-  clipCodePoints,
-  isWithinCodePoints,
-} from '../worker-results/text-length';
 
 interface VideoResultBase {
   micro_content_id: string;
@@ -60,7 +61,6 @@ export type MicroContentVideoApplyOutcome =
       reason: 'superseded' | 'already_applied' | 'asset_missing';
     };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MIME = /^video\/[a-z0-9.+-]+$/;
 const BASE_KEYS = ['micro_content_id', 'asset_id', 'render_id', 'status'];
 const READY_KEYS = new Set([
@@ -138,7 +138,7 @@ export function parseMicroContentVideoPayload(
   const problems: string[] = [];
   for (const key of ['micro_content_id', 'asset_id', 'render_id']) {
     const value = payload[key];
-    if (typeof value !== 'string' || !UUID.test(value)) {
+    if (!isUuid(value)) {
       problems.push(`${key} must be a UUID`);
     }
   }
@@ -286,12 +286,7 @@ export class MicroContentVideoResultHandler implements WorkerResultHandler<
           string,
           unknown
         >;
-        if (
-          typeof assetId !== 'string' ||
-          !UUID.test(assetId) ||
-          typeof renderId !== 'string' ||
-          !UUID.test(renderId)
-        ) {
+        if (!isUuid(assetId) || !isUuid(renderId)) {
           return;
         }
         const outcome = await this.apply({

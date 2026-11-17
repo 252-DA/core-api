@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { COURSE_ROLES } from '../common/constants/course-roles';
 import { PrismaService } from '../prisma/prisma.service';
 
 /** Dòng lms_course_ref cùng các cột Canvas mới. */
@@ -205,7 +206,7 @@ export class CourseRosterRepository {
       if (!isMissingColumn(error)) throw error;
       this.logger.warn('Chưa có cột course_memberships.status, tạm coi mọi learner là đang học.');
       const rows = await this.prisma.course_memberships.findMany({
-        where: { course_id: courseId, role: 'learner' },
+        where: { course_id: courseId, role: COURSE_ROLES.LEARNER },
         select: { user_id: true },
       });
       return rows.map((r) => r.user_id);

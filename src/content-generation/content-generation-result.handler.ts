@@ -1,12 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { STAFF_ROLES } from '../common/constants/course-roles';
+import { runBestEffort } from '../common/utils/best-effort';
+import {
+  clipCodePoints,
+  isWithinCodePoints,
+} from '../common/utils/text-length';
+import { isPlainObject } from '../common/utils/type-guards';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
 } from '../worker-results/worker-result-envelope';
 import { WorkerResultHandler } from '../worker-results/worker-result-handler';
-import { runBestEffort } from '../worker-results/best-effort';
 import {
   MAX_ERROR_CHARS,
   parseContentGenerationResult,
@@ -16,17 +23,11 @@ import {
 import {
   ensureLessonForLo,
   findCurrentLearningOutcome,
-  isPlainObject,
-  isUuid,
   upsertGeneratedLessonCards,
   upsertGeneratedQuizItems,
   type UpsertCount,
   type VerificationStatus,
 } from './generated-content';
-import {
-  clipCodePoints,
-  isWithinCodePoints,
-} from '../worker-results/text-length';
 
 /** Request còn chờ: chỉ những dòng này nhận kết quả. */
 const ACTIVE_STATUSES = ['QUEUED', 'RUNNING'];
@@ -245,7 +246,11 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
     let creatorId = request.requested_by ?? doc.created_by ?? null;
     if (!creatorId) {
       const staff = await tx.course_memberships.findFirst({
-        where: { course_id: request.course_id, role: { in: ['instructor', 'ta', 'admin'] }, status: 'active' },
+        where: {
+          course_id: request.course_id,
+          role: { in: [...STAFF_ROLES, 'admin'] },
+          status: 'active',
+        },
         select: { user_id: true },
       });
       creatorId = staff?.user_id ?? null;

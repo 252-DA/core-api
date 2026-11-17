@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { CanvasApiClient } from '../canvas/canvas-api.client';
 import { CanvasCourseService } from '../canvas/canvas-course.service';
@@ -7,14 +8,7 @@ import {
   resolveChapterCode,
 } from '../canvas-sync/canvas-placement';
 import { settingsView } from './quiz-set-exam';
-import type { QuizSnapshotItem } from './quiz-set.service';
-
-function uuid(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value)
-  );
-}
+import type { QuizSnapshotItem } from './quiz.types';
 
 export async function loadCanvasQuizContext(
   deps: {
@@ -141,7 +135,7 @@ export async function loadQuizBuilderContext(
   prisma: PrismaService,
   body: { courseId: string; loIds?: string[] },
 ) {
-  const loIds = Array.isArray(body.loIds) ? body.loIds.filter(uuid).slice(0, 200) : [];
+  const loIds = Array.isArray(body.loIds) ? body.loIds.filter(isUuid).slice(0, 200) : [];
   const [chapters, documents, sets, quizItems] = await Promise.all([
     prisma.chapters.findMany({
       where: { course_id: body.courseId, deleted_at: null },

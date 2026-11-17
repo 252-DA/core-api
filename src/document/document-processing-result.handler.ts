@@ -1,13 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { runBestEffort } from '../common/utils/best-effort';
+import { isWithinCodePoints } from '../common/utils/text-length';
+import { extraKeys, isIntIn, isPlainObject } from '../common/utils/type-guards';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
 } from '../worker-results/worker-result-envelope';
 import { WorkerResultHandler } from '../worker-results/worker-result-handler';
-import { runBestEffort } from '../worker-results/best-effort';
-import { isWithinCodePoints } from '../worker-results/text-length';
 
 export type DocumentProcessingStage = 'processing' | 'enrichment';
 
@@ -42,7 +44,6 @@ const MAX_INT4 = 2_147_483_647;
 const MAX_ERROR = 1000;
 const MAX_CHAPTER_CODE = 20;
 const MAX_REASON = 255;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface DocumentStatusReport {
   value: string;
@@ -105,27 +106,10 @@ export function statusSequence(
   );
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isIntIn(value: unknown, min: number, max: number): value is number {
-  return (
-    typeof value === 'number' &&
-    Number.isInteger(value) &&
-    value >= min &&
-    value <= max
-  );
-}
-
 function isText(value: unknown, max: number): value is string {
   return (
     typeof value === 'string' && value.length > 0 && isWithinCodePoints(value, max)
   );
-}
-
-function extraKeys(obj: Record<string, unknown>, allowed: string[]) {
-  return Object.keys(obj).filter((key) => !allowed.includes(key));
 }
 
 function checkStatus(status: unknown, problems: string[]) {
@@ -212,10 +196,7 @@ export function parseDocumentProcessingPayload(
   const problems: string[] = [];
   const extra = extraKeys(payload, ['document_id', 'status', 'chapter']);
   if (extra.length) problems.push(`unexpected fields: ${extra.join(', ')}`);
-  if (
-    typeof payload.document_id !== 'string' ||
-    !UUID.test(payload.document_id)
-  ) {
+  if (!isUuid(payload.document_id)) {
     problems.push('document_id must be a UUID');
   }
   if (payload.status === undefined && payload.chapter === undefined) {
@@ -336,7 +317,7 @@ export class DocumentProcessingResultHandler implements WorkerResultHandler<
         const documentId = payload.document_id;
         const { stage, value, processing_generation, attempt } =
           payload.status;
-        if (typeof documentId !== 'string' || !UUID.test(documentId)) return;
+        if (!isUuid(documentId)) return;
         if (stage !== 'processing' && stage !== 'enrichment') return;
         if (typeof value !== 'string' || STEPS[stage][value] === undefined) {
           return;

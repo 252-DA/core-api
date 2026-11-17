@@ -1,10 +1,26 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
+import { LMS_ADMIN_ROLE, STAFF_ROLES } from '../common/constants/course-roles';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BffClaims } from './bff-claims';
 
 @Injectable()
 export class AuthzService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async assertSessionCourse(
+    claims: BffClaims,
+    courseId: string,
+    roles?: string[],
+  ) {
+    if (
+      !isUuid(courseId) ||
+      (claims.scope !== 'admin' && claims.courseId !== courseId)
+    ) {
+      throw new ForbiddenException('Khóa học không khớp phiên Canvas.');
+    }
+    await this.assertCourseAccess(claims, courseId, roles);
+  }
 
   async assertCourseAccess(
     claims: BffClaims,
@@ -43,7 +59,7 @@ export class AuthzService {
       where: {
         user_id: claims.sub,
         course_id: courseId,
-        role: { in: ['instructor', 'ta'] },
+        role: { in: STAFF_ROLES },
       },
       select: { role: true },
     });
@@ -71,6 +87,6 @@ export class AuthzService {
       where: { internal_user_id: claims.sub, deleted_at: null },
       select: { role: true },
     });
-    return user?.role === 'administrator';
+    return user?.role === LMS_ADMIN_ROLE;
   }
 }

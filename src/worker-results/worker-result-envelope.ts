@@ -1,9 +1,10 @@
 import { UnrecoverableError } from 'bullmq';
+import { isPlainObject } from '../common/utils/type-guards';
+import { isWithinCodePoints } from '../common/utils/text-length';
 import {
   isWorkerResultKind,
   type WorkerResultKind,
 } from './worker-results.constants';
-import { isWithinCodePoints } from './text-length';
 
 /**
  * Dữ liệu một job của `worker_results`, đúng
@@ -52,10 +53,6 @@ const ENVELOPE_KEYS = new Set([
   'occurred_at',
   'payload',
 ]);
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /**
  * Kiểm dữ liệu job theo hợp đồng envelope; sai thì ném InvalidWorkerResultError

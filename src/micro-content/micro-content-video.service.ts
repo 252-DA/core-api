@@ -4,10 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { extname } from 'node:path';
+import { COURSE_ROLES, STAFF_ROLES } from '../common/constants/course-roles';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import { DocumentStorageService } from '../storage/document-storage.service';
 import type { BffClaims } from '../auth/bff-claims';
+
+const MC_STAFF_ROLES = [...STAFF_ROLES, 'admin'];
+const MC_CLAIM_STAFF_ROLES = [...MC_STAFF_ROLES, 'teacher'];
 
 @Injectable()
 export class MicroContentVideoService {
@@ -30,7 +34,7 @@ export class MicroContentVideoService {
     if (!item) {
       throw new NotFoundException('Micro content not found');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     const ext = extname(input.filename || '').toLowerCase();
     if (!['.mp4', '.webm'].includes(ext)) {
@@ -84,7 +88,7 @@ export class MicroContentVideoService {
     if (!item) {
       throw new NotFoundException('Micro content not found');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     if (!item.video_object_key) {
       throw new BadRequestException('Chưa khởi tạo upload session cho video này.');
@@ -140,15 +144,17 @@ export class MicroContentVideoService {
 
     const isStaff =
       claims.scope === 'admin' ||
-      claims.roles?.some((r) => ['instructor', 'ta', 'admin', 'teacher'].includes(r));
+      claims.roles?.some((r) => MC_CLAIM_STAFF_ROLES.includes(r));
 
     if (!isStaff) {
       if (item.status !== 'PUBLISHED') {
         throw new NotFoundException('Micro content not found');
       }
-      await this.authz.assertCourseAccess(claims, item.course_id, ['learner']);
+      await this.authz.assertCourseAccess(claims, item.course_id, [
+        COURSE_ROLES.LEARNER,
+      ]);
     } else {
-      await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+      await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
     }
     return item;
   }

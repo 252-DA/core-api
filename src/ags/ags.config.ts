@@ -7,6 +7,8 @@
  * cùng tên biến môi trường `LTI_*` với web. Xem docker-compose.yml.
  */
 
+import { withoutTrailingSlash } from '../common/utils/url';
+
 export const AGS_SCORE_SCOPE =
   'https://purl.imsglobal.org/spec/lti-ags/scope/score';
 
@@ -47,10 +49,6 @@ function intEnv(name: string, fallback: number): number {
   }
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function withoutTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '');
 }
 
 /**

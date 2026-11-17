@@ -4,6 +4,8 @@ import {
   PayloadTooLargeException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { errorMessage } from '../common/utils/errors';
+import { hostOf, withoutTrailingSlash } from '../common/utils/url';
 import { CanvasApiError, describeCanvasError } from './canvas-errors';
 
 export type CanvasFile = {
@@ -77,15 +79,6 @@ function originOf(value: string | undefined): string | null {
   }
 }
 
-function hostOf(value: string | undefined): string | null {
-  if (!value) return null;
-  try {
-    return new URL(value).host;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Link Canvas trả về (phân trang, đường dẫn file) mang tên miền công khai khi
  * Canvas được gọi qua tunnel. Khi CANVAS_API_URL trỏ vào địa chỉ nội bộ thì đổi
@@ -124,7 +117,7 @@ export function toInternalCanvasUrl(url: string, env: NodeJS.ProcessEnv = proces
 export class CanvasApiClient {
   private get baseUrl() {
     const url = process.env.CANVAS_API_URL || process.env.LTI_PLATFORM_URL;
-    return url?.replace(/\/+$/, '');
+    return url ? withoutTrailingSlash(url) : undefined;
   }
 
   private get token() {
@@ -260,8 +253,9 @@ export class CanvasApiClient {
       );
       return { checked_at, ok: false, http_status: response.status, message: describeCanvasError(error) };
     } catch (error: unknown) {
-      const reason = error instanceof Error ? error.message : String(error);
-      const wrapped = new CanvasApiError(`Không kết nối được Canvas khi kiểm tra token: ${reason}`);
+      const wrapped = new CanvasApiError(
+        `Không kết nối được Canvas khi kiểm tra token: ${errorMessage(error)}`,
+      );
       return { checked_at, ok: false, http_status: null, message: describeCanvasError(wrapped) };
     }
   }
@@ -332,8 +326,7 @@ export class CanvasApiClient {
         signal: AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS),
       });
     } catch (error: unknown) {
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new CanvasApiError(`Không kết nối được Canvas khi ${action}: ${reason}`);
+      throw new CanvasApiError(`Không kết nối được Canvas khi ${action}: ${errorMessage(error)}`);
     }
     if (!response.ok) {
       const detail =

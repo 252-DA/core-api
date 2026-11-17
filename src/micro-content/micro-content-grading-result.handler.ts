@@ -1,18 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { runBestEffort } from '../common/utils/best-effort';
+import { isPlainObject } from '../common/utils/type-guards';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   answerGradeData,
   GRADING_STATUS,
   GRADING_UNAPPLIED_FEEDBACK,
-  isPlainObject,
-  isUuid,
   parseAnswerGrades,
   salvageAnswerIds,
   submissionScore,
   type AnswerGradeResult,
 } from '../question/answer-grading';
-import { runBestEffort } from '../worker-results/best-effort';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,

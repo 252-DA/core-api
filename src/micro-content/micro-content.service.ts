@@ -5,54 +5,23 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { COURSE_ROLES, STAFF_ROLES } from '../common/constants/course-roles';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { isQuestionType, normalizeAnswerKey } from '../question/question-types';
+import type {
+  CreateMicroContentInput,
+  QuestionInput,
+  UpdateMicroContentInput,
+} from './micro-content.types';
 
 const DEFAULT_VOICE = 'vi-VN-HoaiMyNeural';
 const DEFAULT_MICRO_QUIZ_COUNT = 3;
 const DEFAULT_MICRO_QUIZ_TYPES = ['MCQ_SINGLE', 'TRUE_FALSE'];
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export type QuestionInput = {
-  id?: string;
-  position: number;
-  type: string;
-  question: string;
-  options?: unknown;
-  correctAnswer?: unknown;
-  explanation?: string;
-};
-
-export type CreateMicroContentInput = {
-  courseId: string;
-  title: string;
-  description?: string;
-  videoSource?: 'UPLOAD' | 'AI';
-  passingScore?: number;
-  requiredWatchPercent?: number;
-  sourceDocumentId?: string | null;
-  sourcePageFrom?: number | null;
-  sourcePageTo?: number | null;
-  loId?: string | null;
-  position?: number | null;
-};
-
-export type UpdateMicroContentInput = {
-  microContentId: string;
-  title?: string;
-  description?: string;
-  passingScore?: number;
-  requiredWatchPercent?: number;
-  aiPrompt?: string;
-  aiOptions?: unknown;
-  sourceDocumentId?: string | null;
-  sourcePageFrom?: number | null;
-  sourcePageTo?: number | null;
-  loId?: string | null;
-  position?: number | null;
-};
+const MC_STAFF_ROLES = [...STAFF_ROLES, 'admin'];
+const MC_CLAIM_STAFF_ROLES = [...MC_STAFF_ROLES, 'teacher'];
 
 function countFlaggedScenes(script: unknown): number {
   if (!script || typeof script !== 'object' || Array.isArray(script)) return 0;
@@ -86,7 +55,7 @@ export class MicroContentService {
     },
   ) {
     if (input.sourceDocumentId) {
-      if (!UUID_RE.test(input.sourceDocumentId)) {
+      if (!isUuid(input.sourceDocumentId)) {
         throw new BadRequestException('sourceDocumentId không hợp lệ.');
       }
       const doc = await this.prisma.documents.findFirst({
@@ -99,7 +68,7 @@ export class MicroContentService {
     }
 
     if (input.loId) {
-      if (!UUID_RE.test(input.loId)) {
+      if (!isUuid(input.loId)) {
         throw new BadRequestException('loId không hợp lệ.');
       }
       const lo = await this.prisma.learning_outcomes.findFirst({
@@ -131,7 +100,7 @@ export class MicroContentService {
    * Danh sách Micro Content theo khoá học cho giảng viên / TA.
    */
   async list(claims: BffClaims, courseId: string) {
-    await this.authz.assertCourseAccess(claims, courseId, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, courseId, MC_STAFF_ROLES);
 
     const items = await this.prisma.micro_contents.findMany({
       where: {
@@ -239,7 +208,7 @@ export class MicroContentService {
 
     const isStaff =
       claims.scope === 'admin' ||
-      claims.roles?.some((r) => ['instructor', 'ta', 'admin', 'teacher'].includes(r));
+      claims.roles?.some((r) => MC_CLAIM_STAFF_ROLES.includes(r));
 
     const hasSubtitles = Boolean(item.video_asset?.vtt_subtitles_key);
     const sceneTimeline = Array.isArray(item.video_asset?.scene_timeline)
@@ -252,7 +221,9 @@ export class MicroContentService {
       if (item.status !== 'PUBLISHED') {
         throw new NotFoundException('Micro content not found');
       }
-      await this.authz.assertCourseAccess(claims, item.course_id, ['learner']);
+      await this.authz.assertCourseAccess(claims, item.course_id, [
+        COURSE_ROLES.LEARNER,
+      ]);
 
       // Ẩn đáp án đúng và giải thích đối với học viên
       const sanitizedQuestions = item.questions.map((q) => ({
@@ -290,7 +261,7 @@ export class MicroContentService {
     }
 
     // Giảng viên / TA / Admin xem được toàn bộ
-    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     let sourceDocumentTotalPages: number | null = null;
     if (item.source_document_id && this.prisma.chunks?.aggregate) {
@@ -365,7 +336,7 @@ export class MicroContentService {
    * Tạo Micro Content mới (mặc định DRAFT).
    */
   async create(claims: BffClaims, input: CreateMicroContentInput) {
-    await this.authz.assertCourseAccess(claims, input.courseId, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, input.courseId, MC_STAFF_ROLES);
 
     if (!input.title?.trim()) {
       throw new BadRequestException('Tiêu đề không được để trống.');
@@ -412,7 +383,7 @@ export class MicroContentService {
     if (!item) {
       throw new NotFoundException('Micro content not found');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     await this.validateSourceAndLo(item.course_id, input, {
       source_page_from: item.source_page_from,
@@ -465,7 +436,7 @@ export class MicroContentService {
     if (!item) {
       throw new NotFoundException('Micro content not found');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     await this.prisma.micro_contents.update({
       where: { micro_content_id: microContentId },
@@ -493,7 +464,7 @@ export class MicroContentService {
     if (!item) {
       throw new NotFoundException('Micro content not found');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     const newStatus = targetStatus ?? (item.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED');
 
@@ -534,7 +505,7 @@ export class MicroContentService {
     if (!item) {
       throw new NotFoundException('Micro content not found');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     // 1. Kiểm tra và chuẩn hoá từng câu hỏi trước khi mở transaction
     const normalizedList = input.questions.map((q, idx) => {
@@ -603,26 +574,13 @@ export class MicroContentService {
     };
   }
 
-  // Placeholder methods for upcoming milestones (M2-M5)
-  async createUpload(claims: BffClaims, _body: { microContentId: string; filename: string }) {
-    return { uploadUrl: '', objectKey: '' };
-  }
-
-  async confirmUpload(claims: BffClaims, _body: { microContentId: string }) {
-    return { success: true };
-  }
-
-  async getVideoUrl(claims: BffClaims, _body: { microContentId: string }) {
-    return { url: '' };
-  }
-
   async requestOutline(
     claims: BffClaims,
     input: { courseId: string; documentId: string },
   ) {
-    await this.authz.assertCourseAccess(claims, input.courseId, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, input.courseId, MC_STAFF_ROLES);
 
-    if (!input.documentId || !UUID_RE.test(input.documentId)) {
+    if (!isUuid(input.documentId)) {
       throw new BadRequestException('documentId không hợp lệ.');
     }
 
@@ -681,7 +639,7 @@ export class MicroContentService {
       }
     }
 
-    const actorId = UUID_RE.test(claims.sub) ? claims.sub : null;
+    const actorId = isUuid(claims.sub) ? claims.sub : null;
     const scope: Record<string, unknown> = {
       document_id: doc.document_id,
       document_title: doc.title,
@@ -743,7 +701,7 @@ export class MicroContentService {
     if (!item) {
       throw new NotFoundException('Micro content not found');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     if (!item.source_document_id) {
       throw new BadRequestException(
@@ -815,7 +773,7 @@ export class MicroContentService {
       ...(neighborTopics.length > 0 ? { neighbor_topics: neighborTopics } : {}),
     };
 
-    const actorId = UUID_RE.test(claims.sub) ? claims.sub : null;
+    const actorId = isUuid(claims.sub) ? claims.sub : null;
 
     const req = await this.prisma.$transaction(async (tx) => {
       const created = await tx.content_generation_requests.create({
@@ -892,7 +850,7 @@ export class MicroContentService {
     if (!item) {
       throw new NotFoundException('Micro content not found');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     if (!item.source_document_id && !item.ai_script) {
       throw new BadRequestException(
@@ -940,7 +898,7 @@ export class MicroContentService {
       ...(item.ai_script ? { script: item.ai_script } : {}),
     };
 
-    const actorId = UUID_RE.test(claims.sub) ? claims.sub : null;
+    const actorId = isUuid(claims.sub) ? claims.sub : null;
 
     const req = await this.prisma.$transaction(async (tx) => {
       const created = await tx.content_generation_requests.create({
@@ -987,7 +945,7 @@ export class MicroContentService {
     if (!item) {
       throw new NotFoundException('Micro content not found');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     if (!input.script || !Array.isArray(input.script.scenes) || input.script.scenes.length === 0) {
       throw new BadRequestException('Kịch bản phải chứa ít nhất 1 cảnh.');
@@ -1024,7 +982,7 @@ export class MicroContentService {
     if (!item) {
       throw new NotFoundException('Micro content not found');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, ['instructor', 'ta', 'admin']);
+    await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     if (!item.ai_script) {
       throw new BadRequestException('Chưa có kịch bản để render video.');
@@ -1135,21 +1093,5 @@ export class MicroContentService {
       return false;
     }
     return Boolean((aiOptions as Record<string, unknown>).low_text);
-  }
-
-  async reportProgress(claims: BffClaims, _body: unknown) {
-    return { watchedPercent: 0, unlocked: false };
-  }
-
-  async submit(claims: BffClaims, _body: unknown) {
-    return { attemptId: '', score: 0, passed: false };
-  }
-
-  async getResult(claims: BffClaims, _body: { attemptId: string }) {
-    return { attemptId: '', score: 0, passed: false };
-  }
-
-  async listAttempts(claims: BffClaims, _body: { microContentId: string }) {
-    return { attempts: [] };
   }
 }

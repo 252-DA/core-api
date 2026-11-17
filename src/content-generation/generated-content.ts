@@ -1,14 +1,17 @@
 import { Prisma } from '@prisma/client';
+import { errorMessage } from '../common/utils/errors';
+import {
+  clipCodePoints,
+  isWithinCodePoints,
+} from '../common/utils/text-length';
+import { isPlainObject } from '../common/utils/type-guards';
+import { isUuid } from '../common/utils/uuid';
 import {
   isQuestionType,
   normalizeAnswerKey,
   TRUE_FALSE_OPTIONS,
   type QuestionType,
 } from '../question/question-types';
-import {
-  clipCodePoints,
-  isWithinCodePoints,
-} from '../worker-results/text-length';
 
 /**
  * Học liệu AI sinh ra (quiz_items, lesson_cards) do worker gửi về: kiểm dạng
@@ -66,18 +69,7 @@ export interface GeneratedLessonCard {
   verification_evidence: Record<string, unknown>;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_TITLE_CHARS = 255;
-
-export function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID.test(value);
-}
-
-export function isPlainObject(
-  value: unknown,
-): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function isText(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -238,9 +230,7 @@ export function parseGeneratedQuizItems(
       try {
         key = normalizeAnswerKey(type, question, key);
       } catch (err) {
-        problems.push(
-          `${at}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        problems.push(`${at}: ${errorMessage(err)}`);
       }
     }
     if (problems.length > before) return;

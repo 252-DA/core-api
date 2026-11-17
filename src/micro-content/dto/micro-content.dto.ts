@@ -8,7 +8,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
-import type { QuestionInput } from '../micro-content.service';
+import type { QuestionInput } from '../micro-content.types';
 import type { SubmitAnswerInput } from '../micro-content-attempt.service';
 
 export class CreateMicroContentDto {

@@ -1,4 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { errorMessage } from '../common/utils/errors';
+import { withoutTrailingSlash } from '../common/utils/url';
 import { AGS_CONFIG, AGS_SCORE_SCOPE, type AgsConfig } from './ags.config';
 import { AgsTokenService } from './ags-token.service';
 
@@ -59,7 +61,7 @@ export class AgsClientService {
    */
   static scoresUrl(lineItemUrl: string): string {
     const url = new URL(lineItemUrl);
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/scores`;
+    url.pathname = `${withoutTrailingSlash(url.pathname)}/scores`;
     return url.toString();
   }
 
@@ -92,9 +94,8 @@ export class AgsClientService {
       }
       return result;
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
       // Lỗi mạng / timeout / không lấy được token — luôn coi là tạm thời.
-      return { ok: false, retryable: true, error: message };
+      return { ok: false, retryable: true, error: errorMessage(err) };
     }
   }
 

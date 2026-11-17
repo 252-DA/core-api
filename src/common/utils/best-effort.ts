@@ -1,4 +1,5 @@
 import type { Logger } from '@nestjs/common';
+import { errorMessage } from './errors';
 
 /**
  * Chạy phần việc của hook `onFinalFailure` và nuốt mọi lỗi (chỉ ghi log): hook là
@@ -14,8 +15,6 @@ export async function runBestEffort(
   try {
     await work();
   } catch (error) {
-    logger.error(
-      `${what}: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    logger.error(`${what}: ${errorMessage(error)}`);
   }
 }

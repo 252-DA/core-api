@@ -10,6 +10,9 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Prisma } from '@prisma/client';
 import { Queue } from 'bullmq';
+import { STAFF_ROLES } from '../common/constants/course-roles';
+import { errorNameAndMessage } from '../common/utils/errors';
+import { safeFileName } from '../common/utils/file-name';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
@@ -32,7 +35,7 @@ import {
 } from './curriculum-payload';
 import { writeCurriculum } from './curriculum-writer';
 
-const MANAGE_ROLES = ['instructor', 'ta'];
+const MANAGE_ROLES = STAFF_ROLES;
 // Worker trích xuất bằng luật, cùng file cho cùng kết quả: đồng bộ lại mà file
 // không đổi thì dùng lại lần nạp trước, trừ khi lần đó lỗi.
 const REUSABLE_STATUSES = [
@@ -91,16 +94,6 @@ const IMPORT_SUMMARY = {
 type ImportSummary = Prisma.curriculum_importsGetPayload<{
   select: typeof IMPORT_SUMMARY;
 }>;
-
-function safeFileName(value: string) {
-  return (
-    value.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 160) || 'syllabus.pdf'
-  );
-}
-
-function errorMessage(err: unknown) {
-  return err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-}
 
 @Injectable()
 export class CurriculumImportService {
@@ -171,7 +164,7 @@ export class CurriculumImportService {
     const fileName =
       file.display_name || file.filename || `canvas-file-${sourceRef}.pdf`;
     const mimeType = file['content-type'] || 'application/pdf';
-    const storageKey = `curricula/${courseId}/${importId}/${safeFileName(fileName)}`;
+    const storageKey = `curricula/${courseId}/${importId}/${safeFileName(fileName, 'syllabus.pdf')}`;
     await this.storage.putObject(storageKey, content, mimeType);
 
     const created = await this.prisma.curriculum_imports.create({
@@ -374,7 +367,7 @@ export class CurriculumImportService {
     curriculum: NormalizedCurriculum,
     err: unknown,
   ): Promise<Error> {
-    const raw = errorMessage(err);
+    const raw = errorNameAndMessage(err);
     this.logger.error(`Áp dụng đề cương ${importId} thất bại: ${raw}`);
     const message = raw.includes('courses_code_key')
       ? `Mã học phần ${curriculum.course.code} trong đề cương đã thuộc một khoá học khác trên hệ thống, nên chưa áp dụng được.`
@@ -386,7 +379,7 @@ export class CurriculumImportService {
       });
     } catch (recordErr) {
       this.logger.warn(
-        `Không ghi được lỗi lên lần nạp ${importId}: ${errorMessage(recordErr)}`,
+        `Không ghi được lỗi lên lần nạp ${importId}: ${errorNameAndMessage(recordErr)}`,
       );
     }
     return new InternalServerErrorException(message);

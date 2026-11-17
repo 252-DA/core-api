@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import { errorMessage } from '../common/utils/errors';
 
 /**
  * Phần của `pg.Client` mà listener dùng. Tách thành interface để test thay
@@ -165,8 +166,4 @@ async function endQuietly(client: ListenClient) {
     }),
   ]);
   if (timer) clearTimeout(timer);
-}
-
-export function errorMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err);
 }

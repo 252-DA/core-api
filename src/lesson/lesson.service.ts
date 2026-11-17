@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { STAFF_ROLES } from '../common/constants/course-roles';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
@@ -58,10 +59,7 @@ export class LessonService {
   async cards(claims: BffClaims, lessonId: string, status?: string) {
     const lesson = await this.get(claims, lessonId);
     if (status !== 'PUBLISHED') {
-      await this.authz.assertCourseAccess(claims, lesson.course_id, [
-        'instructor',
-        'ta',
-      ]);
+      await this.authz.assertCourseAccess(claims, lesson.course_id, STAFF_ROLES);
     }
     return this.prisma.lesson_cards.findMany({
       where: {
@@ -77,10 +75,7 @@ export class LessonService {
   async quiz(claims: BffClaims, lessonId: string, status?: string) {
     const lesson = await this.get(claims, lessonId);
     if (status !== 'PUBLISHED') {
-      await this.authz.assertCourseAccess(claims, lesson.course_id, [
-        'instructor',
-        'ta',
-      ]);
+      await this.authz.assertCourseAccess(claims, lesson.course_id, STAFF_ROLES);
     }
     return this.prisma.quiz_items.findMany({
       where: {
@@ -95,10 +90,7 @@ export class LessonService {
 
   async publish(claims: BffClaims, lessonId: string) {
     const lesson = await this.get(claims, lessonId);
-    await this.authz.assertCourseAccess(claims, lesson.course_id, [
-      'instructor',
-      'ta',
-    ]);
+    await this.authz.assertCourseAccess(claims, lesson.course_id, STAFF_ROLES);
 
     return this.prisma.$transaction(async (tx) => {
       const [cards, quizzes] = await Promise.all([

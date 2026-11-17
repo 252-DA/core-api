@@ -1,3 +1,5 @@
+import { COURSE_ROLES } from '../common/constants/course-roles';
+
 /** Vai trò trong một khóa học của DA (khớp course_memberships.role). */
 export type CourseRole = 'instructor' | 'ta' | 'learner' | 'observer';
 /** Vai trò trên toàn nền tảng (khớp lms_user_mappings.role). */
@@ -21,14 +23,16 @@ const LEARNER_ROLES = [`${MEMBERSHIP}#Learner`, `${MEMBERSHIP}#Member`];
 export function courseRoleFromNrps(roles: readonly string[]): CourseRole | null {
   const has = (candidates: readonly string[]) =>
     roles.some((role) => candidates.includes(role));
-  if (roles.includes(TA_ROLE)) return 'ta';
-  if (has(INSTRUCTOR_ROLES)) return 'instructor';
+  if (roles.includes(TA_ROLE)) return COURSE_ROLES.TA;
+  if (has(INSTRUCTOR_ROLES)) return COURSE_ROLES.INSTRUCTOR;
   if (has(OBSERVER_ROLES)) return 'observer';
-  if (has(LEARNER_ROLES)) return 'learner';
+  if (has(LEARNER_ROLES)) return COURSE_ROLES.LEARNER;
   return null;
 }
 
 /** Role nền tảng cho dòng lms_user_mappings mới tạo từ danh sách lớp. */
 export function platformRoleFor(role: CourseRole): PlatformRole {
-  return role === 'instructor' || role === 'ta' ? 'instructor' : 'learner';
+  return role === COURSE_ROLES.INSTRUCTOR || role === COURSE_ROLES.TA
+    ? COURSE_ROLES.INSTRUCTOR
+    : COURSE_ROLES.LEARNER;
 }

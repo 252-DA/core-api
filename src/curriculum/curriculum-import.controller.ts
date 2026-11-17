@@ -3,7 +3,7 @@ import { CurriculumImportService } from './curriculum-import.service';
 import { BffJwtGuard } from '../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../auth/current-bff-claims.decorator';
 import type { BffClaims } from '../auth/bff-claims';
-import { parseOptionalInt } from '../common/query-params';
+import { parseOptionalInt } from '../common/utils/query-params';
 import { SyncCurriculumDto } from './dto/curriculum-import.dto';
 
 @Controller('api/curriculum')

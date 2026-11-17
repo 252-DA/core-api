@@ -1,6 +1,7 @@
 import { BadGatewayException, Inject, Injectable } from '@nestjs/common';
 import { AGS_CONFIG, type AgsConfig } from '../ags/ags.config';
 import { AgsTokenService } from '../ags/ags-token.service';
+import { errorMessage } from '../common/utils/errors';
 import {
   ASSET_SCOPE,
   PNS_SCOPE,
@@ -144,7 +145,7 @@ export class LtiServicesClient {
       });
     } catch (error: unknown) {
       throw new LtiServiceError(
-        `Không kết nối được Canvas: ${error instanceof Error ? error.message : String(error)}`,
+        `Không kết nối được Canvas: ${errorMessage(error)}`,
         0,
       );
     }
@@ -165,6 +166,5 @@ export class LtiServicesClient {
 
 /** Lỗi gọi Canvas khi giảng viên đang đứng chờ: trả lời dễ hiểu thay vì 500. */
 export function asGatewayError(error: unknown, action: string) {
-  const message = error instanceof Error ? error.message : String(error);
-  return new BadGatewayException(`Không ${action}: ${message}`);
+  return new BadGatewayException(`Không ${action}: ${errorMessage(error)}`);
 }

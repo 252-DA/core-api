@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { STAFF_ROLES } from '../common/constants/course-roles';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
@@ -11,13 +13,6 @@ const BLOOM_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 
 const MAX_SOURCE_DOCUMENTS = 30;
 const MAX_QUESTIONS_PER_REQUEST = 20;
 const MAX_BATCH_SCOPES = 60;
-
-function uuid(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value)
-  );
-}
 
 @Injectable()
 export class ContentGenerationService {
@@ -32,7 +27,7 @@ export class ContentGenerationService {
     limit?: number | string,
     type?: string,
   ) {
-    await this.authz.assertCourseAccess(claims, courseId, ['instructor', 'ta']);
+    await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
 
     if (
       type !== undefined &&
@@ -68,10 +63,7 @@ export class ContentGenerationService {
       scopes?: Array<Record<string, unknown>>;
     },
   ) {
-    await this.authz.assertCourseAccess(claims, body.courseId, [
-      'instructor',
-      'ta',
-    ]);
+    await this.authz.assertCourseAccess(claims, body.courseId, STAFF_ROLES);
 
     if (Array.isArray(body.scopes)) {
       if (!body.scopes.length || body.scopes.length > MAX_BATCH_SCOPES) {
@@ -273,7 +265,7 @@ export class ContentGenerationService {
     } else {
       const raw = scope.source_document_ids;
       const ids = Array.isArray(raw) ? [...new Set(raw)] : [];
-      if (!ids.length || !ids.every(uuid))
+      if (!ids.length || !ids.every(isUuid))
         throw new BadRequestException('Chọn một chương hoặc ít nhất một tài liệu.');
       const documents = await this.prisma.documents.findMany({
         where: {
@@ -310,7 +302,7 @@ export class ContentGenerationService {
       throw new BadRequestException('Chọn tài liệu nguồn chỉ áp dụng khi sinh quiz theo LO.');
     const raw = scope.source_document_ids;
     const ids = Array.isArray(raw) ? [...new Set(raw)] : [];
-    if (!ids.length || ids.length > MAX_SOURCE_DOCUMENTS || !ids.every(uuid))
+    if (!ids.length || ids.length > MAX_SOURCE_DOCUMENTS || !ids.every(isUuid))
       throw new BadRequestException(`Chọn 1–${MAX_SOURCE_DOCUMENTS} tài liệu nguồn.`);
     const count = Number(scope.count);
     if (!Number.isInteger(count) || count < 1 || count > MAX_QUESTIONS_PER_REQUEST)

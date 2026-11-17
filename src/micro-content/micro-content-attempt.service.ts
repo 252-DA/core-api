@@ -5,11 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { COURSE_ROLES, STAFF_ROLES } from '../common/constants/course-roles';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { gradeAnswer } from '../question/question-types';
 import { gradingInput, submissionScore } from '../question/answer-grading';
+
+const MC_PARTICIPANT_ROLES = [COURSE_ROLES.LEARNER, ...STAFF_ROLES, 'admin'];
+const MC_CLAIM_STAFF_ROLES = [...STAFF_ROLES, 'admin', 'teacher'];
 
 export type SubmitAnswerInput = {
   questionId: string;
@@ -76,12 +80,11 @@ export class MicroContentAttemptService {
     if (!item) {
       throw new NotFoundException('Micro content not found');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, [
-      'learner',
-      'instructor',
-      'ta',
-      'admin',
-    ]);
+    await this.authz.assertCourseAccess(
+      claims,
+      item.course_id,
+      MC_PARTICIPANT_ROLES,
+    );
 
     const videoDurationMs = item.video_duration_ms || 60000;
     const now = new Date();
@@ -189,7 +192,9 @@ export class MicroContentAttemptService {
     if (item.status !== 'PUBLISHED') {
       throw new BadRequestException('Micro content chưa được xuất bản.');
     }
-    await this.authz.assertCourseAccess(claims, item.course_id, ['learner']);
+    await this.authz.assertCourseAccess(claims, item.course_id, [
+      COURSE_ROLES.LEARNER,
+    ]);
 
     // 1. Kiểm tra điều kiện xem video phía server
     if (item.required_watch_percent > 0) {
@@ -363,7 +368,7 @@ export class MicroContentAttemptService {
     const isOwner = attempt.user_id === claims.sub;
     const isStaff =
       claims.scope === 'admin' ||
-      claims.roles?.some((r) => ['instructor', 'ta', 'admin', 'teacher'].includes(r));
+      claims.roles?.some((r) => MC_CLAIM_STAFF_ROLES.includes(r));
 
     if (!isOwner && !isStaff) {
       throw new ForbiddenException('Bạn không có quyền xem kết quả này.');
@@ -400,7 +405,7 @@ export class MicroContentAttemptService {
   async listAttempts(claims: BffClaims, input: { microContentId: string }) {
     const isStaff =
       claims.scope === 'admin' ||
-      claims.roles?.some((r) => ['instructor', 'ta', 'admin', 'teacher'].includes(r));
+      claims.roles?.some((r) => MC_CLAIM_STAFF_ROLES.includes(r));
 
     const attempts = await this.prisma.micro_content_attempts.findMany({
       where: {

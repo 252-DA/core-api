@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { runBestEffort } from '../common/utils/best-effort';
+import { isWithinCodePoints } from '../common/utils/text-length';
+import { extraKeys, isPlainObject } from '../common/utils/type-guards';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   InvalidWorkerResultError,
@@ -7,8 +11,6 @@ import {
 } from '../worker-results/worker-result-envelope';
 import { WorkerResultHandler } from '../worker-results/worker-result-handler';
 import { ESSAY_GRADING_ERROR_CODES, ESSAY_STATUS, type EssayResult } from './essay-grading';
-import { runBestEffort } from '../worker-results/best-effort';
-import { isWithinCodePoints } from '../worker-results/text-length';
 
 export type EssayGradingResult =
   | { essaySubmissionId: string; status: 'GRADED'; result: EssayResult }
@@ -19,27 +21,18 @@ export type EssayGradingResult =
       error: string;
     };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Điểm tiêu chí làm tròn 2 chữ số nên tổng có thể lệch max_score một chút. */
 const EPSILON = 1e-6;
 const MAX_ERROR = 2000;
 /** Giảng viên đọc câu này trong báo cáo lỗi Canvas: không kèm lỗi kỹ thuật. */
 const UNAPPLIED_ERROR = 'Hệ thống không lưu được kết quả chấm của AI cho bài này.';
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function finite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function extraKeys(value: Record<string, unknown>, allowed: string[]) {
-  return Object.keys(value).filter((key) => !allowed.includes(key));
-}
-
 function parseResult(raw: unknown, where: string): EssayResult {
-  if (!isObject(raw)) throw new InvalidWorkerResultError(`${where}: result must be an object`);
+  if (!isPlainObject(raw)) throw new InvalidWorkerResultError(`${where}: result must be an object`);
   const problems = extraKeys(raw, [
     'score',
     'max_score',
@@ -68,7 +61,7 @@ function parseResult(raw: unknown, where: string): EssayResult {
   } else {
     criteria.forEach((c, i) => {
       const at = `result.criteria[${i}]`;
-      if (!isObject(c)) {
+      if (!isPlainObject(c)) {
         problems.push(`${at} must be an object`);
         return;
       }
@@ -100,9 +93,9 @@ function parseResult(raw: unknown, where: string): EssayResult {
 /** Kiểm payload theo contracts/integration-events/v1/essay-grading-result.json. */
 export function parseEssayGradingResult(payload: unknown): EssayGradingResult {
   const where = 'ESSAY_GRADING_RESULT';
-  if (!isObject(payload)) throw new InvalidWorkerResultError(`${where}: payload must be an object`);
+  if (!isPlainObject(payload)) throw new InvalidWorkerResultError(`${where}: payload must be an object`);
   const { essay_submission_id: id, status } = payload;
-  if (typeof id !== 'string' || !UUID.test(id)) {
+  if (!isUuid(id)) {
     throw new InvalidWorkerResultError(`${where}: essay_submission_id must be a uuid`);
   }
   if (status === ESSAY_STATUS.graded) {
@@ -207,8 +200,8 @@ export class EssayGradingResultHandler implements WorkerResultHandler {
       `Không đánh dấu FAILED được bài luận của ${envelope.result_id}`,
       async () => {
         const payload: unknown = envelope.payload;
-        const id = isObject(payload) ? payload.essay_submission_id : undefined;
-        if (typeof id !== 'string' || !UUID.test(id)) return;
+        const id = isPlainObject(payload) ? payload.essay_submission_id : undefined;
+        if (!isUuid(id)) return;
         const { count } = await this.prisma.essay_submissions.updateMany({
           where: { essay_submission_id: id, status: ESSAY_STATUS.queued },
           data: {

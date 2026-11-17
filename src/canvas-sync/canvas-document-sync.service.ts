@@ -3,6 +3,8 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { documents } from '@prisma/client';
+import { STAFF_ROLES } from '../common/constants/course-roles';
+import { safeFileName } from '../common/utils/file-name';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
@@ -29,7 +31,7 @@ import {
   type SessionRow,
 } from './canvas-placement';
 
-const MANAGE_ROLES = ['instructor', 'ta'];
+const MANAGE_ROLES = STAFF_ROLES;
 const ROLES: DocumentRole[] = ['lecture', 'reference', 'exercise'];
 // Mỗi lần đồng bộ tải tối đa ngần này file mới/đã đổi; phần còn lại để lần sau.
 const MAX_DOWNLOADS_PER_SYNC = 30;
@@ -38,10 +40,6 @@ export const MAP_DOCUMENT_LOS_JOB = 'map_document_los';
 
 type Entry = { fileId: string; moduleName: string; published: boolean; cls: ModuleClass };
 type ChapterHint = { code: string; provenance: 'module' | 'file_name'; reason: string };
-
-function safeFileName(value: string) {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 160) || 'document';
-}
 
 /**
  * File trong các module theo thứ tự hiển thị. Một file nằm ở nhiều module chỉ

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { STAFF_ROLES } from '../common/constants/course-roles';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
 import type { CanvasTokenCheck } from '../canvas/canvas-api.client';
@@ -9,7 +10,7 @@ import {
 } from './canvas-sync-runs.service';
 import { CanvasTokenStatusService } from './canvas-token-status.service';
 
-const MANAGE_ROLES = ['instructor', 'ta'];
+const MANAGE_ROLES = STAFF_ROLES;
 // Job bị dừng giữa chừng (core-api khởi động lại) để dòng ở "running" mãi.
 const STALE_RUNNING_MS = 30 * 60_000;
 const INTERRUPTED_MESSAGE = 'Lần đồng bộ bị gián đoạn';

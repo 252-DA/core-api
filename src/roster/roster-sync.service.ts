@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { COURSE_ROLES } from '../common/constants/course-roles';
 import { CanvasApiClient } from '../canvas/canvas-api.client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -88,7 +89,7 @@ export class RosterSyncService {
       const status = member.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active';
       const key = `${userId}:${role}`;
       wanted.add(key);
-      if (role === 'learner' && status === 'active') learners++;
+      if (role === COURSE_ROLES.LEARNER && status === 'active') learners++;
       const current = existingByKey.get(key);
       if (!current) {
         created++;

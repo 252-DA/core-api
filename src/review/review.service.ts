@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { STAFF_ROLES } from '../common/constants/course-roles';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
@@ -50,10 +51,7 @@ export class ReviewService {
   ) {}
 
   async listDrafts(claims: BffClaims, courseId: string, kind?: 'card' | 'quiz') {
-    await this.authz.assertCourseAccess(claims, courseId, [
-      'instructor',
-      'ta',
-    ]);
+    await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
 
     const [cards, quizItems] = await Promise.all([
       kind === 'quiz'
@@ -196,10 +194,7 @@ export class ReviewService {
     }
     const courseIds = [...new Set(quizzes.map((q) => q.course_id))];
     for (const courseId of courseIds) {
-      await this.authz.assertCourseAccess(claims, courseId, [
-        'instructor',
-        'ta',
-      ]);
+      await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
     }
     for (const quiz of quizzes) {
       normalizeAnswerKey(quiz.type, quiz.question, {
@@ -309,10 +304,7 @@ export class ReviewService {
     if (!card) {
       throw new NotFoundException(`Card not found: ${cardId}`);
     }
-    await this.authz.assertCourseAccess(claims, card.course_id, [
-      'instructor',
-      'ta',
-    ]);
+    await this.authz.assertCourseAccess(claims, card.course_id, STAFF_ROLES);
     return card;
   }
 
@@ -323,10 +315,7 @@ export class ReviewService {
     if (!quiz) {
       throw new NotFoundException(`Quiz item not found: ${quizId}`);
     }
-    await this.authz.assertCourseAccess(claims, quiz.course_id, [
-      'instructor',
-      'ta',
-    ]);
+    await this.authz.assertCourseAccess(claims, quiz.course_id, STAFF_ROLES);
     return quiz;
   }
 }

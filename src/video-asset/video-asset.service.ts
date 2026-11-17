@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { extname } from 'node:path';
+import { STAFF_ROLES as COURSE_STAFF_ROLES } from '../common/constants/course-roles';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import { DocumentStorageService } from '../storage/document-storage.service';
@@ -19,7 +20,7 @@ export function serializeVideoAsset(asset: video_assets) {
 }
 
 const VISIBILITIES = ['PRIVATE', 'COURSE', 'PUBLIC'];
-const STAFF_ROLES = ['instructor', 'ta', 'admin'];
+const STAFF_ROLES = [...COURSE_STAFF_ROLES, 'admin'];
 
 @Injectable()
 export class VideoAssetService {
@@ -109,7 +110,7 @@ export class VideoAssetService {
     },
   ) {
     if (input.courseId) {
-      await this.authz.assertCourseAccess(claims, input.courseId, ['instructor', 'ta', 'admin']);
+      await this.authz.assertCourseAccess(claims, input.courseId, STAFF_ROLES);
     }
 
     const ext = extname(input.filename || '').toLowerCase();

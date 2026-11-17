@@ -1,4 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
+import { AuthzService } from '../auth/authz.service';
 import { LearnerModelService } from './learner-model.service';
 import type { BffClaims } from '../auth/bff-claims';
 
@@ -85,7 +86,10 @@ function setup(attempts: ReturnType<typeof attempt>[], sets: ReturnType<typeof s
       findMany: jest.fn().mockResolvedValue([{ internal_user_id: STUDENT, display_name: 'An' }]),
     },
   };
-  const authz = { assertCourseAccess: jest.fn().mockResolvedValue(undefined) };
+  const authz = {
+    assertCourseAccess: jest.fn().mockResolvedValue(undefined),
+    assertSessionCourse: AuthzService.prototype.assertSessionCourse,
+  };
   // Mẫu số lớp lấy từ danh sách lớp (membership learner đang hoạt động), không từ lượt làm bài.
   const roster = { activeLearnerIds: jest.fn().mockResolvedValue([STUDENT]) };
   return {

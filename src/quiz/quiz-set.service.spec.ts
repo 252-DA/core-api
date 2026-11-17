@@ -1,5 +1,6 @@
-import { QuizSetService } from './quiz-set.service';
+import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
+import { QuizSetService } from './quiz-set.service';
 
 const COURSE = '00000000-0000-0000-0000-000000000001';
 const USER = '00000000-0000-0000-0000-000000000002';
@@ -87,7 +88,10 @@ function setup() {
   prisma.$transaction.mockImplementation((fn: (tx: typeof prisma) => unknown) =>
     fn(prisma),
   );
-  const authz = { assertCourseAccess: jest.fn() };
+  const authz = {
+    assertCourseAccess: jest.fn(),
+    assertSessionCourse: AuthzService.prototype.assertSessionCourse,
+  };
   const ags = { isWaitingForPublish: jest.fn().mockReturnValue(false) };
   // Danh sách lớp mặc định chỉ có USER, giữ nguyên số liệu của các test cũ.
   const roster = { activeLearnerIds: jest.fn().mockResolvedValue([USER]) };

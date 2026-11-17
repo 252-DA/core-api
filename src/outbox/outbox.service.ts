@@ -9,6 +9,7 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { hostname } from 'node:os';
+import { errorMessage } from '../common/utils/errors';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ANSWER_GRADING_QUEUE,
@@ -25,7 +26,6 @@ import {
 import { MICRO_CONTENT_GRADING_REQUESTED } from '../micro-content/micro-content-attempt.service';
 import {
   createPgListenClient,
-  errorMessage,
   OutboxListener,
   type ListenClientFactory,
 } from './outbox-listener';

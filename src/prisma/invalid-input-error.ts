@@ -2,6 +2,7 @@ export type InvalidInputSqlState = '22P02' | '22021';
 
 const INVALID_INPUT_SQLSTATES = new Set<string>(['22P02', '22021']);
 
+/** Không dùng isPlainObject: không loại trừ mảng vì chỉ đọc thuộc tính đối tượng lỗi driver. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }

@@ -1,13 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { runBestEffort } from '../common/utils/best-effort';
+import { isWithinCodePoints } from '../common/utils/text-length';
+import { isIntIn, isPlainObject } from '../common/utils/type-guards';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
 } from '../worker-results/worker-result-envelope';
 import { WorkerResultHandler } from '../worker-results/worker-result-handler';
-import { runBestEffort } from '../worker-results/best-effort';
-import { isWithinCodePoints } from '../worker-results/text-length';
 
 export interface EnrichmentCard {
   card_id: string;
@@ -55,7 +57,6 @@ export type EnrichmentContentOutcome =
       reason: 'document_missing' | 'stale_generation' | 'already_applied';
     };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_INT4 = 2_147_483_647;
 const MAX_ITEMS = 5000;
 const MAX_SOURCE_CHUNKS = 200;
@@ -84,10 +85,6 @@ const QUIZ_KEYS = [
 // Bản nháp được thay; câu/thẻ đã duyệt hoặc đã xuất bản thì giữ.
 const DRAFT_STATUSES = ['GENERATED_DRAFT', 'REVIEWING', 'CHANGES_REQUESTED'];
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 function isText(
   value: unknown,
   max = Number.MAX_SAFE_INTEGER,
@@ -97,19 +94,6 @@ function isText(
     value.trim().length > 0 &&
     isWithinCodePoints(value, max)
   );
-}
-
-function isIntIn(value: unknown, min: number, max: number): value is number {
-  return (
-    typeof value === 'number' &&
-    Number.isInteger(value) &&
-    value >= min &&
-    value <= max
-  );
-}
-
-function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID.test(value);
 }
 
 function checkChunks(

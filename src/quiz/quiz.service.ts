@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
+import { AGS_STATUS } from '../common/constants/ags-status';
+import { COURSE_ROLES } from '../common/constants/course-roles';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
-import { AGS_STATUS } from '../ags/ags-status';
 import type { BffClaims } from '../auth/bff-claims';
 import { gradeAnswer } from '../question/question-types';
 import {
@@ -36,7 +37,9 @@ export class QuizService {
     if (!lesson) {
       throw new BadRequestException('Lesson not found');
     }
-    await this.authz.assertCourseAccess(claims, lesson.course_id, ['learner']);
+    await this.authz.assertCourseAccess(claims, lesson.course_id, [
+      COURSE_ROLES.LEARNER,
+    ]);
 
     const quizIds = body.answers.map((answer) => answer.quizId);
     const quizItems = await this.prisma.quiz_items.findMany({

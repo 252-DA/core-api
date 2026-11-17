@@ -1,10 +1,12 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import type { quiz_sets as QuizSetRow } from '@prisma/client';
+import { STAFF_ROLES } from '../common/constants/course-roles';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { answersRevealed, withCanvasSettings } from '../quiz/quiz-set-exam';
-import type { QuizSnapshotItem } from '../quiz/quiz-set.service';
+import type { QuizSnapshotItem } from '../quiz/quiz.types';
 import { CourseRosterRepository } from '../roster/course-roster.repository';
 import { BKT_DEFAULTS, MASTERY_DEFAULTS } from './bkt';
 import { learnerLoStates, type LoState } from './learner-state';
@@ -27,13 +29,6 @@ const POOL_STATUSES = ['APPROVED', 'PUBLISHED'];
  * ngưỡng vận hành đề xuất, không bảo đảm đủ câu cho mọi người học.
  */
 export const MIN_PRACTICE_ITEMS = 6;
-
-function uuid(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value)
-  );
-}
 
 function snapshotItems(set: QuizSetRow): QuizSnapshotItem[] {
   return Array.isArray(set.items) ? (set.items as unknown as QuizSnapshotItem[]) : [];
@@ -80,13 +75,6 @@ export class LearnerModelService {
     private readonly roster: CourseRosterRepository,
   ) {}
 
-  private async access(claims: BffClaims, courseId: string, roles?: string[]) {
-    if (!uuid(courseId) || (claims.scope !== 'admin' && claims.courseId !== courseId)) {
-      throw new ForbiddenException('Khóa học không khớp phiên Canvas.');
-    }
-    await this.authz.assertCourseAccess(claims, courseId, roles);
-  }
-
   /**
    * Mức nắm theo LO của người học đang đăng nhập, kèm lịch ôn dẫn xuất và đề
    * xuất tiếp theo của planner. Giảng viên/trợ giảng truyền `userId` để xem
@@ -94,8 +82,8 @@ export class LearnerModelService {
    */
   async summary(claims: BffClaims, body: { courseId: string; userId?: string }) {
     const self = !body.userId || body.userId === claims.sub;
-    if (!self && !uuid(body.userId)) throw new BadRequestException('userId không hợp lệ.');
-    await this.access(claims, body.courseId, self ? undefined : ['instructor', 'ta']);
+    if (!self && !isUuid(body.userId)) throw new BadRequestException('userId không hợp lệ.');
+    await this.authz.assertSessionCourse(claims, body.courseId, self ? undefined : STAFF_ROLES);
     const userId = self ? claims.sub : body.userId!;
 
     const [los, sets] = await Promise.all([this.courseLos(body.courseId), this.courseSets(body.courseId)]);
@@ -130,7 +118,7 @@ export class LearnerModelService {
    * vẫn có mặt vì bằng chứng của họ còn đó.
    */
   async courseMastery(claims: BffClaims, body: { courseId: string }) {
-    await this.access(claims, body.courseId, ['instructor', 'ta']);
+    await this.authz.assertSessionCourse(claims, body.courseId, STAFF_ROLES);
     const [los, sets, learnerIds] = await Promise.all([
       this.courseLos(body.courseId),
       this.courseSets(body.courseId),

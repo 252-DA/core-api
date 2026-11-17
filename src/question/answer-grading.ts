@@ -1,7 +1,9 @@
 import type { Prisma } from '@prisma/client';
-import { AGS_STATUS } from '../ags/ags-status';
+import { AGS_STATUS } from '../common/constants/ags-status';
+import { isWithinCodePoints } from '../common/utils/text-length';
+import { isPlainObject } from '../common/utils/type-guards';
+import { isUuid } from '../common/utils/uuid';
 import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
-import { isWithinCodePoints } from '../worker-results/text-length';
 
 /**
  * `quiz_attempts.grading_status`: xem migration 20261004120000_question_types
@@ -180,19 +182,9 @@ export type AnswerGradeResult =
       graderModel: string | null;
     };
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Khớp maxLength trong schema (đếm code point, xem text-length.ts); worker cắt trước khi gửi. */
 export const MAX_GRADE_FEEDBACK = 4000;
 const MAX_GRADER_MODEL = 200;
-
-export function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-export function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID_PATTERN.test(value);
-}
 
 function nullableText(value: unknown, max: number) {
   return value === null || (typeof value === 'string' && isWithinCodePoints(value, max));

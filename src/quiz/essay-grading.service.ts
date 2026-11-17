@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
+import { STAFF_ROLES } from '../common/constants/course-roles';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
@@ -16,8 +18,7 @@ import {
   releaseIfGraded,
 } from '../question/answer-grading';
 
-const STAFF = ['instructor', 'ta'];
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const STAFF = STAFF_ROLES;
 const MAX_FEEDBACK = 2000;
 
 /**
@@ -194,7 +195,7 @@ export class EssayGradingService {
   }
 
   private async findAttempt(claims: BffClaims, attemptId: string) {
-    if (typeof attemptId !== 'string' || !UUID.test(attemptId))
+    if (!isUuid(attemptId))
       throw new BadRequestException('Mã bài làm không hợp lệ.');
     const attempt = await this.prisma.quiz_attempts.findFirst({
       where: { attempt_id: attemptId, deleted_at: null },

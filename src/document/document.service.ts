@@ -6,14 +6,12 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { documents } from '@prisma/client';
+import { STAFF_ROLES } from '../common/constants/course-roles';
+import { safeFileName } from '../common/utils/file-name';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
 import { DocumentStorageService } from '../storage/document-storage.service';
-
-function safeFileName(value: string) {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 160) || 'document';
-}
 
 function fileNameFromStorageKey(storageKey: string, fallback: string) {
   return storageKey.split('/').filter(Boolean).pop() || fallback;
@@ -69,8 +67,7 @@ export class DocumentService {
     offset = 0,
   ) {
     await this.authz.assertCourseAccess(claims, courseId, [
-      'instructor',
-      'ta',
+      ...STAFF_ROLES,
       'observer',
     ]);
 
@@ -205,10 +202,7 @@ export class DocumentService {
       checksum?: string;
     },
   ) {
-    await this.authz.assertCourseAccess(claims, data.courseId, [
-      'instructor',
-      'ta',
-    ]);
+    await this.authz.assertCourseAccess(claims, data.courseId, STAFF_ROLES);
 
     const [{ id: documentId }] = await this.prisma.$queryRaw<
       Array<{ id: string }>
@@ -245,10 +239,7 @@ export class DocumentService {
     if (!doc) {
       throw new NotFoundException(`Document not found: ${documentId}`);
     }
-    await this.authz.assertCourseAccess(claims, doc.course_id, [
-      'instructor',
-      'ta',
-    ]);
+    await this.authz.assertCourseAccess(claims, doc.course_id, STAFF_ROLES);
     if (doc.status !== 'UPLOADING' && doc.status !== 'UPLOADED') {
       throw new BadRequestException(
         `Document in status ${doc.status} cannot be confirmed`,
@@ -295,10 +286,7 @@ export class DocumentService {
     if (!doc) {
       throw new NotFoundException(`Document not found: ${documentId}`);
     }
-    await this.authz.assertCourseAccess(claims, doc.course_id, [
-      'instructor',
-      'ta',
-    ]);
+    await this.authz.assertCourseAccess(claims, doc.course_id, STAFF_ROLES);
 
     return this.softDelete(doc);
   }

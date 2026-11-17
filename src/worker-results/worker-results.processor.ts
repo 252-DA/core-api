@@ -1,6 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job, UnrecoverableError } from 'bullmq';
+import { errorMessage } from '../common/utils/errors';
+import { isPlainObject } from '../common/utils/type-guards';
 import {
   WORKER_RESULTS_QUEUE,
   isWorkerResultKind,
@@ -30,10 +32,6 @@ export function isFinalFailure(job: Job, error: unknown): boolean {
     (error instanceof Error && error.name === 'UnrecoverableError') ||
     job.attemptsMade + 1 >= (job.opts?.attempts ?? 1)
   );
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -144,9 +142,7 @@ export class WorkerResultsProcessor extends WorkerHost {
       );
     } catch (hookError) {
       this.logger.error(
-        `Gỡ dòng chờ của kết quả ${envelope.result_id} (${envelope.kind}) lỗi: ${
-          hookError instanceof Error ? hookError.message : String(hookError)
-        }`,
+        `Gỡ dòng chờ của kết quả ${envelope.result_id} (${envelope.kind}) lỗi: ${errorMessage(hookError)}`,
       );
     }
   }

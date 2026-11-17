@@ -6,6 +6,9 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { AGS_STATUS } from '../common/constants/ags-status';
+import { COURSE_ROLES, STAFF_ROLES } from '../common/constants/course-roles';
+import { isUuid } from '../common/utils/uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
@@ -15,9 +18,9 @@ import {
   loadCanvasQuizContext,
   loadQuizBuilderContext,
 } from './quiz-set-context';
-import { AGS_STATUS } from '../ags/ags-status';
 import { AgsPublisherService } from '../ags/ags-publisher.service';
 import { CourseRosterRepository } from '../roster/course-roster.repository';
+import type { QuizSnapshotItem } from './quiz.types';
 import {
   groupSubmissions,
   learnerResults,
@@ -48,25 +51,6 @@ import {
   type GradingAnswer,
 } from '../question/answer-grading';
 
-export type QuizSnapshotItem = {
-  quiz_id: string;
-  question: string;
-  type: string;
-  options: Prisma.JsonValue;
-  correct_answer: Prisma.JsonValue;
-  explanation: string | null;
-  lo_id: string | null;
-  bloom_level: number | null;
-  source_chunk_ids: string[];
-};
-
-function uuid(value: unknown): value is string {
-  return (
-    typeof value === 'string' &&
-    /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value)
-  );
-}
-
 @Injectable()
 export class QuizSetService {
   constructor(
@@ -78,16 +62,7 @@ export class QuizSetService {
     private readonly roster: CourseRosterRepository,
   ) {}
 
-  private async access(claims: BffClaims, courseId: string, roles?: string[]) {
-    if (
-      !uuid(courseId) ||
-      (claims.scope !== 'admin' && claims.courseId !== courseId)
-    ) {
-      throw new ForbiddenException('Khóa học không khớp phiên Canvas.');
-    }
-    await this.authz.assertCourseAccess(claims, courseId, roles);
-  }
-
+  // TODO(refactor): hỏi chủ repo có gộp vào isCourseStaff
   /** Giảng viên/trợ giảng của khóa học, hoặc token quản trị. */
   private async isStaff(claims: BffClaims, courseId: string) {
     if (claims.scope === 'admin') return true;
@@ -96,7 +71,7 @@ export class QuizSetService {
         where: {
           user_id: claims.sub,
           course_id: courseId,
-          role: { in: ['instructor', 'ta'] },
+          role: { in: STAFF_ROLES },
         },
       })) > 0
     );
@@ -106,7 +81,7 @@ export class QuizSetService {
     claims: BffClaims,
     body: { courseId: string; moduleId?: string | null; chapterId?: string },
   ) {
-    await this.access(claims, body.courseId, ['instructor', 'ta']);
+    await this.authz.assertSessionCourse(claims, body.courseId, STAFF_ROLES);
     return loadCanvasQuizContext(
       {
         prisma: this.prisma,
@@ -125,7 +100,7 @@ export class QuizSetService {
     claims: BffClaims,
     body: { courseId: string; loIds?: string[] },
   ) {
-    await this.access(claims, body.courseId, ['instructor', 'ta']);
+    await this.authz.assertSessionCourse(claims, body.courseId, STAFF_ROLES);
     return loadQuizBuilderContext(this.prisma, body);
   }
 
@@ -144,7 +119,7 @@ export class QuizSetService {
       blueprint?: unknown;
     },
   ) {
-    await this.access(claims, body.courseId, ['instructor', 'ta']);
+    await this.authz.assertSessionCourse(claims, body.courseId, STAFF_ROLES);
     const settings = parseSettings(body.settings);
     const chapterIds = [
       ...new Set(
@@ -158,15 +133,15 @@ export class QuizSetService {
     if (
       !chapterIds.length ||
       chapterIds.length > 30 ||
-      !chapterIds.every(uuid) ||
-      !uuid(body.selectionId) ||
+      !chapterIds.every(isUuid) ||
+      !isUuid(body.selectionId) ||
       typeof body.title !== 'string' ||
       !body.title.trim() ||
       body.title.trim().length > 255 ||
       !Array.isArray(body.quizIds) ||
       !body.quizIds.length ||
       body.quizIds.length > 100 ||
-      !body.quizIds.every(uuid) ||
+      !body.quizIds.every(isUuid) ||
       new Set(body.quizIds).size !== body.quizIds.length
     ) {
       throw new BadRequestException(
@@ -275,12 +250,12 @@ export class QuizSetService {
   }
 
   private async snapshot(claims: BffClaims, id: string, roles?: string[]) {
-    if (!uuid(id)) throw new BadRequestException('Quiz không hợp lệ.');
+    if (!isUuid(id)) throw new BadRequestException('Quiz không hợp lệ.');
     const set = await this.prisma.quiz_sets.findFirst({
       where: { quiz_set_id: id, deleted_at: null },
     });
     if (!set) throw new NotFoundException('Không tìm thấy quiz.');
-    await this.access(claims, set.course_id, roles);
+    await this.authz.assertSessionCourse(claims, set.course_id, roles);
     return { ...set, items: set.items as unknown as QuizSnapshotItem[] };
   }
 
@@ -292,7 +267,7 @@ export class QuizSetService {
     set: { quiz_set_id: string; course_id: string },
     resourceLinkId: unknown,
   ): Promise<CanvasLinkSettings | null> {
-    if (!uuid(resourceLinkId)) return null;
+    if (!isUuid(resourceLinkId)) return null;
     return this.prisma.lti_resource_links.findFirst({
       where: {
         resource_link_id: resourceLinkId,
@@ -336,7 +311,7 @@ export class QuizSetService {
     set: { quiz_set_id: string; course_id: string },
     resourceLinkId: string,
   ) {
-    if (!uuid(resourceLinkId))
+    if (!isUuid(resourceLinkId))
       throw new BadRequestException('Mở quiz từ bài tập Canvas để nộp bài.');
     const link = await this.prisma.lti_resource_links.findFirst({
       where: {
@@ -392,7 +367,7 @@ export class QuizSetService {
     claims: BffClaims,
     body: { quizSetId: string; resourceLinkId: string },
   ) {
-    const found = await this.snapshot(claims, body.quizSetId, ['learner']);
+    const found = await this.snapshot(claims, body.quizSetId, [COURSE_ROLES.LEARNER]);
     if (found.mode !== 'exam')
       throw new BadRequestException('Quiz luyện tập không cần bắt đầu lượt làm.');
     const link = await this.quizLink(found, body.resourceLinkId);
@@ -587,9 +562,9 @@ export class QuizSetService {
     claims: BffClaims,
     body: { quizSetId: string; submissionId: string },
   ) {
-    if (!uuid(body.submissionId))
+    if (!isUuid(body.submissionId))
       throw new BadRequestException('Bài làm không hợp lệ.');
-    const found = await this.snapshot(claims, body.quizSetId, ['instructor', 'ta']);
+    const found = await this.snapshot(claims, body.quizSetId, STAFF_ROLES);
     const links = await this.prisma.lti_resource_links.findMany({
       where: {
         target_kind: 'quiz_set',
@@ -680,7 +655,7 @@ export class QuizSetService {
       sessionId?: string;
     },
   ) {
-    const found = await this.snapshot(claims, body.quizSetId, ['learner']);
+    const found = await this.snapshot(claims, body.quizSetId, [COURSE_ROLES.LEARNER]);
     const link = await this.quizLink(found, body.resourceLinkId);
     const set = withCanvasSettings(found, link);
     const exam = set.mode === 'exam';
@@ -706,7 +681,7 @@ export class QuizSetService {
     const attemptedAt = new Date();
     let session: { session_id: string; expires_at: Date | null } | null = null;
     if (exam) {
-      if (!uuid(body.sessionId))
+      if (!isUuid(body.sessionId))
         throw new BadRequestException('Thiếu lượt làm bài. Bấm Bắt đầu trước.');
       session = await this.prisma.quiz_set_sessions.findFirst({
         where: {

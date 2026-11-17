@@ -1,5 +1,7 @@
+import { isWithinCodePoints } from '../common/utils/text-length';
+import { isPlainObject } from '../common/utils/type-guards';
+import { isUuid } from '../common/utils/uuid';
 import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
-import { isWithinCodePoints } from '../worker-results/text-length';
 
 /**
  * Bản đề cương chuẩn hoá worker gửi trong CURRICULUM_IMPORT_RESULT
@@ -223,13 +225,8 @@ const CURRICULUM_KEYS = new Set([
 const PROVENANCES = new Set(['extracted', 'inferred', 'confirmed']);
 const SEVERITIES = new Set(['error', 'warning', 'info']);
 const CDIO_LEVELS = new Set(['I', 'II', 'III']);
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_ERROR = 2000;
 const MAX_PROBLEMS = 20;
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function fieldOk(kind: FieldKind, value: unknown): boolean {
   switch (kind) {
@@ -341,7 +338,7 @@ export function parseCurriculumImportResult(
     if (!(key in payload)) problems.push(`${key} is required`);
   }
   const { import_id, status, preview, curriculum, error } = payload;
-  if (typeof import_id !== 'string' || !UUID.test(import_id)) {
+  if (!isUuid(import_id)) {
     problems.push('import_id must be a UUID');
   }
   if (status === 'FAILED') {

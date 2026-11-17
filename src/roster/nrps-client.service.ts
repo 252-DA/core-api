@@ -1,4 +1,5 @@
 import { BadGatewayException, Inject, Injectable, Logger } from '@nestjs/common';
+import { hostOf } from '../common/utils/url';
 import { AgsTokenService, AgsTokenError } from '../ags/ags-token.service';
 import { AGS_CONFIG, type AgsConfig } from '../ags/ags.config';
 
@@ -35,15 +36,6 @@ export class NrpsError extends BadGatewayException {
 export const NRPS_UNAUTHORIZED_MESSAGE =
   'Canvas từ chối đọc danh sách lớp (401). Kiểm tra tool đã có scope contextmembership.readonly và đã được cài lại.';
 export const NRPS_UNREACHABLE_MESSAGE = 'Không kết nối được Canvas để đọc danh sách lớp';
-
-function hostOf(value: string | undefined): string | null {
-  if (!value) return null;
-  try {
-    return new URL(value).host;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Names and Role Provisioning Service (NRPS) v2: đọc danh sách thành viên của

@@ -1,4 +1,5 @@
 import { BadGatewayException } from '@nestjs/common';
+import { errorMessage } from '../common/utils/errors';
 
 /** Lỗi khi gọi REST API của Canvas; `canvasStatus` rỗng nếu không nhận được phản hồi HTTP. */
 export class CanvasApiError extends BadGatewayException {
@@ -22,8 +23,7 @@ const STATUS_PATTERN = /HTTP (\d{3})/;
 /** Mã HTTP Canvas trả về, nếu thông báo lỗi có nêu (lỗi chưa qua CanvasApiError). */
 function statusOf(error: unknown): number | undefined {
   if (error instanceof CanvasApiError) return error.canvasStatus;
-  const message = error instanceof Error ? error.message : String(error);
-  const match = message.match(STATUS_PATTERN);
+  const match = errorMessage(error).match(STATUS_PATTERN);
   return match ? Number(match[1]) : undefined;
 }
 
@@ -32,7 +32,7 @@ function statusOf(error: unknown): number | undefined {
  * tới được, hoặc giữ nguyên thông báo gốc. Chi tiết kỹ thuật vẫn nằm trong log.
  */
 export function describeCanvasError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessage(error);
   const status = statusOf(error);
   if (status === 401) return CANVAS_TOKEN_INVALID_MESSAGE;
   if (status !== undefined && UNREACHABLE_STATUSES.includes(status))

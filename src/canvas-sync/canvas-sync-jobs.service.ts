@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { LMS_ADMIN_ROLE, STAFF_ROLES } from '../common/constants/course-roles';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CANVAS_SYNC_CONFIG,
@@ -106,7 +107,7 @@ export class CanvasSyncJobsService implements OnModuleInit {
     if (
       !this.config.enabled ||
       lmsType !== 'canvas' ||
-      !['instructor', 'ta'].includes(courseRole)
+      !STAFF_ROLES.includes(courseRole)
     )
       return;
     try {
@@ -136,8 +137,8 @@ export class CanvasSyncJobsService implements OnModuleInit {
       !this.config.enabled ||
       lmsType !== 'canvas' ||
       !(
-        ['instructor', 'ta'].includes(courseRole) ||
-        platformRole === 'administrator'
+        STAFF_ROLES.includes(courseRole) ||
+        platformRole === LMS_ADMIN_ROLE
       )
     )
       return;

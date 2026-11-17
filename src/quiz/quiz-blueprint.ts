@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { isUuid } from '../common/utils/uuid';
 
 /** Ma trận đề: mỗi ô là số câu của một LO ở một mức Bloom (1–6). */
 export interface QuizBlueprint {
@@ -6,7 +7,6 @@ export interface QuizBlueprint {
   source_document_ids: string[];
 }
 
-const UUID = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const MAX_CELLS = 120;
 
 /**
@@ -30,7 +30,7 @@ export function parseBlueprint(
     const bloom = Number(c?.bloom_level);
     const count = Number(c?.count);
     if (
-      !UUID.test(loId) ||
+      !isUuid(loId) ||
       !allowedLoIds.has(loId) ||
       !Number.isInteger(bloom) ||
       bloom < 1 ||
@@ -45,7 +45,7 @@ export function parseBlueprint(
     return { lo_id: loId, bloom_level: bloom, count };
   });
   const docs = Array.isArray(input.source_document_ids) ? input.source_document_ids : [];
-  if (docs.length > 30 || !docs.every((d) => typeof d === 'string' && UUID.test(d)))
+  if (docs.length > 30 || !docs.every(isUuid))
     throw new BadRequestException('Danh sách tài liệu nguồn không hợp lệ.');
   return { cells, source_document_ids: [...new Set(docs as string[])] };
 }

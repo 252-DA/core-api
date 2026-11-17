@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { AGS_CONFIG, type AgsConfig } from '../ags/ags.config';
+import { errorMessage } from '../common/utils/errors';
 import { DocumentStorageService } from '../storage/document-storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -146,7 +147,7 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
     for (const asset of assets) {
       await this.lti
         .postReport(row.report_url, processingReport({ assetId: asset.asset_id, timestamp: new Date().toISOString() }))
-        .catch((error: unknown) => this.logger.warn(`Báo cáo Processing lỗi (${row.essay_submission_id}): ${message(error)}`));
+        .catch((error: unknown) => this.logger.warn(`Báo cáo Processing lỗi (${row.essay_submission_id}): ${errorMessage(error)}`));
     }
 
     try {
@@ -210,7 +211,7 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
       await this.mark(row, {
         attempts: row.attempts + 1,
         next_attempt_at: new Date(Date.now() + backoff(row.attempts)),
-        error: `Gửi báo cáo lỗi: ${message(error)}`.slice(0, 2000),
+        error: `Gửi báo cáo lỗi: ${errorMessage(error)}`.slice(0, 2000),
       });
     }
   }
@@ -231,7 +232,7 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
         attempts: row.attempts + 1,
         next_attempt_at: new Date(Date.now() + backoff(row.attempts)),
       });
-      this.logger.warn(`Gửi báo cáo lỗi về Canvas thất bại (${row.essay_submission_id}): ${message(error)}`);
+      this.logger.warn(`Gửi báo cáo lỗi về Canvas thất bại (${row.essay_submission_id}): ${errorMessage(error)}`);
     }
   }
 
@@ -239,12 +240,12 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
     const attempts = row.attempts + 1;
     const giveUp = permanent || attempts >= MAX_ATTEMPTS;
     this.logger.warn(
-      `Tải bài nộp ${row.lms_submission_id} lỗi (lần ${attempts}${giveUp ? ', dừng' : ''}): ${message(error)}`,
+      `Tải bài nộp ${row.lms_submission_id} lỗi (lần ${attempts}${giveUp ? ', dừng' : ''}): ${errorMessage(error)}`,
     );
     await this.mark(row, {
       attempts: giveUp ? 0 : attempts,
       next_attempt_at: giveUp ? null : new Date(Date.now() + backoff(row.attempts)),
-      error: message(error).slice(0, 2000),
+      error: errorMessage(error).slice(0, 2000),
       ...(giveUp ? { status: ESSAY_STATUS.failed, error_code: errorCode } : {}),
     });
   }
@@ -259,8 +260,4 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
 
 function backoff(attempts: number) {
   return Math.min(BACKOFF_BASE_MS * 2 ** attempts, BACKOFF_MAX_MS);
-}
-
-function message(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }

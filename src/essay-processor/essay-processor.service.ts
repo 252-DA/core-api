@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { AGS_CONFIG, type AgsConfig } from '../ags/ags.config';
+import { STAFF_ROLES } from '../common/constants/course-roles';
+import { isUuid } from '../common/utils/uuid';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { PrismaService } from '../prisma/prisma.service';
@@ -34,7 +36,7 @@ export type VerifiedNotice = {
   }>;
 };
 
-const TEACHER_ROLES = ['instructor', 'ta'];
+const TEACHER_ROLES = STAFF_ROLES;
 
 @Injectable()
 export class EssayProcessorService {
@@ -240,8 +242,4 @@ export class EssayProcessorService {
       visible_to_owner: p.visible_to_owner,
     };
   }
-}
-
-function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value);
 }
