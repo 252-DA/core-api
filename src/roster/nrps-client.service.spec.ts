@@ -1,5 +1,5 @@
 import { AgsTokenError } from '../ags/ags-token.service';
-import type { AgsConfig } from '../ags/ags.config';
+import type { AgsConfig } from '../config/ags.config';
 import {
   NRPS_SCOPE,
   NRPS_UNAUTHORIZED_MESSAGE,

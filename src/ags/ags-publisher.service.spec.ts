@@ -1,6 +1,6 @@
 import { AGS_STATUS } from '../common/constants/ags-status';
+import type { AgsConfig } from '../config/ags.config';
 import { AgsPublisherService } from './ags-publisher.service';
-import type { AgsConfig } from './ags.config';
 import type { AgsScorePayload } from './ags-client.service';
 
 const CONFIG: AgsConfig = {

@@ -5,11 +5,14 @@ import { CanvasModule } from '../canvas/canvas.module';
 import { DocumentModule } from '../document/document.module';
 import { RosterModule } from '../roster/roster.module';
 import { StorageModule } from '../storage/storage.module';
+import {
+  CANVAS_SYNC_CONFIG,
+  canvasSyncConfig,
+} from '../config/canvas-sync.config';
 import { CanvasDocumentSyncService } from './canvas-document-sync.service';
 import { CANVAS_SYNC_QUEUE, CanvasSyncJobsService } from './canvas-sync-jobs.service';
 import { CanvasSyncRunsService } from './canvas-sync-runs.service';
 import { CanvasSyncStatusService } from './canvas-sync-status.service';
-import { CANVAS_SYNC_CONFIG, canvasSyncConfig } from './canvas-sync.config';
 import { CanvasSyncController } from './canvas-sync.controller';
 import { CanvasSyncProcessor } from './canvas-sync.processor';
 import { CanvasTokenStatusService } from './canvas-token-status.service';

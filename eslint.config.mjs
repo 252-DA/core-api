@@ -32,4 +32,19 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/config/**/*.ts', 'src/testing/**/*.ts', '**/*.spec.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'process',
+          property: 'env',
+          message:
+            'Chỉ được đọc process.env trong src/config/** (docs/ke-hoach-tai-cau-truc-core-api.md §2).',
+        },
+      ],
+    },
+  },
 );

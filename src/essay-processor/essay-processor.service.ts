@@ -7,9 +7,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { AGS_CONFIG, type AgsConfig } from '../ags/ags.config';
 import { STAFF_ROLES } from '../common/constants/course-roles';
 import { isUuid } from '../common/utils/uuid';
+import { AGS_CONFIG, type AgsConfig } from '../config/ags.config';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { PrismaService } from '../prisma/prisma.service';

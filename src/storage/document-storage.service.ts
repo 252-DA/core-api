@@ -1,30 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Client as MinioClient } from 'minio';
-
-const DEFAULT_BUCKET = process.env.MINIO__BUCKET_NAME || 'documents';
-
-function createClient() {
-  const endpoint = process.env.MINIO__ENDPOINT || 'minio:9000';
-  const [host, rawPort] = endpoint.split(':');
-
-  return new MinioClient({
-    endPoint: host,
-    port: rawPort ? Number(rawPort) : (process.env.MINIO__SECURE === 'true' ? 443 : 9000),
-    useSSL: process.env.MINIO__SECURE === 'true',
-    accessKey: process.env.MINIO__ACCESS_KEY || 'minioadmin',
-    secretKey: process.env.MINIO__SECRET_KEY || 'minioadmin',
-    // Cloudflare R2 dùng region "auto". Có region thì minio-js bỏ qua bước dò
-    // region của bucket (một request riêng, R2 có thể không trả lời được).
-    // Để trống thì giữ hành vi cũ — MinIO tự dựng, B2.
-    ...(process.env.MINIO__REGION ? { region: process.env.MINIO__REGION } : {}),
-  });
-}
+import { loadStorageConfig } from '../config/storage.config';
 
 @Injectable()
 export class DocumentStorageService {
   private readonly logger = new Logger(DocumentStorageService.name);
-  private readonly client = createClient();
+  private readonly bucket: string;
+  private readonly client: MinioClient;
   private bucketReady?: Promise<void>;
+
+  constructor() {
+    const { bucket, ...clientOptions } = loadStorageConfig();
+    this.bucket = bucket;
+    this.client = new MinioClient(clientOptions);
+  }
 
   async createPresignedUploadUrl(
     objectName: string,
@@ -32,7 +21,7 @@ export class DocumentStorageService {
   ) {
     await this.ensureBucket();
     return this.client.presignedPutObject(
-      DEFAULT_BUCKET,
+      this.bucket,
       objectName,
       expiresInSeconds,
     );
@@ -49,7 +38,7 @@ export class DocumentStorageService {
   ) {
     await this.ensureBucket();
     return this.client.presignedGetObject(
-      DEFAULT_BUCKET,
+      this.bucket,
       objectName,
       expiresInSeconds,
     );
@@ -58,7 +47,7 @@ export class DocumentStorageService {
   /** Ghi file do chính core-api tải về (vd. đề cương lấy từ Canvas). */
   async putObject(objectName: string, content: Buffer, contentType: string) {
     await this.ensureBucket();
-    await this.client.putObject(DEFAULT_BUCKET, objectName, content, content.length, {
+    await this.client.putObject(this.bucket, objectName, content, content.length, {
       'Content-Type': contentType,
     });
   }
@@ -72,15 +61,15 @@ export class DocumentStorageService {
   }
 
   private async ensureBucketExists() {
-    if (await this.client.bucketExists(DEFAULT_BUCKET)) {
+    if (await this.client.bucketExists(this.bucket)) {
       return;
     }
 
     try {
-      await this.client.makeBucket(DEFAULT_BUCKET);
+      await this.client.makeBucket(this.bucket);
     } catch (error: unknown) {
       // Another request may have created the bucket between the check and create.
-      if (!(await this.client.bucketExists(DEFAULT_BUCKET))) {
+      if (!(await this.client.bucketExists(this.bucket))) {
         this.logger.warn(
           `[storage] bucket check notice: ${(error as Error)?.message || error}`,
         );

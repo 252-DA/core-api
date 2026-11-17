@@ -5,7 +5,11 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { errorMessage } from '../common/utils/errors';
-import { hostOf, withoutTrailingSlash } from '../common/utils/url';
+import { hostOf } from '../common/utils/url';
+import {
+  loadCanvasApiConfig,
+  loadCanvasApiEnv,
+} from '../config/canvas-api.config';
 import { CanvasApiError, describeCanvasError } from './canvas-errors';
 
 export type CanvasFile = {
@@ -89,7 +93,7 @@ function originOf(value: string | undefined): string | null {
  * So khớp theo host (bỏ qua http/https) vì Canvas dựng link chuyển hướng bằng
  * scheme của request nội bộ (http) dù tên miền công khai là https.
  */
-export function toInternalCanvasUrl(url: string, env: NodeJS.ProcessEnv = process.env): string {
+export function toInternalCanvasUrl(url: string, env: NodeJS.ProcessEnv = loadCanvasApiEnv()): string {
   const internal = originOf(env.CANVAS_API_URL);
   if (!internal) return url;
   let target: URL;
@@ -115,18 +119,8 @@ export function toInternalCanvasUrl(url: string, env: NodeJS.ProcessEnv = proces
  */
 @Injectable()
 export class CanvasApiClient {
-  private get baseUrl() {
-    const url = process.env.CANVAS_API_URL || process.env.LTI_PLATFORM_URL;
-    return url ? withoutTrailingSlash(url) : undefined;
-  }
-
-  private get token() {
-    return process.env.CANVAS_API_TOKEN;
-  }
-
   private config() {
-    const baseUrl = this.baseUrl;
-    const token = this.token;
+    const { baseUrl, token } = loadCanvasApiConfig();
     if (!baseUrl || !token) {
       throw new ServiceUnavailableException(
         'Chưa cấu hình kết nối Canvas API (CANVAS_API_URL/LTI_PLATFORM_URL và CANVAS_API_TOKEN).',

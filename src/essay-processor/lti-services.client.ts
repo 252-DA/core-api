@@ -1,7 +1,11 @@
 import { BadGatewayException, Inject, Injectable } from '@nestjs/common';
-import { AGS_CONFIG, type AgsConfig } from '../ags/ags.config';
 import { AgsTokenService } from '../ags/ags-token.service';
 import { errorMessage } from '../common/utils/errors';
+import {
+  AGS_CONFIG,
+  resolvePlatformUrl,
+  type AgsConfig,
+} from '../config/ags.config';
 import {
   ASSET_SCOPE,
   PNS_SCOPE,
@@ -41,7 +45,7 @@ export class LtiServicesClient {
     @Inject(AGS_CONFIG) private readonly config: AgsConfig,
   ) {
     try {
-      const platform = new URL(process.env.LTI_PLATFORM_URL || '');
+      const platform = new URL(resolvePlatformUrl() || '');
       this.platform = /^https?:$/.test(platform.protocol) ? platform : null;
     } catch {
       this.platform = null;

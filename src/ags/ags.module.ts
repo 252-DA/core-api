@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AGS_CONFIG, loadAgsConfig } from '../config/ags.config';
 import { PrismaModule } from '../prisma/prisma.module';
-import { AGS_CONFIG, loadAgsConfig } from './ags.config';
 import { AgsTokenService } from './ags-token.service';
 import { AgsClientService } from './ags-client.service';
 import { AgsPublisherService } from './ags-publisher.service';

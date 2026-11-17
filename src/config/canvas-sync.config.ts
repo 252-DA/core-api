@@ -1,3 +1,5 @@
+import { readEnv } from './env';
+
 export const CANVAS_SYNC_CONFIG = Symbol('CANVAS_SYNC_CONFIG');
 
 export interface CanvasSyncConfig {
@@ -6,6 +8,7 @@ export interface CanvasSyncConfig {
   launchCooldownMs: number;
 }
 
+// Giữ riêng vì ném lỗi khi chuỗi không phải số nguyên dương (khác readIntEnv).
 function positiveMs(value: string | undefined, fallback: number): number {
   if (!value?.trim()) return fallback;
   const result = Number(value);
@@ -23,9 +26,9 @@ export function canvasSyncConfig(): CanvasSyncConfig {
       process.env.CANVAS_AUTO_SYNC_ENABLED !== 'false' &&
       !!process.env.CANVAS_API_TOKEN &&
       !!(process.env.CANVAS_API_URL || process.env.LTI_PLATFORM_URL),
-    intervalMs: positiveMs(process.env.CANVAS_SYNC_INTERVAL_MS, 15 * 60_000),
+    intervalMs: positiveMs(readEnv('CANVAS_SYNC_INTERVAL_MS'), 15 * 60_000),
     launchCooldownMs: positiveMs(
-      process.env.CANVAS_SYNC_LAUNCH_COOLDOWN_MS,
+      readEnv('CANVAS_SYNC_LAUNCH_COOLDOWN_MS'),
       2 * 60_000,
     ),
   };

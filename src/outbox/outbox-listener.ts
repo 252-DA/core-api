@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { errorMessage } from '../common/utils/errors';
+import { loadDatabaseConfig } from '../config/database.config';
 
 /**
  * Phần của `pg.Client` mà listener dùng. Tách thành interface để test thay
@@ -35,7 +36,7 @@ type PgModule = {
  * cũng thành sự kiện 'error' và được nối lại.
  */
 export function createPgListenClient(
-  connectionString = process.env.DATABASE_URL,
+  connectionString = loadDatabaseConfig().url,
 ): ListenClient {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { Client } = require('pg') as PgModule;

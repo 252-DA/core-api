@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { importPKCS8, SignJWT, type CryptoKey } from 'jose';
-import { AGS_CONFIG, type AgsConfig } from './ags.config';
+import { AGS_CONFIG, type AgsConfig } from '../config/ags.config';
 
 /** Đổi token sớm hơn hạn một chút để không dùng phải token vừa hết hạn giữa chừng. */
 const EXPIRY_SKEW_MS = 60_000;

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { errorMessage } from '../common/utils/errors';
 import { withoutTrailingSlash } from '../common/utils/url';
-import { AGS_CONFIG, AGS_SCORE_SCOPE, type AgsConfig } from './ags.config';
+import { AGS_CONFIG, AGS_SCORE_SCOPE, type AgsConfig } from '../config/ags.config';
 import { AgsTokenService } from './ags-token.service';
 
 const SCORE_CONTENT_TYPE = 'application/vnd.ims.lis.v1.score+json';

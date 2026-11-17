@@ -2,11 +2,11 @@ import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { LMS_ADMIN_ROLE, STAFF_ROLES } from '../common/constants/course-roles';
-import { PrismaService } from '../prisma/prisma.service';
 import {
   CANVAS_SYNC_CONFIG,
   type CanvasSyncConfig,
-} from './canvas-sync.config';
+} from '../config/canvas-sync.config';
+import { PrismaService } from '../prisma/prisma.service';
 
 export const CANVAS_SYNC_QUEUE = 'canvas_sync';
 export const CANVAS_SYNC_COURSE = 'sync_course';

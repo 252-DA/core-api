@@ -1,5 +1,5 @@
 import { AgsClientService } from './ags-client.service';
-import { AGS_SCORE_SCOPE, type AgsConfig } from './ags.config';
+import { AGS_SCORE_SCOPE, type AgsConfig } from '../config/ags.config';
 
 describe('AgsClientService', () => {
   const config = { requestTimeoutMs: 5000 } as AgsConfig;

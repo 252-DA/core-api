@@ -5,11 +5,11 @@ import {
   CanvasApiClient,
   type CanvasTokenCheck,
 } from '../canvas/canvas-api.client';
-import { CANVAS_SYNC_QUEUE } from './canvas-sync-jobs.service';
 import {
   CANVAS_SYNC_CONFIG,
   type CanvasSyncConfig,
-} from './canvas-sync.config';
+} from '../config/canvas-sync.config';
+import { CANVAS_SYNC_QUEUE } from './canvas-sync-jobs.service';
 
 export const CANVAS_TOKEN_CHECK = 'check_token';
 export const CANVAS_TOKEN_STATUS_KEY = 'canvas:token-status';

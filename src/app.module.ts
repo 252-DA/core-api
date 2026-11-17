@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { DiscoveryModule } from '@nestjs/core';
 import { BullModule } from '@nestjs/bullmq';
 import { LoggerModule } from 'nestjs-pino';
+import { loadRedisConfig } from './config/redis.config';
 import { BullMqErrorLogger } from './logging/bullmq-error-logger.service';
 import { getSharedLoggerModuleParams } from './logging/pino-config';
 import { PrismaModule } from './prisma/prisma.module';
@@ -26,26 +27,6 @@ import { EssayProcessorModule } from './essay-processor/essay-processor.module';
 import { ChatModule } from './chat/chat.module';
 import { LearningAgentModule } from './learning-agent/learning-agent.module';
 
-// Parse Redis URL for BullMQ connection
-const getRedisConnection = () => {
-  const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-  try {
-    const parsed = new URL(redisUrl);
-    return {
-      host: parsed.hostname || 'localhost',
-      port: parsed.port ? parseInt(parsed.port, 10) : 6379,
-      username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
-      password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
-    };
-  } catch (err) {
-    // Fallback if URL is invalid or in a different format
-    return {
-      host: 'localhost',
-      port: 6379,
-    };
-  }
-};
-
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -53,7 +34,7 @@ const getRedisConnection = () => {
     }),
     LoggerModule.forRoot(getSharedLoggerModuleParams()),
     BullModule.forRoot({
-      connection: getRedisConnection(),
+      connection: loadRedisConfig(),
     }),
     DiscoveryModule,
     PrismaModule,

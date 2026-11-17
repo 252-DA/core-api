@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { COURSE_ROLES } from '../common/constants/course-roles';
+import { resolvePlatformUrl } from '../config/ags.config';
 import { CanvasApiClient } from '../canvas/canvas-api.client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -122,7 +123,7 @@ export class RosterSyncService {
   /** URL đã lưu từ lần launch, hoặc suy ra từ id khóa học Canvas rồi lưu lại. */
   private async resolveNrpsUrl(ref: CourseRefRow): Promise<string> {
     if (ref.nrps_context_memberships_url) return ref.nrps_context_memberships_url;
-    const platform = process.env.LTI_PLATFORM_URL?.trim().replace(/\/+$/, '');
+    const platform = resolvePlatformUrl();
     if (!platform)
       throw new ServiceUnavailableException('Chưa cấu hình LTI_PLATFORM_URL nên không suy ra được địa chỉ danh sách lớp.');
     let platformCourseId = canvasNumericId(ref.lms_platform_course_id);

@@ -1,7 +1,11 @@
 import { BadGatewayException, Inject, Injectable, Logger } from '@nestjs/common';
 import { hostOf } from '../common/utils/url';
+import {
+  AGS_CONFIG,
+  resolvePlatformUrl,
+  type AgsConfig,
+} from '../config/ags.config';
 import { AgsTokenService, AgsTokenError } from '../ags/ags-token.service';
-import { AGS_CONFIG, type AgsConfig } from '../ags/ags.config';
 
 export const NRPS_SCOPE =
   'https://purl.imsglobal.org/spec/lti-nrps/scope/contextmembership.readonly';
@@ -83,7 +87,7 @@ export class NrpsClientService {
     } catch {
       throw new NrpsError('Địa chỉ danh sách lớp (NRPS) không hợp lệ');
     }
-    const trusted = hostOf(process.env.LTI_PLATFORM_URL);
+    const trusted = hostOf(resolvePlatformUrl());
     if (!/^https?:$/.test(url.protocol) || (trusted && url.host !== trusted))
       throw new NrpsError('Địa chỉ danh sách lớp (NRPS) không thuộc Canvas đã cấu hình');
     if (!url.searchParams.has('limit')) url.searchParams.set('limit', String(PAGE_LIMIT));

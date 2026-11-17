@@ -1,7 +1,8 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { AGS_CONFIG, type AgsConfig } from '../ags/ags.config';
 import { errorMessage } from '../common/utils/errors';
+import { AGS_CONFIG, type AgsConfig } from '../config/ags.config';
+import { loadEssayConfig } from '../config/essay.config';
 import { DocumentStorageService } from '../storage/document-storage.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -44,7 +45,7 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
   private running = false;
   private warnedMissingTable = false;
   private timer: NodeJS.Timeout | null = null;
-  private readonly intervalMs = Number(process.env.ESSAY_POLL_INTERVAL_MS) || 10_000;
+  private readonly intervalMs = loadEssayConfig().pollIntervalMs;
 
   constructor(
     private readonly prisma: PrismaService,

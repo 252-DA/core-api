@@ -3,6 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import { FastifyAdapter } from '@nestjs/platform-fastify';
 import { Logger as PinoNestLogger, type Params, PinoLogger } from 'nestjs-pino';
 import pino, { type DestinationStream, type LoggerOptions } from 'pino';
+import { loadLoggingConfig } from '../config/logging.config';
 
 export const REQUEST_ID_HEADER = 'x-request-id';
 export const REQUEST_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
@@ -86,7 +87,7 @@ export function serializeResponse(res: ResponseLike) {
  * Dựng tùy chọn pino thuần từ env, không phụ thuộc trạng thái ngoài để dễ unit test.
  */
 export function buildPinoOptions(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = loadLoggingConfig(),
 ): LoggerOptions {
   const jsonLogs = isJsonLogsEnabled(env.APP__JSON_LOGS);
 
@@ -140,7 +141,7 @@ export function buildPinoOptions(
  * Dựng cấu hình cho LoggerModule của nestjs-pino (access log, request_id, bỏ qua GET /metrics).
  */
 export function buildLoggerModuleParams(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = loadLoggingConfig(),
   stream?: DestinationStream,
 ): Params {
   const pinoOptions = buildPinoOptions(env);

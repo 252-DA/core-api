@@ -6,8 +6,8 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { AGS_STATUS } from '../common/constants/ags-status';
+import { AGS_CONFIG, type AgsConfig } from '../config/ags.config';
 import { PrismaService } from '../prisma/prisma.service';
-import { AGS_CONFIG, type AgsConfig } from './ags.config';
 import { AgsClientService } from './ags-client.service';
 import { buildScoreComment } from './ags-score-comment';
 

@@ -8,6 +8,7 @@
  */
 
 import { withoutTrailingSlash } from '../common/utils/url';
+import { readEnv } from './env';
 
 export const AGS_SCORE_SCOPE =
   'https://purl.imsglobal.org/spec/lti-ags/scope/score';
@@ -37,18 +38,19 @@ export interface AgsConfig {
   toolUrl?: string;
 }
 
-function env(name: string): string | undefined {
-  const value = process.env[name]?.trim();
-  return value ? value : undefined;
-}
-
+// Giữ riêng vì chỉ nhận số nguyên dương (> 0), khác readIntEnv.
 function intEnv(name: string, fallback: number): number {
-  const raw = env(name);
+  const raw = readEnv(name);
   if (!raw) {
     return fallback;
   }
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function resolvePlatformUrl(): string | undefined {
+  const raw = readEnv('LTI_PLATFORM_URL');
+  return raw ? withoutTrailingSlash(raw) : undefined;
 }
 
 /**
@@ -57,15 +59,13 @@ function intEnv(name: string, fallback: number): number {
  * Lệch nhau ở đây thì AGS tắt âm thầm dù web launch vẫn chạy bình thường.
  */
 export function resolveTokenUrl(): string {
-  const explicit = env('LTI_TOKEN_URL');
+  const explicit = readEnv('LTI_TOKEN_URL');
   if (explicit) {
     return withoutTrailingSlash(explicit);
   }
 
-  const platformUrl = withoutTrailingSlash(
-    env('LTI_PLATFORM_URL') || 'http://local.edly.io',
-  );
-  switch (env('LTI_LMS_TYPE')) {
+  const platformUrl = resolvePlatformUrl() || 'http://local.edly.io';
+  switch (readEnv('LTI_LMS_TYPE')) {
     case 'moodle':
       return `${platformUrl}/mod/lti/token.php`;
     case 'canvas':
@@ -80,7 +80,7 @@ export function resolveTokenUrl(): string {
  * web dùng cho launch. Canvas tìm tool của bài nộp theo tên miền của URL này.
  */
 export function resolveToolUrl(): string | undefined {
-  const raw = env('LTI_TOOL_URL') || env('LTI_REDIRECT_URI');
+  const raw = readEnv('LTI_TOOL_URL') || readEnv('LTI_REDIRECT_URI');
   if (!raw) return undefined;
   try {
     const url = new URL(raw);
@@ -91,15 +91,15 @@ export function resolveToolUrl(): string | undefined {
 }
 
 export function loadAgsConfig(): AgsConfig {
-  const clientId = env('LTI_CLIENT_ID') || env('LTI_KEY_ID') || '';
+  const clientId = readEnv('LTI_CLIENT_ID') || readEnv('LTI_KEY_ID') || '';
   const tokenUrl = resolveTokenUrl();
-  const privateKeyPath = env('LTI_PRIVATE_KEY_PATH') || '';
+  const privateKeyPath = readEnv('LTI_PRIVATE_KEY_PATH') || '';
 
   // Bật mặc định khi có đủ danh tính tool để ký client assertion; AGS_ENABLED
   // chỉ là công tắc tắt tay. Bật mà chưa có platform thật cũng không sao:
   // poller chỉ gọi ra ngoài khi tồn tại attempt gắn line item, tức là đã có
   // một cú launch AGS thật sự.
-  const explicit = env('AGS_ENABLED')?.toLowerCase();
+  const explicit = readEnv('AGS_ENABLED')?.toLowerCase();
   const configured = Boolean(clientId && privateKeyPath);
   const enabled =
     explicit === 'false' ? false : explicit === 'true' || configured;
@@ -107,7 +107,7 @@ export function loadAgsConfig(): AgsConfig {
   return {
     enabled,
     clientId,
-    keyId: env('LTI_KEY_ID') || 'ai-nextjs-1',
+    keyId: readEnv('LTI_KEY_ID') || 'ai-nextjs-1',
     privateKeyPath,
     tokenUrl,
     pollIntervalMs: intEnv('AGS_POLL_INTERVAL_MS', 15000),
