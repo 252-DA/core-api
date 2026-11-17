@@ -1,10 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job, UnrecoverableError } from 'bullmq';
-import { describeCanvasError } from '../../integrations/canvas/canvas-errors';
-import { CANVAS_SYNC_QUEUE } from '../../messaging/queues';
-import { RosterSyncService } from '../roster/roster-sync.service';
-import { CanvasDocumentSyncService } from './canvas-document-sync.service';
+import { describeCanvasError } from '../../../integrations/canvas/canvas-errors';
+import { CANVAS_SYNC_QUEUE } from '../../../messaging/queues';
+import { RosterSyncService } from '../../roster/roster-sync.service';
+import { CanvasDocumentSyncService } from '../services/canvas-document-sync.service';
 import {
   CANVAS_SYNC_COURSE,
   CANVAS_SYNC_SWEEP,
@@ -16,11 +16,11 @@ import {
   CanvasSyncRunsService,
   type SyncRunKind,
   type SyncRunTrigger,
-} from './canvas-sync-runs.service';
+} from '../services/canvas-sync-runs.service';
 import {
   CANVAS_TOKEN_CHECK,
   CanvasTokenStatusService,
-} from './canvas-token-status.service';
+} from '../services/canvas-token-status.service';
 
 const RUN_TRIGGER: Record<SyncCourseJob['trigger'], SyncRunTrigger> = {
   manual: 'manual',

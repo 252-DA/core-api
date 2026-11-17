@@ -1,16 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { runBestEffort } from '../../common/utils/best-effort';
-import { isWithinCodePoints } from '../../common/utils/text-length';
-import { extraKeys, isPlainObject } from '../../common/utils/type-guards';
-import { isUuid } from '../../common/utils/uuid';
-import { PrismaService } from '../../infra/prisma/prisma.service';
+import { runBestEffort } from '../../../common/utils/best-effort';
+import { isWithinCodePoints } from '../../../common/utils/text-length';
+import { extraKeys, isPlainObject } from '../../../common/utils/type-guards';
+import { isUuid } from '../../../common/utils/uuid';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
-} from '../../messaging/worker-results/worker-result-envelope';
-import { WorkerResultHandler } from '../../messaging/worker-results/worker-result-handler';
-import { ESSAY_GRADING_ERROR_CODES, ESSAY_STATUS, type EssayResult } from './essay-grading';
+} from '../../../messaging/worker-results/worker-result-envelope';
+import { WorkerResultHandler } from '../../../messaging/worker-results/worker-result-handler';
+import { ESSAY_GRADING_ERROR_CODES, ESSAY_STATUS, type EssayResult } from '../essay-grading';
 
 export type EssayGradingResult =
   | { essaySubmissionId: string; status: 'GRADED'; result: EssayResult }

@@ -4,12 +4,12 @@ import { Queue } from 'bullmq';
 import {
   CanvasApiClient,
   type CanvasTokenCheck,
-} from '../../integrations/canvas/canvas-api.client';
+} from '../../../integrations/canvas/canvas-api.client';
 import {
   CANVAS_SYNC_CONFIG,
   type CanvasSyncConfig,
-} from '../../config/canvas-sync.config';
-import { CANVAS_SYNC_QUEUE } from '../../messaging/queues';
+} from '../../../config/canvas-sync.config';
+import { CANVAS_SYNC_QUEUE } from '../../../messaging/queues';
 
 export const CANVAS_TOKEN_CHECK = 'check_token';
 export const CANVAS_TOKEN_STATUS_KEY = 'canvas:token-status';

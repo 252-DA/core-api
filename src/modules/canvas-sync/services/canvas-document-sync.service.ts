@@ -3,24 +3,24 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { documents } from '@prisma/client';
-import { STAFF_ROLES } from '../../common/constants/course-roles';
-import { safeFileName } from '../../common/utils/file-name';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import type { BffClaims } from '../../auth/bff-claims';
-import { AuthzService } from '../../auth/authz.service';
+import { STAFF_ROLES } from '../../../common/constants/course-roles';
+import { safeFileName } from '../../../common/utils/file-name';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
+import type { BffClaims } from '../../../auth/bff-claims';
+import { AuthzService } from '../../../auth/authz.service';
 import {
   CanvasApiClient,
   type CanvasFile,
   type CanvasModule,
-} from '../../integrations/canvas/canvas-api.client';
-import { CanvasCourseService } from '../../integrations/canvas/canvas-course.service';
+} from '../../../integrations/canvas/canvas-api.client';
+import { CanvasCourseService } from '../../../integrations/canvas/canvas-course.service';
 import {
   DocumentService,
   NEXT_PROCESSING_GENERATION,
-} from '../document/document.service';
-import { DocumentStorageService } from '../../infra/storage/document-storage.service';
-import { DOCUMENT_PROCESSING_QUEUE } from '../../messaging/queues';
-import { CanvasSyncJobsService, type SyncActor } from './canvas-sync-jobs.service';
+} from '../../document/document.service';
+import { DocumentStorageService } from '../../../infra/storage/document-storage.service';
+import { DOCUMENT_PROCESSING_QUEUE } from '../../../messaging/queues';
+import { CanvasSyncJobsService, type SyncActor } from '../jobs/canvas-sync-jobs.service';
 import {
   chapterRefFromFileName,
   classifyModule,
@@ -30,7 +30,7 @@ import {
   type DocumentRole,
   type ModuleClass,
   type SessionRow,
-} from '../../integrations/canvas/canvas-placement';
+} from '../../../integrations/canvas/canvas-placement';
 
 const MANAGE_ROLES = STAFF_ROLES;
 const ROLES: DocumentRole[] = ['lecture', 'reference', 'exercise'];

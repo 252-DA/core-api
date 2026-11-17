@@ -5,7 +5,7 @@ import { parseContentGenerationResult } from '../../modules/content-generation/h
 import { parseEnrichmentContentPayload } from '../../modules/content-generation/handlers/enrichment-content-result.handler';
 import { parseCurriculumImportEnvelope } from '../../modules/curriculum/handlers/curriculum-import-result.handler';
 import { parseDocumentProcessingPayload } from '../../modules/document/handlers/document-processing-result.handler';
-import { parseEssayGradingResult } from '../../modules/essay-processor/essay-grading-result.handler';
+import { parseEssayGradingResult } from '../../modules/essay-processor/handlers/essay-grading-result.handler';
 import { parseMicroContentGradingResult } from '../../modules/micro-content/handlers/micro-content-grading-result.handler';
 import { parseMicroContentVideoPayload } from '../../modules/micro-content/handlers/micro-content-video-result.handler';
 import { parseQuizGradingResult } from '../../modules/quiz/handlers/quiz-grading-result.handler';

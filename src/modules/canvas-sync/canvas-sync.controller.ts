@@ -11,8 +11,8 @@ import {
 import type { BffClaims } from '../../auth/bff-claims';
 import { BffJwtGuard } from '../../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../../auth/current-bff-claims.decorator';
-import { CanvasDocumentSyncService } from './canvas-document-sync.service';
-import { CanvasSyncStatusService } from './canvas-sync-status.service';
+import { CanvasDocumentSyncService } from './services/canvas-document-sync.service';
+import { CanvasSyncStatusService } from './services/canvas-sync-status.service';
 import {
   SyncCanvasDocumentsDto,
   UpdateDocumentPlacementDto,

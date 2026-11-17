@@ -1,12 +1,12 @@
 import { BadGatewayException } from '@nestjs/common';
-import { CanvasApiError } from '../../integrations/canvas/canvas-errors';
+import { CanvasApiError } from '../../../integrations/canvas/canvas-errors';
 import { CanvasSyncProcessor } from './canvas-sync.processor';
 import {
   CANVAS_ROSTER_SYNC,
   CANVAS_SYNC_COURSE,
   CANVAS_SYNC_SWEEP,
 } from './canvas-sync-jobs.service';
-import { CANVAS_TOKEN_CHECK } from './canvas-token-status.service';
+import { CANVAS_TOKEN_CHECK } from '../services/canvas-token-status.service';
 
 describe('CanvasSyncProcessor', () => {
   function setup() {

@@ -5,7 +5,7 @@ import { StorageModule } from '../../infra/storage/storage.module';
 import { LtiPlatformModule } from '../../integrations/lti-platform/lti-platform.module';
 import { EssayProcessorService } from './essay-processor.service';
 import { EssayReportPublisherService } from './essay-report.publisher';
-import { EssayGradingResultHandler } from './essay-grading-result.handler';
+import { EssayGradingResultHandler } from './handlers/essay-grading-result.handler';
 import { LtiServicesClient } from './lti-services.client';
 import { EssayProcessorController } from './essay-processor.controller';
 

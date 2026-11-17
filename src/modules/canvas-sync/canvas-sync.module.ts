@@ -8,13 +8,13 @@ import {
   CANVAS_SYNC_CONFIG,
   canvasSyncConfig,
 } from '../../config/canvas-sync.config';
-import { CanvasDocumentSyncService } from './canvas-document-sync.service';
-import { CanvasSyncJobsService } from './canvas-sync-jobs.service';
-import { CanvasSyncRunsService } from './canvas-sync-runs.service';
-import { CanvasSyncStatusService } from './canvas-sync-status.service';
+import { CanvasDocumentSyncService } from './services/canvas-document-sync.service';
+import { CanvasSyncJobsService } from './jobs/canvas-sync-jobs.service';
+import { CanvasSyncRunsService } from './services/canvas-sync-runs.service';
+import { CanvasSyncStatusService } from './services/canvas-sync-status.service';
 import { CanvasSyncController } from './canvas-sync.controller';
-import { CanvasSyncProcessor } from './canvas-sync.processor';
-import { CanvasTokenStatusService } from './canvas-token-status.service';
+import { CanvasSyncProcessor } from './jobs/canvas-sync.processor';
+import { CanvasTokenStatusService } from './services/canvas-token-status.service';
 
 @Module({
   imports: [

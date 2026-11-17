@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import { InvalidWorkerResultError } from '../../messaging/worker-results/worker-result-envelope';
 import { QuizGradingResultHandler } from './handlers/quiz-grading-result.handler';
 import { MicroContentGradingResultHandler } from '../micro-content/handlers/micro-content-grading-result.handler';
-import { EssayGradingResultHandler } from '../essay-processor/essay-grading-result.handler';
+import { EssayGradingResultHandler } from '../essay-processor/handlers/essay-grading-result.handler';
 import { EssayGradingService } from './services/essay-grading.service';
 
 /**
