@@ -6,17 +6,17 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
-import { STAFF_ROLES } from '../../common/constants/course-roles';
-import { isUuid } from '../../common/utils/uuid';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { AuthzService } from '../../auth/authz.service';
-import type { BffClaims } from '../../auth/bff-claims';
+import { STAFF_ROLES } from '../../../common/constants/course-roles';
+import { isUuid } from '../../../common/utils/uuid';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
+import { AuthzService } from '../../../auth/authz.service';
+import type { BffClaims } from '../../../auth/bff-claims';
 import {
   answerGradingEvent,
   GRADING_STATUS,
   lockAwaitingGroup,
   releaseIfGraded,
-} from '../question/answer-grading';
+} from '../../question/answer-grading';
 
 const STAFF = STAFF_ROLES;
 const MAX_FEEDBACK = 2000;

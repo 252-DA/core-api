@@ -1,5 +1,5 @@
 import { QuizService } from './quiz.service';
-import type { BffClaims } from '../../auth/bff-claims';
+import type { BffClaims } from '../../../auth/bff-claims';
 
 const COURSE = '33333333-3333-4333-8333-333333333333';
 const LESSON = '44444444-4444-4444-8444-444444444444';

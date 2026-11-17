@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
-import { AGS_STATUS } from '../../common/constants/ags-status';
-import { GRADING_STATUS } from '../question/answer-grading';
-import type { QuizSnapshotItem } from './quiz.types';
+import { AGS_STATUS } from '../../../common/constants/ags-status';
+import { GRADING_STATUS } from '../../question/answer-grading';
+import type { QuizSnapshotItem } from '../quiz.types';
 
 /** Trạng thái điểm của một lượt nộp so với sổ điểm Canvas, theo góc nhìn người dùng. */
 export type GradeSyncState =

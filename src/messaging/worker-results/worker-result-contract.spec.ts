@@ -8,7 +8,7 @@ import { parseDocumentProcessingPayload } from '../../modules/document/document-
 import { parseEssayGradingResult } from '../../modules/essay-processor/essay-grading-result.handler';
 import { parseMicroContentGradingResult } from '../../modules/micro-content/handlers/micro-content-grading-result.handler';
 import { parseMicroContentVideoPayload } from '../../modules/micro-content/handlers/micro-content-video-result.handler';
-import { parseQuizGradingResult } from '../../modules/quiz/quiz-grading-result.handler';
+import { parseQuizGradingResult } from '../../modules/quiz/handlers/quiz-grading-result.handler';
 import {
   InvalidWorkerResultError,
   parseWorkerResultEnvelope,

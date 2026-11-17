@@ -1,10 +1,10 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { QuizService } from './quiz.service';
-import { EssayGradingService } from './essay-grading.service';
-import { BffJwtGuard } from '../../auth/bff-jwt.guard';
-import { CurrentBffClaims } from '../../auth/current-bff-claims.decorator';
-import type { BffClaims } from '../../auth/bff-claims';
-import { GradeEssayAnswerDto, SubmitQuizDto } from './dto/quiz.dto';
+import { QuizService } from '../services/quiz.service';
+import { EssayGradingService } from '../services/essay-grading.service';
+import { BffJwtGuard } from '../../../auth/bff-jwt.guard';
+import { CurrentBffClaims } from '../../../auth/current-bff-claims.decorator';
+import type { BffClaims } from '../../../auth/bff-claims';
+import { GradeEssayAnswerDto, SubmitQuizDto } from '../dto/quiz.dto';
 
 @Controller('api/quiz')
 @UseGuards(BffJwtGuard)

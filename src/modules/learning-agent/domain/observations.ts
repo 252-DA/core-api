@@ -1,5 +1,5 @@
-import { GRADING_STATUS } from '../question/answer-grading';
-import { isQuestionType, type QuestionType } from '../question/question-types';
+import { GRADING_STATUS } from '../../question/answer-grading';
+import { isQuestionType, type QuestionType } from '../../question/question-types';
 
 /**
  * Chuẩn hoá lượt làm bài thành quan sát cho mô hình người học: quy tắc ở

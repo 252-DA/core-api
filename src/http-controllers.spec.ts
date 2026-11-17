@@ -31,11 +31,11 @@ import { MicroContentService } from './modules/micro-content/services/micro-cont
 import { MicroContentVideoService } from './modules/micro-content/services/micro-content-video.service';
 import { ModelSettingsController } from './modules/model-settings/model-settings.controller';
 import { ModelSettingsService } from './modules/model-settings/model-settings.service';
-import { EssayGradingService } from './modules/quiz/essay-grading.service';
-import { QuizController } from './modules/quiz/quiz.controller';
-import { QuizSetController } from './modules/quiz/quiz-set.controller';
-import { QuizSetService } from './modules/quiz/quiz-set.service';
-import { QuizService } from './modules/quiz/quiz.service';
+import { EssayGradingService } from './modules/quiz/services/essay-grading.service';
+import { QuizController } from './modules/quiz/controllers/quiz.controller';
+import { QuizSetController } from './modules/quiz/controllers/quiz-set.controller';
+import { QuizSetService } from './modules/quiz/services/quiz-set.service';
+import { QuizService } from './modules/quiz/services/quiz.service';
 import { ReviewController } from './modules/review/review.controller';
 import { ReviewService } from './modules/review/review.service';
 import { VideoAssetController } from './modules/video-asset/video-asset.controller';

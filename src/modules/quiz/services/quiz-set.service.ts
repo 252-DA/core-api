@@ -6,27 +6,27 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { AGS_STATUS } from '../../common/constants/ags-status';
-import { COURSE_ROLES, STAFF_ROLES } from '../../common/constants/course-roles';
-import { isUuid } from '../../common/utils/uuid';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { AuthzService } from '../../auth/authz.service';
-import type { BffClaims } from '../../auth/bff-claims';
-import { CanvasApiClient } from '../../integrations/canvas/canvas-api.client';
-import { CanvasCourseService } from '../../integrations/canvas/canvas-course.service';
+import { AGS_STATUS } from '../../../common/constants/ags-status';
+import { COURSE_ROLES, STAFF_ROLES } from '../../../common/constants/course-roles';
+import { isUuid } from '../../../common/utils/uuid';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
+import { AuthzService } from '../../../auth/authz.service';
+import type { BffClaims } from '../../../auth/bff-claims';
+import { CanvasApiClient } from '../../../integrations/canvas/canvas-api.client';
+import { CanvasCourseService } from '../../../integrations/canvas/canvas-course.service';
 import {
   loadCanvasQuizContext,
   loadQuizBuilderContext,
 } from './quiz-set-context';
-import { AgsPublisherService } from '../ags/ags-publisher.service';
-import { CourseRosterRepository } from '../roster/course-roster.repository';
-import type { QuizSnapshotItem } from './quiz.types';
+import { AgsPublisherService } from '../../ags/ags-publisher.service';
+import { CourseRosterRepository } from '../../roster/course-roster.repository';
+import type { QuizSnapshotItem } from '../quiz.types';
 import {
   groupSubmissions,
   learnerResults,
   reviewOf,
   staffResults,
-} from './quiz-set-results';
+} from '../domain/quiz-set-results';
 import {
   answersRevealed,
   closesAt,
@@ -39,9 +39,9 @@ import {
   withCanvasSettings,
   type CanvasLinkSettings,
   type ItemOrder,
-} from './quiz-set-exam';
-import { parseBlueprint } from './quiz-blueprint';
-import { gradeAnswer } from '../question/question-types';
+} from '../domain/quiz-set-exam';
+import { parseBlueprint } from '../domain/quiz-blueprint';
+import { gradeAnswer } from '../../question/question-types';
 import {
   answerGradingEvent,
   GRADING_STATUS,
@@ -49,7 +49,7 @@ import {
   rowAgsStatus,
   submissionScore,
   type GradingAnswer,
-} from '../question/answer-grading';
+} from '../../question/answer-grading';
 
 @Injectable()
 export class QuizSetService {

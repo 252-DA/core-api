@@ -1,5 +1,5 @@
-import { AuthzService } from '../../auth/authz.service';
-import type { BffClaims } from '../../auth/bff-claims';
+import { AuthzService } from '../../../auth/authz.service';
+import type { BffClaims } from '../../../auth/bff-claims';
 import { QuizSetService } from './quiz-set.service';
 
 const COURSE = '00000000-0000-0000-0000-000000000001';

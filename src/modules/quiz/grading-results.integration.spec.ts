@@ -2,10 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { InvalidWorkerResultError } from '../../messaging/worker-results/worker-result-envelope';
-import { QuizGradingResultHandler } from './quiz-grading-result.handler';
+import { QuizGradingResultHandler } from './handlers/quiz-grading-result.handler';
 import { MicroContentGradingResultHandler } from '../micro-content/handlers/micro-content-grading-result.handler';
 import { EssayGradingResultHandler } from '../essay-processor/essay-grading-result.handler';
-import { EssayGradingService } from './essay-grading.service';
+import { EssayGradingService } from './services/essay-grading.service';
 
 /**
  * Ba handler kết quả chấm chạy thật trên PostgreSQL đã áp đủ migration (CHECK

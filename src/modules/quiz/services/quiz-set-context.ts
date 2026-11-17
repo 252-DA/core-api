@@ -1,14 +1,14 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { isUuid } from '../../common/utils/uuid';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { CanvasApiClient } from '../../integrations/canvas/canvas-api.client';
-import { CanvasCourseService } from '../../integrations/canvas/canvas-course.service';
+import { isUuid } from '../../../common/utils/uuid';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
+import { CanvasApiClient } from '../../../integrations/canvas/canvas-api.client';
+import { CanvasCourseService } from '../../../integrations/canvas/canvas-course.service';
 import {
   classifyModule,
   resolveChapterCode,
-} from '../../integrations/canvas/canvas-placement';
-import { settingsView } from './quiz-set-exam';
-import type { QuizSnapshotItem } from './quiz.types';
+} from '../../../integrations/canvas/canvas-placement';
+import { settingsView } from '../domain/quiz-set-exam';
+import type { QuizSnapshotItem } from '../quiz.types';
 
 export async function loadCanvasQuizContext(
   deps: {

@@ -1,12 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
-import { AGS_STATUS } from '../../common/constants/ags-status';
-import { COURSE_ROLES } from '../../common/constants/course-roles';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { AuthzService } from '../../auth/authz.service';
-import type { BffClaims } from '../../auth/bff-claims';
-import { gradeAnswer } from '../question/question-types';
+import { AGS_STATUS } from '../../../common/constants/ags-status';
+import { COURSE_ROLES } from '../../../common/constants/course-roles';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
+import { AuthzService } from '../../../auth/authz.service';
+import type { BffClaims } from '../../../auth/bff-claims';
+import { gradeAnswer } from '../../question/question-types';
 import {
   answerGradingEvent,
   GRADING_STATUS,
@@ -14,7 +14,7 @@ import {
   rowAgsStatus,
   submissionScore,
   type GradingAnswer,
-} from '../question/answer-grading';
+} from '../../question/answer-grading';
 
 @Injectable()
 export class QuizService {

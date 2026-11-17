@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { isUuid } from '../../common/utils/uuid';
+import { isUuid } from '../../../common/utils/uuid';
 
 /** Ma trận đề: mỗi ô là số câu của một LO ở một mức Bloom (1–6). */
 export interface QuizBlueprint {

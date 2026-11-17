@@ -5,21 +5,21 @@ import { isUuid } from '../../common/utils/uuid';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { AuthzService } from '../../auth/authz.service';
 import type { BffClaims } from '../../auth/bff-claims';
-import { answersRevealed, withCanvasSettings } from '../quiz/quiz-set-exam';
+import { answersRevealed, withCanvasSettings } from '../quiz/domain/quiz-set-exam';
 import type { QuizSnapshotItem } from '../quiz/quiz.types';
 import { CourseRosterRepository } from '../roster/course-roster.repository';
-import { BKT_DEFAULTS, MASTERY_DEFAULTS } from './bkt';
-import { learnerLoStates, type LoState } from './learner-state';
-import { bktPolicy } from './mastery-policy';
+import { BKT_DEFAULTS, MASTERY_DEFAULTS } from './domain/bkt';
+import { learnerLoStates, type LoState } from './domain/learner-state';
+import { bktPolicy } from './domain/mastery-policy';
 import {
   duplicateKey,
   normalizeAttempts,
   type AttemptEvidence,
   type NormalizedEvidence,
-} from './observations';
-import { plan, type Decision, type PlannerLo } from './planner';
-import { dueLoIds, reviewQueue, type ReviewQueueEntry } from './review-queue';
-import { localDayStart, REVIEW_DEFAULTS } from './review-schedule';
+} from './domain/observations';
+import { plan, type Decision, type PlannerLo } from './domain/planner';
+import { dueLoIds, reviewQueue, type ReviewQueueEntry } from './domain/review-queue';
+import { localDayStart, REVIEW_DEFAULTS } from './domain/review-schedule';
 
 /** Trạng thái câu được dùng trong đề, cũng là trạng thái câu được vào kho luyện. */
 const POOL_STATUSES = ['APPROVED', 'PUBLISHED'];

@@ -1,5 +1,5 @@
 import { EssayGradingService } from './essay-grading.service';
-import type { BffClaims } from '../../auth/bff-claims';
+import type { BffClaims } from '../../../auth/bff-claims';
 
 const COURSE = '00000000-0000-0000-0000-000000000001';
 const TEACHER = '00000000-0000-0000-0000-000000000002';

@@ -1,4 +1,4 @@
-import type { QuestionType } from '../question/question-types';
+import type { QuestionType } from '../../question/question-types';
 
 /**
  * Bayesian Knowledge Tracing theo LO: docs/bao-cao-learning-agent.md §6.2–6.4.

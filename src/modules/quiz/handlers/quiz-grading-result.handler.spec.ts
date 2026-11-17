@@ -1,13 +1,13 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { Logger } from '@nestjs/common';
 import { resolve } from 'node:path';
-import { CONTRACTS_DIR } from '../../testing/repo-paths';
-import { InvalidWorkerResultError } from '../../messaging/worker-results/worker-result-envelope';
+import { CONTRACTS_DIR } from '../../../testing/repo-paths';
+import { InvalidWorkerResultError } from '../../../messaging/worker-results/worker-result-envelope';
 import {
   parseQuizGradingResult,
   QuizGradingResultHandler,
 } from './quiz-grading-result.handler';
-import { submissionScore } from '../question/answer-grading';
+import { submissionScore } from '../../question/answer-grading';
 
 const COURSE = '33333333-3333-4333-8333-333333333333';
 const SUBMISSION = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

@@ -1,14 +1,14 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { QuizSetService } from './quiz-set.service';
-import { BffJwtGuard } from '../../auth/bff-jwt.guard';
-import { CurrentBffClaims } from '../../auth/current-bff-claims.decorator';
-import type { BffClaims } from '../../auth/bff-claims';
+import { QuizSetService } from '../services/quiz-set.service';
+import { BffJwtGuard } from '../../../auth/bff-jwt.guard';
+import { CurrentBffClaims } from '../../../auth/current-bff-claims.decorator';
+import type { BffClaims } from '../../../auth/bff-claims';
 import {
   CreateQuizSetDto,
   QuizBuilderContextDto,
   StartQuizSetDto,
   SubmitQuizSetDto,
-} from './dto/quiz.dto';
+} from '../dto/quiz.dto';
 
 @Controller('api/quiz-sets')
 @UseGuards(BffJwtGuard)

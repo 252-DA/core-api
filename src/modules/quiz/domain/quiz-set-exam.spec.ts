@@ -5,7 +5,7 @@ import {
   sessionExpiry,
   windowState,
 } from './quiz-set-exam';
-import type { QuizSnapshotItem } from './quiz.types';
+import type { QuizSnapshotItem } from '../quiz.types';
 
 const NOW = new Date('2026-09-27T10:00:00Z');
 const at = (iso: string) => new Date(iso);
