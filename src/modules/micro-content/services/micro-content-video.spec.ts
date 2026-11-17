@@ -1,5 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import type { BffClaims } from '../../auth/bff-claims';
+import type { BffClaims } from '../../../auth/bff-claims';
 import { MicroContentVideoService } from './micro-content-video.service';
 
 describe('MicroContentVideoService', () => {

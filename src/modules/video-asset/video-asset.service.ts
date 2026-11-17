@@ -11,13 +11,7 @@ import { AuthzService } from '../../auth/authz.service';
 import { DocumentStorageService } from '../../infra/storage/document-storage.service';
 import type { BffClaims } from '../../auth/bff-claims';
 import { video_assets } from '@prisma/client';
-
-export function serializeVideoAsset(asset: video_assets) {
-  return {
-    ...asset,
-    size_bytes: asset.size_bytes ? Number(asset.size_bytes) : null,
-  };
-}
+import { serializeVideoAsset } from './video-asset.mapper';
 
 const VISIBILITIES = ['PRIVATE', 'COURSE', 'PUBLIC'];
 const STAFF_ROLES = [...COURSE_STAFF_ROLES, 'admin'];

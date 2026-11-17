@@ -9,7 +9,7 @@ import {
   IsString,
 } from 'class-validator';
 import type { QuestionInput } from '../micro-content.types';
-import type { SubmitAnswerInput } from '../micro-content-attempt.service';
+import type { SubmitAnswerInput } from '../services/micro-content-attempt.service';
 
 export class CreateMicroContentDto {
   @IsString()

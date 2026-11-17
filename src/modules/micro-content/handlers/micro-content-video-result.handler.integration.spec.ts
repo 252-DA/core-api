@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
-import type { BffClaims } from '../../auth/bff-claims';
-import type { WorkerResultEnvelope } from '../../messaging/worker-results/worker-result-envelope';
-import { MicroContentService } from './micro-content.service';
+import type { BffClaims } from '../../../auth/bff-claims';
+import type { WorkerResultEnvelope } from '../../../messaging/worker-results/worker-result-envelope';
+import { MicroContentService } from '../services/micro-content.service';
 import { MicroContentVideoResultHandler } from './micro-content-video-result.handler';
 
 /**

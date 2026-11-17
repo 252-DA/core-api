@@ -4,11 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { extname } from 'node:path';
-import { COURSE_ROLES, STAFF_ROLES } from '../../common/constants/course-roles';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { AuthzService } from '../../auth/authz.service';
-import { DocumentStorageService } from '../../infra/storage/document-storage.service';
-import type { BffClaims } from '../../auth/bff-claims';
+import { COURSE_ROLES, STAFF_ROLES } from '../../../common/constants/course-roles';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
+import { AuthzService } from '../../../auth/authz.service';
+import { DocumentStorageService } from '../../../infra/storage/document-storage.service';
+import type { BffClaims } from '../../../auth/bff-claims';
 
 const MC_STAFF_ROLES = [...STAFF_ROLES, 'admin'];
 const MC_CLAIM_STAFF_ROLES = [...MC_STAFF_ROLES, 'teacher'];

@@ -5,13 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { COURSE_ROLES, STAFF_ROLES } from '../../common/constants/course-roles';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { AuthzService } from '../../auth/authz.service';
-import type { BffClaims } from '../../auth/bff-claims';
-import { MICRO_CONTENT_GRADING_REQUESTED } from '../../messaging/event-types';
-import { gradeAnswer } from '../question/question-types';
-import { gradingInput, submissionScore } from '../question/answer-grading';
+import { COURSE_ROLES, STAFF_ROLES } from '../../../common/constants/course-roles';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
+import { AuthzService } from '../../../auth/authz.service';
+import type { BffClaims } from '../../../auth/bff-claims';
+import { MICRO_CONTENT_GRADING_REQUESTED } from '../../../messaging/event-types';
+import { gradeAnswer } from '../../question/question-types';
+import { gradingInput, submissionScore } from '../../question/answer-grading';
 
 const MC_PARTICIPANT_ROLES = [COURSE_ROLES.LEARNER, ...STAFF_ROLES, 'admin'];
 const MC_CLAIM_STAFF_ROLES = [...STAFF_ROLES, 'admin', 'teacher'];

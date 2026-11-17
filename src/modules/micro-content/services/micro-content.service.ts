@@ -5,21 +5,21 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { COURSE_ROLES, STAFF_ROLES } from '../../common/constants/course-roles';
-import { isUuid } from '../../common/utils/uuid';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { AuthzService } from '../../auth/authz.service';
-import type { BffClaims } from '../../auth/bff-claims';
+import { COURSE_ROLES, STAFF_ROLES } from '../../../common/constants/course-roles';
+import { isUuid } from '../../../common/utils/uuid';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
+import { AuthzService } from '../../../auth/authz.service';
+import type { BffClaims } from '../../../auth/bff-claims';
 import {
   CONTENT_GENERATION_REQUESTED,
   MICRO_CONTENT_RENDER_REQUESTED,
-} from '../../messaging/event-types';
-import { isQuestionType, normalizeAnswerKey } from '../question/question-types';
+} from '../../../messaging/event-types';
+import { isQuestionType, normalizeAnswerKey } from '../../question/question-types';
 import type {
   CreateMicroContentInput,
   QuestionInput,
   UpdateMicroContentInput,
-} from './micro-content.types';
+} from '../micro-content.types';
 
 const DEFAULT_VOICE = 'vi-VN-HoaiMyNeural';
 const DEFAULT_MICRO_QUIZ_COUNT = 3;

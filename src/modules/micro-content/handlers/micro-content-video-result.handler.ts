@@ -1,17 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { runBestEffort } from '../../common/utils/best-effort';
+import { runBestEffort } from '../../../common/utils/best-effort';
 import {
   clipCodePoints,
   isWithinCodePoints,
-} from '../../common/utils/text-length';
-import { isUuid } from '../../common/utils/uuid';
-import { PrismaService } from '../../infra/prisma/prisma.service';
+} from '../../../common/utils/text-length';
+import { isUuid } from '../../../common/utils/uuid';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
-} from '../../messaging/worker-results/worker-result-envelope';
-import { WorkerResultHandler } from '../../messaging/worker-results/worker-result-handler';
+} from '../../../messaging/worker-results/worker-result-envelope';
+import { WorkerResultHandler } from '../../../messaging/worker-results/worker-result-handler';
 
 interface VideoResultBase {
   micro_content_id: string;

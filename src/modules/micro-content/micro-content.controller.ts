@@ -10,9 +10,9 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { MicroContentService } from './micro-content.service';
-import { MicroContentVideoService } from './micro-content-video.service';
-import { MicroContentAttemptService } from './micro-content-attempt.service';
+import { MicroContentService } from './services/micro-content.service';
+import { MicroContentVideoService } from './services/micro-content-video.service';
+import { MicroContentAttemptService } from './services/micro-content-attempt.service';
 import { BffJwtGuard } from '../../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../../auth/current-bff-claims.decorator';
 import type { BffClaims } from '../../auth/bff-claims';

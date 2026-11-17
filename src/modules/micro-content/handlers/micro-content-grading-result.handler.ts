@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { runBestEffort } from '../../common/utils/best-effort';
-import { isPlainObject } from '../../common/utils/type-guards';
-import { isUuid } from '../../common/utils/uuid';
-import { PrismaService } from '../../infra/prisma/prisma.service';
+import { runBestEffort } from '../../../common/utils/best-effort';
+import { isPlainObject } from '../../../common/utils/type-guards';
+import { isUuid } from '../../../common/utils/uuid';
+import { PrismaService } from '../../../infra/prisma/prisma.service';
 import {
   answerGradeData,
   GRADING_STATUS,
@@ -12,12 +12,12 @@ import {
   salvageAnswerIds,
   submissionScore,
   type AnswerGradeResult,
-} from '../question/answer-grading';
+} from '../../question/answer-grading';
 import {
   InvalidWorkerResultError,
   type WorkerResultEnvelope,
-} from '../../messaging/worker-results/worker-result-envelope';
-import { WorkerResultHandler } from '../../messaging/worker-results/worker-result-handler';
+} from '../../../messaging/worker-results/worker-result-envelope';
+import { WorkerResultHandler } from '../../../messaging/worker-results/worker-result-handler';
 
 export type MicroContentGradingResult = {
   attemptId: string;

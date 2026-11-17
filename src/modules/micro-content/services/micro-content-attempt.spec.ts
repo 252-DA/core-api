@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import type { BffClaims } from '../../auth/bff-claims';
+import type { BffClaims } from '../../../auth/bff-claims';
 import { MicroContentAttemptService } from './micro-content-attempt.service';
 
 describe('MicroContentAttemptService', () => {
