@@ -13,7 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   ANSWER_GRADING_QUEUE,
   ANSWER_GRADING_REQUESTED,
-} from '../quiz/answer-grading';
+} from '../question/answer-grading';
 import {
   ESSAY_GRADING_QUEUE,
   ESSAY_GRADING_REQUESTED,

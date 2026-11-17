@@ -8,7 +8,7 @@ import { RosterSyncService } from './roster-sync.service';
 
 /**
  * Danh sách lớp Canvas (NRPS): đọc thành viên, ghi lms_user_mappings và
- * course_memberships. Không phụ thuộc DocumentModule: hàng đợi và lịch sử chạy
+ * course_memberships. Không phụ thuộc CanvasSyncModule: hàng đợi và lịch sử chạy
  * nằm ở đó, và nó gọi sang module này.
  */
 @Module({

@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
-import { normalizeAnswerKey } from '../quiz/question-types';
+import { normalizeAnswerKey } from '../question/question-types';
 
 const DRAFT_STATUSES = [
   'GENERATED_DRAFT',

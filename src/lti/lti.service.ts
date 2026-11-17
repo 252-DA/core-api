@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { LaunchSyncDto } from './dto/launch-sync.dto';
-import { CanvasSyncJobsService } from '../document/canvas-sync-jobs.service';
+import { CanvasSyncJobsService } from '../canvas-sync/canvas-sync-jobs.service';
 import { CanvasApiClient } from '../canvas/canvas-api.client';
 import { describeCanvasError } from '../canvas/canvas-errors';
 import {

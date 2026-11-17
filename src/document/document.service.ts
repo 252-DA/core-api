@@ -9,7 +9,7 @@ import type { documents } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
-import { DocumentStorageService } from './document-storage.service';
+import { DocumentStorageService } from '../storage/document-storage.service';
 
 function safeFileName(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 160) || 'document';

@@ -13,13 +13,12 @@ import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { AuthzService } from '../auth/authz.service';
-import { DocumentStorageService } from '../document/document-storage.service';
-import { CanvasApiClient } from '../canvas/canvas-api.client';
+import { DocumentStorageService } from '../storage/document-storage.service';
+import { CanvasApiClient, type CanvasFile } from '../canvas/canvas-api.client';
 import { CanvasCourseService } from '../canvas/canvas-course.service';
 import {
   fileIdsInSyllabus,
   pickSyllabusFile,
-  type CanvasFile,
 } from './syllabus-file';
 import {
   COURSE_CHUNK_LO_REMAP_REQUESTED,

@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import type { BffClaims } from '../auth/bff-claims';
-import { isQuestionType, normalizeAnswerKey } from '../quiz/question-types';
+import { isQuestionType, normalizeAnswerKey } from '../question/question-types';
 
 const DEFAULT_VOICE = 'vi-VN-HoaiMyNeural';
 const DEFAULT_MICRO_QUIZ_COUNT = 3;

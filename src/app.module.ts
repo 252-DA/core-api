@@ -1,9 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { DiscoveryModule } from '@nestjs/core';
 import { BullModule } from '@nestjs/bullmq';
+import { LoggerModule } from 'nestjs-pino';
+import { BullMqErrorLogger } from './logging/bullmq-error-logger.service';
+import { getSharedLoggerModuleParams } from './logging/pino-config';
 import { PrismaModule } from './prisma/prisma.module';
 import { CourseModule } from './course/course.module';
 import { DocumentModule } from './document/document.module';
+import { CanvasSyncModule } from './canvas-sync/canvas-sync.module';
 import { ReviewModule } from './review/review.module';
 import { OutboxModule } from './outbox/outbox.module';
 import { LtiModule } from './lti/lti.module';
@@ -46,12 +51,15 @@ const getRedisConnection = () => {
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    LoggerModule.forRoot(getSharedLoggerModuleParams()),
     BullModule.forRoot({
       connection: getRedisConnection(),
     }),
+    DiscoveryModule,
     PrismaModule,
     CourseModule,
     DocumentModule,
+    CanvasSyncModule,
     ReviewModule,
     OutboxModule,
     LtiModule,
@@ -69,5 +77,6 @@ const getRedisConnection = () => {
     ChatModule,
     LearningAgentModule,
   ],
+  providers: [BullMqErrorLogger],
 })
 export class AppModule {}

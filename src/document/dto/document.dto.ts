@@ -19,19 +19,3 @@ export class CreateUploadSessionDto {
   @IsString()
   checksum?: string;
 }
-
-export class SyncCanvasDocumentsDto {
-  @IsString()
-  @IsNotEmpty()
-  courseId!: string;
-}
-
-export class UpdateDocumentPlacementDto {
-  @IsOptional()
-  @IsString()
-  role?: string;
-
-  @IsOptional()
-  @IsString()
-  chapterCode?: string | null;
-}

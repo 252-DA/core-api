@@ -6,15 +6,7 @@
  * `/api/v1/courses/:course_id/files/:file_id` (data-api-endpoint).
  */
 
-export type CanvasFile = {
-  id: number | string;
-  display_name: string;
-  filename?: string;
-  'content-type'?: string;
-  size?: number;
-  url?: string;
-  updated_at?: string;
-};
+import type { CanvasFile } from '../canvas/canvas-api.client';
 
 const FILE_LINK = /\/(?:api\/v1\/)?(?:courses\/\d+\/)?files\/(\d+)/g;
 

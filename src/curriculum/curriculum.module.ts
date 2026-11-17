@@ -3,7 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { AuthModule } from '../auth/auth.module';
 import { CanvasModule } from '../canvas/canvas.module';
 import { CourseModule } from '../course/course.module';
-import { DocumentStorageService } from '../document/document-storage.service';
+import { StorageModule } from '../storage/storage.module';
 import { CurriculumImportController } from './curriculum-import.controller';
 import { CurriculumImportService } from './curriculum-import.service';
 import { CurriculumImportResultHandler } from './curriculum-import-result.handler';
@@ -13,12 +13,12 @@ import { CurriculumImportResultHandler } from './curriculum-import-result.handle
     AuthModule,
     CanvasModule,
     CourseModule,
+    StorageModule,
     BullModule.registerQueue({ name: 'document_processing' }),
   ],
   controllers: [CurriculumImportController],
   providers: [
     CurriculumImportService,
-    DocumentStorageService,
     CurriculumImportResultHandler,
   ],
   exports: [CurriculumImportService],

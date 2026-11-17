@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { AGS_STATUS } from '../ags/ags-status';
-import { GRADING_STATUS } from './answer-grading';
+import { GRADING_STATUS } from '../question/answer-grading';
 import type { QuizSnapshotItem } from './quiz-set.service';
 
 /** Trạng thái điểm của một lượt nộp so với sổ điểm Canvas, theo góc nhìn người dùng. */

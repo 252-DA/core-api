@@ -1,8 +1,8 @@
+import type { CanvasFile } from '../canvas/canvas-api.client';
 import {
   fileIdsInSyllabus,
   isSupportedSyllabusFile,
   pickSyllabusFile,
-  type CanvasFile,
 } from './syllabus-file';
 
 describe('fileIdsInSyllabus', () => {

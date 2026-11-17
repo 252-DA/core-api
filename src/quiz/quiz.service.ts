@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
 import { AGS_STATUS } from '../ags/ags-status';
 import type { BffClaims } from '../auth/bff-claims';
-import { gradeAnswer } from './question-types';
+import { gradeAnswer } from '../question/question-types';
 import {
   answerGradingEvent,
   GRADING_STATUS,
@@ -13,7 +13,7 @@ import {
   rowAgsStatus,
   submissionScore,
   type GradingAnswer,
-} from './answer-grading';
+} from '../question/answer-grading';
 
 @Injectable()
 export class QuizService {

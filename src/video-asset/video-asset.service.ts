@@ -7,7 +7,7 @@ import {
 import { extname } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthzService } from '../auth/authz.service';
-import { DocumentStorageService } from '../document/document-storage.service';
+import { DocumentStorageService } from '../storage/document-storage.service';
 import type { BffClaims } from '../auth/bff-claims';
 import { video_assets } from '@prisma/client';
 

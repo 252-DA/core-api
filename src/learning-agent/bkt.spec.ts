@@ -6,7 +6,7 @@ import {
   replay,
   type PolicyObservation,
 } from './mastery-policy';
-import type { QuestionType } from '../quiz/question-types';
+import type { QuestionType } from '../question/question-types';
 
 const obs = (type: QuestionType, correct: boolean): PolicyObservation => ({
   type,
