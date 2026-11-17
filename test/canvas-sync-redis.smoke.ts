@@ -2,8 +2,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Job, Queue, QueueEvents, Worker } from 'bullmq';
-import { CanvasSyncJobsService } from '../src/canvas-sync/canvas-sync-jobs.service';
-import { CanvasSyncProcessor } from '../src/canvas-sync/canvas-sync.processor';
+import { CanvasSyncJobsService } from '../src/modules/canvas-sync/canvas-sync-jobs.service';
+import { CanvasSyncProcessor } from '../src/modules/canvas-sync/canvas-sync.processor';
 
 async function main() {
   const url = process.env.CANVAS_SYNC_TEST_REDIS_URL;
