@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { CONTRACTS_DIR } from '../testing/repo-paths';
 import { parseContentGenerationResult } from '../content-generation/content-generation-result.payload';
 import { parseEnrichmentContentPayload } from '../content-generation/enrichment-content-result.handler';
 import { parseCurriculumImportEnvelope } from '../curriculum/curriculum-import-result.handler';
@@ -26,7 +27,7 @@ import {
  * phải nhận, invalid phải từ chối. Bỏ qua khi không có thư mục contracts (repo
  * core-api checkout riêng).
  */
-const FIXTURES = resolve(__dirname, '..', '..', '..', 'contracts', 'fixtures', 'v1');
+const FIXTURES = resolve(CONTRACTS_DIR, 'fixtures', 'v1');
 const describeContract = existsSync(FIXTURES) ? describe : describe.skip;
 
 type Payload = Record<string, unknown>;

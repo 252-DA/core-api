@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { UnrecoverableError } from 'bullmq';
+import { CONTRACTS_DIR } from '../testing/repo-paths';
 import {
   InvalidWorkerResultError,
   RESULT_ID_PATTERN,
@@ -101,7 +102,7 @@ describe('parseWorkerResultEnvelope', () => {
 
 // Cùng bộ fixture packages-ai/tests/unit/test_contract_fixtures.py dùng: bên
 // TS phải chấp nhận/từ chối đúng như JSON Schema.
-const CONTRACTS = resolve(__dirname, '..', '..', '..', 'contracts');
+const CONTRACTS = CONTRACTS_DIR;
 const ENVELOPE_SCHEMA = join(
   CONTRACTS,
   'integration-events',

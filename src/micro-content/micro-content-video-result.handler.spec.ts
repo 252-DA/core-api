@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Logger } from '@nestjs/common';
+import { CONTRACTS_DIR } from '../testing/repo-paths';
 import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
 import type { WorkerResultEnvelope } from '../worker-results/worker-result-envelope';
 import {
@@ -375,15 +376,7 @@ describe('micro-content-video-result: độ dài tính theo code point', () => {
 
 // Cùng bộ fixture packages-ai/tests/unit/test_contract_fixtures.py kiểm bằng JSON
 // Schema: parser bên TS phải chấp nhận/từ chối đúng như schema.
-const FIXTURES = resolve(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'contracts',
-  'fixtures',
-  'v1',
-);
+const FIXTURES = resolve(CONTRACTS_DIR, 'fixtures', 'v1');
 const describeContract = existsSync(FIXTURES) ? describe : describe.skip;
 
 describeContract('micro-content-video-result contract fixtures', () => {

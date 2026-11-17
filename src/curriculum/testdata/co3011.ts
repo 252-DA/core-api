@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { CONTRACTS_DIR } from '../../testing/repo-paths';
 import type { NormalizedCurriculum } from '../curriculum-payload';
 import type { CurriculumRows } from '../curriculum-writer';
 
@@ -9,13 +10,10 @@ import type { CurriculumRows } from '../curriculum-writer';
  * - PYTHON_ROWS: 9 bảng do SQL Python cũ (upsert_curriculum, ghi 2 lần) ghi cho
  *   đúng đề cương đó trên PG18 tạm — co3011-python-rows.json cạnh file này.
  */
-const REPO = join(__dirname, '..', '..', '..', '..');
-
 export const CO3011_ENVELOPE = JSON.parse(
   readFileSync(
     join(
-      REPO,
-      'contracts',
+      CONTRACTS_DIR,
       'fixtures',
       'v1',
       'valid',

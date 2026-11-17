@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
+import { CONTRACTS_DIR } from '../testing/repo-paths';
 import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
 import type { WorkerResultEnvelope } from '../worker-results/worker-result-envelope';
 import {
@@ -62,7 +63,7 @@ function envelope(payload: unknown): WorkerResultEnvelope {
 describe('parseContentGenerationResult', () => {
   // Cùng bộ fixture mà packages-ai kiểm bằng JSON Schema: schema và parser
   // của core-api phải đồng ý với nhau.
-  const fixtures = join(__dirname, '../../../contracts/fixtures/v1');
+  const fixtures = join(CONTRACTS_DIR, 'fixtures', 'v1');
   const ours = (dir: string) =>
     existsSync(join(fixtures, dir))
       ? readdirSync(join(fixtures, dir)).filter((f) =>

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Logger } from '@nestjs/common';
 import { UnrecoverableError } from 'bullmq';
+import { CONTRACTS_DIR } from '../testing/repo-paths';
 import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
 import {
   DocumentProcessingResultHandler,
@@ -369,15 +370,7 @@ describe('document-processing-result: độ dài tính theo code point', () => {
 });
 
 // Cùng fixture packages-ai/tests/unit/test_contract_fixtures.py kiểm bằng JSON Schema.
-const FIXTURES = resolve(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'contracts',
-  'fixtures',
-  'v1',
-);
+const FIXTURES = resolve(CONTRACTS_DIR, 'fixtures', 'v1');
 const describeContract = existsSync(FIXTURES) ? describe : describe.skip;
 
 describeContract('DOCUMENT_PROCESSING_RESULT contract fixtures', () => {

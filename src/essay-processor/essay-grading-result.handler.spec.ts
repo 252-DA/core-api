@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { Logger } from '@nestjs/common';
 import { resolve } from 'node:path';
+import { CONTRACTS_DIR } from '../testing/repo-paths';
 import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
 import {
   EssayGradingResultHandler,
@@ -266,7 +267,7 @@ describe('essay-grading-result: độ dài tính theo code point', () => {
 });
 
 describe('essay-grading-result fixtures', () => {
-  const dir = resolve(__dirname, '..', '..', '..', 'contracts', 'fixtures', 'v1');
+  const dir = resolve(CONTRACTS_DIR, 'fixtures', 'v1');
   const load = (kind: 'valid' | 'invalid') =>
     readdirSync(resolve(dir, kind))
       .filter((f) => f.startsWith('essay-grading-result'))

@@ -1,18 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
+import { CONTRACTS_DIR } from '../testing/repo-paths';
 import { InvalidWorkerResultError } from '../worker-results/worker-result-envelope';
 import { CurriculumImportResultHandler } from './curriculum-import-result.handler';
 
-const FIXTURES = join(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  'contracts',
-  'fixtures',
-  'v1',
-);
+const FIXTURES = join(CONTRACTS_DIR, 'fixtures', 'v1');
 const IMPORT_ID = '01900000-0000-7000-8000-0000000000aa';
 
 /** Envelope READY của đề cương CO3011 thật, do worker sinh (fixture hợp đồng). */
