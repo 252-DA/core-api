@@ -1,22 +1,48 @@
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import {
-  FastifyAdapter,
-  NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import { NestFastifyApplication } from '@nestjs/platform-fastify';
+import { Logger as PinoNestLogger, PinoLogger } from 'nestjs-pino';
+import pino from 'pino';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { loadAppConfig } from './config/app.config';
+import { HttpExceptionLoggingFilter } from './infra/logging/http-exception-logging.filter';
+import {
+  buildPinoOptions,
+  createBootstrapLogger,
+  createFastifyAdapter,
+} from './infra/logging/pino-config';
+
+(BigInt.prototype as any).toJSON = function () {
+  return Number(this);
+};
+
+function logCriticalAndExit(event: string, reason: unknown): void {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  const root =
+    PinoLogger.root ?? pino({ ...buildPinoOptions(), transport: undefined });
+  root.fatal({ logger: 'Bootstrap', err }, event);
+  root.flush(() => process.exit(1));
+  setTimeout(() => process.exit(1), 500).unref();
+}
+
+process.on('unhandledRejection', (reason) => {
+  logCriticalAndExit('Unhandled promise rejection', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  logCriticalAndExit('Uncaught exception', error);
+});
 
 async function bootstrap() {
+  const logger = createBootstrapLogger();
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    createFastifyAdapter(),
+    { logger },
   );
 
-  app.enableCors({
-    origin: '*',
-    allowedHeaders: 'Content-Type, Authorization',
-    methods: 'GET, POST, PUT, DELETE, OPTIONS, PATCH',
-  });
+  app.useLogger(app.get(PinoNestLogger));
+  app.useGlobalFilters(new HttpExceptionLoggingFilter(app.getHttpAdapter()));
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -25,8 +51,8 @@ async function bootstrap() {
     }),
   );
 
-  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
+  const { port } = loadAppConfig();
   await app.listen(port, '0.0.0.0');
-  console.log(`Core API running on: http://localhost:${port}`);
+  new Logger('Bootstrap').log(`Core API running on: http://localhost:${port}`);
 }
 bootstrap();

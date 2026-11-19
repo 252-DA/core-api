@@ -1,0 +1,348 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { STAFF_ROLES } from '../../common/constants/course-roles';
+import { PrismaService } from '../../infra/prisma/prisma.service';
+import { AuthzService } from '../../auth/authz.service';
+import type { BffClaims } from '../../auth/bff-claims';
+import { normalizeAnswerKey } from '../question/question-types';
+
+const DRAFT_STATUSES = [
+  'GENERATED_DRAFT',
+  'REVIEWING',
+  'CHANGES_REQUESTED',
+  'APPROVED',
+];
+
+/**
+ * Hồ sơ kiểm chứng sau khi giảng viên sửa nội dung. verification_status/evidence
+ * (do judge ghi lúc sinh) mô tả bản AI chứ không phải bản đã sửa, nên để nguyên
+ * VERIFIED thì người học và giảng viên khác tin một kết luận không còn đúng:
+ *   - verification_status → UNVERIFIED (như câu giảng viên tự soạn);
+ *   - evidence giữ lại để xem lại bản AI gốc, thêm `superseded_by_edit_at` (lần sửa
+ *     đầu tiên, các lần sau không đổi) để biết nó không còn áp dụng cho nội dung hiện
+ *     tại. Câu chưa có evidence (giảng viên tự soạn, dòng cũ) thì không có gì để đánh dấu.
+ */
+function unverifiedAfterEdit(evidence: unknown, at: Date) {
+  const record =
+    typeof evidence === 'object' &&
+    evidence !== null &&
+    !Array.isArray(evidence)
+      ? (evidence as Record<string, unknown>)
+      : null;
+  return {
+    verification_status: 'UNVERIFIED',
+    ...(record
+      ? {
+          verification_evidence: {
+            ...record,
+            superseded_by_edit_at:
+              typeof record.superseded_by_edit_at === 'string'
+                ? record.superseded_by_edit_at
+                : at.toISOString(),
+          } as Prisma.InputJsonValue,
+        }
+      : {}),
+  };
+}
+
+@Injectable()
+export class ReviewService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authz: AuthzService,
+  ) {}
+
+  async listDrafts(
+    claims: BffClaims,
+    courseId: string,
+    kind?: 'card' | 'quiz',
+  ) {
+    await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
+
+    const [cards, quizItems] = await Promise.all([
+      kind === 'quiz'
+        ? Promise.resolve([])
+        : this.prisma.lesson_cards.findMany({
+            where: {
+              course_id: courseId,
+              status: { in: DRAFT_STATUSES },
+              deleted_at: null,
+            },
+            include: { lessons: true, learning_outcomes: true },
+            // Cả mẻ card lưu trong một transaction nên trùng created_at;
+            // position giữ thứ tự người viết đặt trong mẻ đó.
+            orderBy: [{ created_at: 'asc' }, { position: 'asc' }],
+          }),
+      kind === 'card'
+        ? Promise.resolve([])
+        : this.prisma.quiz_items.findMany({
+            where: {
+              course_id: courseId,
+              status: { in: DRAFT_STATUSES },
+              deleted_at: null,
+            },
+            include: { lessons: true, learning_outcomes: true },
+            orderBy: { created_at: 'asc' },
+          }),
+    ]);
+
+    return { cards, quizItems };
+  }
+
+  async approveCard(claims: BffClaims, cardId: string) {
+    const card = await this.getCardForReview(claims, cardId);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.lesson_cards.update({
+        where: { card_id: cardId },
+        data: { status: 'APPROVED', updated_at: new Date() },
+      });
+      await tx.review_audit_logs.create({
+        data: {
+          action: 'APPROVE_CARD',
+          entity_type: 'lesson_card',
+          entity_id: cardId,
+          performed_by: claims.sub,
+          raw_changes: { before: card.status, after: 'APPROVED' },
+        },
+      });
+      return updated;
+    });
+  }
+
+  async rejectCard(claims: BffClaims, cardId: string, reason?: string) {
+    const card = await this.getCardForReview(claims, cardId);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.lesson_cards.update({
+        where: { card_id: cardId },
+        data: { status: 'CHANGES_REQUESTED', updated_at: new Date() },
+      });
+      await tx.review_audit_logs.create({
+        data: {
+          action: 'REJECT_CARD',
+          entity_type: 'lesson_card',
+          entity_id: cardId,
+          performed_by: claims.sub,
+          raw_changes: {
+            before: card.status,
+            after: 'CHANGES_REQUESTED',
+            reason,
+          },
+        },
+      });
+      return updated;
+    });
+  }
+
+  async updateCard(claims: BffClaims, cardId: string, content: unknown) {
+    const card = await this.getCardForReview(claims, cardId);
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const updated = await tx.lesson_cards.update({
+        where: { card_id: cardId },
+        data: {
+          content: content as any,
+          status: 'REVIEWING',
+          updated_at: now,
+          ...unverifiedAfterEdit(card.verification_evidence, now),
+        },
+      });
+      await tx.review_audit_logs.create({
+        data: {
+          action: 'EDIT_CARD',
+          entity_type: 'lesson_card',
+          entity_id: cardId,
+          performed_by: claims.sub,
+          raw_changes: {
+            before: card.content,
+            after: content,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      return updated;
+    });
+  }
+
+  async approveQuizItem(claims: BffClaims, quizId: string) {
+    const quiz = await this.getQuizForReview(claims, quizId);
+    normalizeAnswerKey(quiz.type, quiz.question, {
+      options: quiz.options,
+      correct_answer: quiz.correct_answer,
+    });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.quiz_items.update({
+        where: { quiz_id: quizId },
+        data: { status: 'APPROVED', updated_at: new Date() },
+      });
+      await tx.review_audit_logs.create({
+        data: {
+          action: 'APPROVE_QUIZ',
+          entity_type: 'quiz_item',
+          entity_id: quizId,
+          performed_by: claims.sub,
+          raw_changes: { before: quiz.status, after: 'APPROVED' },
+        },
+      });
+      return updated;
+    });
+  }
+
+  async approveQuizItems(claims: BffClaims, quizIds: string[]) {
+    if (
+      !Array.isArray(quizIds) ||
+      !quizIds.length ||
+      quizIds.length > 100 ||
+      !quizIds.every((id) => typeof id === 'string' && id.trim().length > 0)
+    ) {
+      throw new BadRequestException('Danh sách câu hỏi không hợp lệ.');
+    }
+    const uniqueIds = [...new Set(quizIds)];
+    const quizzes = await this.prisma.quiz_items.findMany({
+      where: { quiz_id: { in: uniqueIds }, deleted_at: null },
+    });
+    if (quizzes.length !== uniqueIds.length) {
+      throw new NotFoundException('Có câu hỏi không tồn tại.');
+    }
+    const courseIds = [...new Set(quizzes.map((q) => q.course_id))];
+    for (const courseId of courseIds) {
+      await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
+    }
+    for (const quiz of quizzes) {
+      normalizeAnswerKey(quiz.type, quiz.question, {
+        options: quiz.options,
+        correct_answer: quiz.correct_answer,
+      });
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      for (const quiz of quizzes) {
+        await tx.quiz_items.update({
+          where: { quiz_id: quiz.quiz_id },
+          data: { status: 'APPROVED', updated_at: now },
+        });
+        await tx.review_audit_logs.create({
+          data: {
+            action: 'APPROVE_QUIZ',
+            entity_type: 'quiz_item',
+            entity_id: quiz.quiz_id,
+            performed_by: claims.sub,
+            raw_changes: { before: quiz.status, after: 'APPROVED' },
+          },
+        });
+      }
+      return { approved: quizzes.length };
+    });
+  }
+
+  async rejectQuizItem(claims: BffClaims, quizId: string, reason?: string) {
+    const quiz = await this.getQuizForReview(claims, quizId);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.quiz_items.update({
+        where: { quiz_id: quizId },
+        data: { status: 'CHANGES_REQUESTED', updated_at: new Date() },
+      });
+      await tx.review_audit_logs.create({
+        data: {
+          action: 'REJECT_QUIZ',
+          entity_type: 'quiz_item',
+          entity_id: quizId,
+          performed_by: claims.sub,
+          raw_changes: {
+            before: quiz.status,
+            after: 'CHANGES_REQUESTED',
+            reason,
+          },
+        },
+      });
+      return updated;
+    });
+  }
+
+  async updateQuizItem(
+    claims: BffClaims,
+    quizId: string,
+    data: {
+      question?: string;
+      options?: unknown;
+      correct_answer?: unknown;
+      explanation?: string;
+    },
+  ) {
+    const quiz = await this.getQuizForReview(claims, quizId);
+    const question = (data.question ?? quiz.question).trim();
+    if (!question)
+      throw new BadRequestException('Câu hỏi không được để trống.');
+    // Kiểu câu không đổi khi sửa; đáp án phải đúng dạng của kiểu đó.
+    // Câu điền khuyết đổi lời cũng phải giữ chỗ trống, nên sửa câu hỏi cũng kiểm tra.
+    const key =
+      data.question !== undefined ||
+      data.options !== undefined ||
+      data.correct_answer !== undefined
+        ? normalizeAnswerKey(quiz.type, question, {
+            options: data.options !== undefined ? data.options : quiz.options,
+            correct_answer:
+              data.correct_answer !== undefined
+                ? data.correct_answer
+                : quiz.correct_answer,
+          })
+        : null;
+    return this.prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const updated = await tx.quiz_items.update({
+        where: { quiz_id: quizId },
+        data: {
+          question,
+          ...(key
+            ? {
+                options: (key.options ??
+                  Prisma.JsonNull) as Prisma.InputJsonValue,
+                correct_answer: key.correct_answer as Prisma.InputJsonValue,
+              }
+            : {}),
+          explanation: data.explanation,
+          status: 'REVIEWING',
+          updated_at: now,
+          ...unverifiedAfterEdit(quiz.verification_evidence, now),
+        },
+      });
+      await tx.review_audit_logs.create({
+        data: {
+          action: 'EDIT_QUIZ',
+          entity_type: 'quiz_item',
+          entity_id: quizId,
+          performed_by: claims.sub,
+          raw_changes: {
+            before: quiz,
+            after: data,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      return updated;
+    });
+  }
+
+  private async getCardForReview(claims: BffClaims, cardId: string) {
+    const card = await this.prisma.lesson_cards.findFirst({
+      where: { card_id: cardId, deleted_at: null },
+    });
+    if (!card) {
+      throw new NotFoundException(`Card not found: ${cardId}`);
+    }
+    await this.authz.assertCourseAccess(claims, card.course_id, STAFF_ROLES);
+    return card;
+  }
+
+  private async getQuizForReview(claims: BffClaims, quizId: string) {
+    const quiz = await this.prisma.quiz_items.findFirst({
+      where: { quiz_id: quizId, deleted_at: null },
+    });
+    if (!quiz) {
+      throw new NotFoundException(`Quiz item not found: ${quizId}`);
+    }
+    await this.authz.assertCourseAccess(claims, quiz.course_id, STAFF_ROLES);
+    return quiz;
+  }
+}

@@ -1,3 +1,8 @@
+CREATE OR REPLACE FUNCTION uuidv7() RETURNS uuid AS $$
+BEGIN
+  RETURN gen_random_uuid();
+END;
+$$ LANGUAGE plpgsql;
 -- ============================================================================
 -- COMPLETE DATABASE SPECIFICATION
 -- LMS for Automatically Generating Micro-Content and Quizzes Using Generative AI

@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { importSPKI, jwtVerify, type CryptoKey, type JWTPayload } from 'jose';
 import * as fs from 'fs';
+import { errorMessage } from '../common/utils/errors';
 import { BffClaims } from './bff-claims';
 
 @Injectable()
@@ -34,8 +35,9 @@ export class BffJwtService implements OnModuleInit, OnModuleDestroy {
       this.publicKey = await importSPKI(pem, 'EdDSA');
       this.logger.log('BFF to Core public key loaded successfully');
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      this.logger.error(`Failed to load BFF to Core public key: ${message}`);
+      this.logger.error(
+        `Failed to load BFF to Core public key: ${errorMessage(e)}`,
+      );
       throw e;
     }
 
@@ -48,10 +50,7 @@ export class BffJwtService implements OnModuleInit, OnModuleDestroy {
       'core-api',
     );
 
-    this.cacheCleanupInterval = setInterval(
-      () => this.cleanJtiCache(),
-      60_000,
-    );
+    this.cacheCleanupInterval = setInterval(() => this.cleanJtiCache(), 60_000);
     this.cacheCleanupInterval.unref?.();
   }
 
@@ -89,8 +88,7 @@ export class BffJwtService implements OnModuleInit, OnModuleDestroy {
       if (e instanceof UnauthorizedException) {
         throw e;
       }
-      const message = e instanceof Error ? e.message : String(e);
-      this.logger.debug(`JWT verification failed: ${message}`);
+      this.logger.debug(`JWT verification failed: ${errorMessage(e)}`);
       throw new UnauthorizedException('Invalid token');
     }
   }

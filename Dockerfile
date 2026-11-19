@@ -3,23 +3,47 @@ RUN npm install -g pnpm
 
 WORKDIR /app
 
-COPY core-api/package.json ./
-RUN pnpm install --no-frozen-lockfile --ignore-scripts
+# Copy cả pnpm-lock.yaml và cài với --frozen-lockfile: hai lần build cùng một
+# commit phải ra cùng một bộ phiên bản (trước đây lockfile bị bỏ qua).
+COPY core-api/package.json core-api/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 COPY core-api/ .
+
+# Thư mục contracts/proto chứa llm_model_catalog.json dùng chung giữa ai-sdk
+# và core-api, sống ở da-platform. model-catalog.ts resolve
+# process.cwd()/proto/llm_model_catalog.json nên giữ đúng /app/proto.
+COPY contracts/proto ./proto
+
 RUN npx prisma generate
 
 FROM base AS dev
 CMD ["./node_modules/.bin/nest", "start", "--watch"]
 
+# Chạy `prisma migrate deploy` ở prod. Stage `prod` không làm được việc này:
+# prisma là devDependency (đã bị `pnpm prune --prod` xóa) và stage đó cũng không
+# có thư mục prisma/ lẫn prisma.config.ts. Stage này giữ cả hai từ `base`.
+# Tài khoản quản trị truyền lúc chạy qua MIGRATION_DATABASE_URL (prisma.config.ts),
+# để nó không nằm trong env của core-api.
+FROM base AS migrate
+CMD ["./node_modules/.bin/prisma", "migrate", "deploy"]
+
 FROM base AS build
 RUN pnpm run build
-RUN pnpm prune --prod
+# --ignore-scripts như lúc install: pnpm mới coi build script bị bỏ qua là lỗi
+# (ERR_PNPM_IGNORED_BUILDS) và làm `prune` thoát mã 1. prisma generate đã chạy
+# tường minh ở stage base nên không cần các script đó.
+RUN pnpm prune --prod --ignore-scripts
 
 FROM node:24-alpine AS prod
-RUN npm install -g pnpm
 WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
-CMD ["pnpm", "run", "start:prod"]
+# Thiếu dòng này thì start:prod chết ngay khi nạp catalog model: runtime đọc
+# proto/llm_model_catalog.json theo đường dẫn tương đối với cwd.
+COPY --from=build /app/proto ./proto
+# Chạy node trực tiếp (không qua pnpm) để SIGTERM của `docker stop` tới thẳng
+# process. Đầu ra nằm ở dist/src/main.js, không phải dist/main.js: tsc lấy
+# rootDir là gốc dự án vì prisma/ và prisma.config.ts cũng được biên dịch.
+CMD ["node", "dist/src/main"]
