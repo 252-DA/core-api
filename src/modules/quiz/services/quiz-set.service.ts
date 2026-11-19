@@ -23,6 +23,7 @@ import {
 } from './quiz-set-context';
 import { AgsPublisherService } from '../../ags/ags-publisher.service';
 import { CourseRosterRepository } from '../../roster/course-roster.repository';
+import { BankAccessService } from '../../question-bank/bank-access.service';
 import type { QuizSnapshotItem } from '../quiz.types';
 import {
   groupSubmissions,
@@ -63,6 +64,7 @@ export class QuizSetService {
     private readonly canvasCourses: CanvasCourseService,
     private readonly ags: AgsPublisherService,
     private readonly roster: CourseRosterRepository,
+    private readonly bankAccess: BankAccessService,
   ) {}
 
   // TODO(refactor): hỏi chủ repo có gộp vào isCourseStaff
@@ -201,10 +203,16 @@ export class QuizSetService {
         throw new BadRequestException(
           'Chỉ thêm các câu đã duyệt và thuộc LO của chương.',
         );
+      await this.bankAccess.assertAll(
+        claims,
+        quizzes.map((q) => q.bank_id),
+        'USE',
+      );
       const items: QuizSnapshotItem[] = body.quizIds.map((id) => {
         const q = quizzes.find((row) => row.quiz_id === id)!;
         return {
           quiz_id: q.quiz_id,
+          version_id: q.current_version_id ?? null,
           question: q.question,
           type: q.type,
           options: q.options,
@@ -765,6 +773,7 @@ export class QuizSetService {
       submission_id: submissionId,
       user_id: claims.sub,
       quiz_id: result.quizId,
+      quiz_version_id: set.items[index].version_id ?? null,
       course_id: set.course_id,
       resource_link_id: link.resource_link_id,
       score: result.score,

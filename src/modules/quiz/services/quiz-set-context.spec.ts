@@ -1,4 +1,7 @@
-import { loadCanvasQuizContext } from './quiz-set-context';
+import {
+  loadCanvasQuizContext,
+  loadQuizBuilderContext,
+} from './quiz-set-context';
 
 const COURSE = '00000000-0000-0000-0000-000000000001';
 const CHAPTER = '00000000-0000-0000-0000-000000000002';
@@ -70,6 +73,30 @@ describe('loadCanvasQuizContext', () => {
     );
     await expect(load({ courseId: COURSE, moduleId: '99' })).rejects.toThrow(
       'không thuộc khóa',
+    );
+  });
+
+  it('ẩn câu đã RETIRED khỏi danh sách gợi ý ở cả context Canvas và Soạn đề', async () => {
+    const { prisma, load } = setup();
+    await load({ courseId: COURSE, chapterId: CHAPTER });
+    expect(prisma.quiz_items.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { not: 'RETIRED' },
+        }),
+      }),
+    );
+
+    await loadQuizBuilderContext(prisma as never, {
+      courseId: COURSE,
+      loIds: ['00000000-0000-4000-8000-000000000010'],
+    });
+    expect(prisma.quiz_items.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { not: 'RETIRED' },
+        }),
+      }),
     );
   });
 });

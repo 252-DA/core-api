@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import type { BffClaims } from '../../auth/bff-claims';
 import { ReviewService } from './review.service';
 
@@ -19,6 +20,10 @@ describe('ReviewService', () => {
           quiz_id: where.quiz_id,
           ...data,
         })),
+        findUniqueOrThrow: jest.fn().mockImplementation(async ({ where }) => ({
+          quiz_id: where.quiz_id,
+          current_version_id: 'v-after',
+        })),
       },
       lesson_cards: {
         update: jest.fn().mockImplementation(async ({ where, data }) => ({
@@ -37,6 +42,7 @@ describe('ReviewService', () => {
       },
       lesson_cards: {
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       $transaction: jest.fn(
         async (callback: (client: typeof tx) => Promise<unknown>) =>
@@ -46,8 +52,26 @@ describe('ReviewService', () => {
     const authz = {
       assertCourseAccess: jest.fn().mockResolvedValue(undefined),
     };
-    const service = new ReviewService(prisma as never, authz as never);
-    return { service, prisma, tx, authz };
+    const bankAccess = {
+      assertRole: jest
+        .fn()
+        .mockResolvedValue({ bank: { bank_id: 'b1' }, role: 'EDIT' }),
+      assertAll: jest.fn().mockResolvedValue(undefined),
+      viewer: jest.fn().mockResolvedValue({
+        userId: claims.sub,
+        isAdmin: false,
+        isLearnerOnly: false,
+        staffCourseIds: new Set([courseId]),
+        subjectCodes: new Set(),
+      }),
+      visibleWhere: jest.fn().mockReturnValue({ deleted_at: null }),
+    };
+    const service = new ReviewService(
+      prisma as never,
+      authz as never,
+      bankAccess as never,
+    );
+    return { service, prisma, tx, authz, bankAccess };
   }
 
   it('validates answer key before approving a single quiz item', async () => {
@@ -259,7 +283,145 @@ describe('ReviewService', () => {
       ][]) {
         expect(data).not.toHaveProperty('verification_status');
         expect(data).not.toHaveProperty('verification_evidence');
+        expect(data).not.toHaveProperty('updated_by');
+        expect(data).not.toHaveProperty('provenance');
       }
+    });
+
+    it('sets updated_by, resets provenance, re-reads current_version_id and logs version transition', async () => {
+      const { service, prisma, tx } = setup();
+      prisma.quiz_items.findFirst.mockResolvedValue({
+        ...aiQuiz,
+        current_version_id: 'v-before',
+      });
+      tx.quiz_items.findUniqueOrThrow.mockResolvedValue({
+        ...aiQuiz,
+        question: 'Câu đã sửa?',
+        current_version_id: 'v-after',
+      });
+
+      const result = await service.updateQuizItem(claims, 'q1', {
+        question: 'Câu đã sửa?',
+      });
+
+      expect(tx.quiz_items.update).toHaveBeenCalledWith({
+        where: { quiz_id: 'q1' },
+        data: expect.objectContaining({
+          updated_by: claims.sub,
+          provenance: {},
+        }),
+      });
+      expect(tx.quiz_items.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { quiz_id: 'q1' },
+      });
+      expect(result.current_version_id).toBe('v-after');
+      expect(tx.review_audit_logs.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          action: 'EDIT_QUIZ',
+          raw_changes: expect.objectContaining({
+            before_version_id: 'v-before',
+            after_version_id: 'v-after',
+          }),
+        }),
+      });
+    });
+  });
+
+  describe('bank permission enforcement and bankId filter', () => {
+    it('rejects review operations with 403 when caller lacks EDIT permission on bank', async () => {
+      const { service, prisma, tx, bankAccess } = setup();
+      prisma.quiz_items.findFirst.mockResolvedValue({
+        quiz_id: 'q1',
+        bank_id: 'b-other',
+        course_id: courseId,
+        type: 'MCQ_SINGLE',
+        question: 'Q?',
+        options: ['A', 'B', 'C', 'D'],
+        correct_answer: 'A',
+        status: 'GENERATED_DRAFT',
+      });
+      bankAccess.assertRole.mockRejectedValue(
+        new ForbiddenException('Bạn không có quyền sửa ngân hàng câu hỏi này.'),
+      );
+
+      await expect(
+        service.updateQuizItem(claims, 'q1', { question: 'Sửa?' }),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(service.approveQuizItem(claims, 'q1')).rejects.toThrow(
+        ForbiddenException,
+      );
+      await expect(service.rejectQuizItem(claims, 'q1', 'sai')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(bankAccess.assertRole).toHaveBeenCalledWith(
+        claims,
+        'b-other',
+        'EDIT',
+      );
+      expect(tx.quiz_items.update).not.toHaveBeenCalled();
+    });
+
+    it('checks bankAccess.assertAll(EDIT) on batch approval', async () => {
+      const { service, prisma, tx, bankAccess } = setup();
+      prisma.quiz_items.findMany.mockResolvedValue([
+        {
+          quiz_id: 'q1',
+          bank_id: 'b1',
+          course_id: courseId,
+          type: 'MCQ_SINGLE',
+          question: 'Q1?',
+          options: ['A', 'B', 'C', 'D'],
+          correct_answer: 'A',
+          status: 'GENERATED_DRAFT',
+        },
+        {
+          quiz_id: 'q2',
+          bank_id: 'b2',
+          course_id: courseId,
+          type: 'MCQ_SINGLE',
+          question: 'Q2?',
+          options: ['A', 'B', 'C', 'D'],
+          correct_answer: 'B',
+          status: 'GENERATED_DRAFT',
+        },
+      ]);
+      bankAccess.assertAll.mockRejectedValueOnce(
+        new ForbiddenException('forbidden'),
+      );
+
+      await expect(
+        service.approveQuizItems(claims, ['q1', 'q2']),
+      ).rejects.toThrow(ForbiddenException);
+      expect(bankAccess.assertAll).toHaveBeenCalledWith(
+        claims,
+        ['b1', 'b2'],
+        'EDIT',
+      );
+      expect(tx.quiz_items.update).not.toHaveBeenCalled();
+    });
+
+    it('listDrafts filters by bankId (checking VIEW) and scopes by visibleWhere otherwise', async () => {
+      const { service, prisma, bankAccess } = setup();
+      prisma.quiz_items.findMany.mockResolvedValue([]);
+
+      await service.listDrafts(claims, courseId, 'quiz', 'b-1');
+      expect(bankAccess.assertRole).toHaveBeenCalledWith(claims, 'b-1', 'VIEW');
+      expect(prisma.quiz_items.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ bank_id: 'b-1' }),
+        }),
+      );
+
+      await service.listDrafts(claims, courseId, 'quiz');
+      expect(bankAccess.visibleWhere).toHaveBeenCalled();
+      expect(prisma.quiz_items.findMany).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            course_id: courseId,
+            question_banks: { deleted_at: null },
+          }),
+        }),
+      );
     });
   });
 });

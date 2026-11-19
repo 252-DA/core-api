@@ -390,11 +390,12 @@ export class EnrichmentContentResultHandler implements WorkerResultHandler<
             WHERE c.document_id = ${documentId}::uuid
               AND c.chunk_id = ANY(lesson_cards.source_chunk_ids)
          )`;
+    // Chỉ xoá mềm câu chưa qua tay giảng viên (đóng H6: giữ REVIEWING và CHANGES_REQUESTED).
     const retiredQuizItems = await tx.$executeRaw`
       UPDATE quiz_items
          SET deleted_at = NOW()
        WHERE deleted_at IS NULL
-         AND status = ANY(${DRAFT_STATUSES}::text[])
+         AND status = 'GENERATED_DRAFT'
          AND EXISTS (
            SELECT 1 FROM chunks c
             WHERE c.document_id = ${documentId}::uuid
@@ -498,6 +499,9 @@ export class EnrichmentContentResultHandler implements WorkerResultHandler<
     tx: Prisma.TransactionClient,
     result: EnrichmentContentPayload,
   ): Promise<number> {
+    const provenance = JSON.stringify(
+      result.model_id !== null ? { model_id: result.model_id } : {},
+    );
     const rows = JSON.stringify(
       result.quiz_items.map((item) => ({
         quiz_id: item.quiz_id,
@@ -540,11 +544,11 @@ export class EnrichmentContentResultHandler implements WorkerResultHandler<
       )
       INSERT INTO quiz_items (
         quiz_id, lesson_id, course_id, lo_id, type, question, options, correct_answer,
-        explanation, source_chunk_ids, status, deleted_at
+        explanation, source_chunk_ids, status, updated_by, provenance, deleted_at
       )
       SELECT ctx.quiz_id, l.lesson_id, ctx.course_id, ctx.lo_id, 'MCQ_SINGLE', ctx.question,
              ctx.options, ctx.correct_answer, ctx.explanation, ctx.source_chunk_ids,
-             'GENERATED_DRAFT', NULL
+             'GENERATED_DRAFT', NULL, ${provenance}::jsonb, NULL
         FROM ctx
         JOIN lesson_rows l ON l.course_id = ctx.course_id AND l.lo_id = ctx.lo_id
       ON CONFLICT (quiz_id) DO UPDATE SET
@@ -557,7 +561,10 @@ export class EnrichmentContentResultHandler implements WorkerResultHandler<
         explanation = EXCLUDED.explanation,
         source_chunk_ids = EXCLUDED.source_chunk_ids,
         status = 'GENERATED_DRAFT',
+        updated_by = NULL,
+        provenance = EXCLUDED.provenance,
         updated_at = NOW(),
-        deleted_at = NULL`;
+        deleted_at = NULL
+      WHERE quiz_items.status = 'GENERATED_DRAFT'`;
   }
 }

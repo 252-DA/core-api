@@ -91,7 +91,13 @@ describeDb('document results on PostgreSQL', () => {
   afterAll(async () => {
     if (prisma && courseId) {
       const where = { course_id: courseId };
+      await prisma.quiz_item_versions.deleteMany({
+        where: { quiz_items: where },
+      });
       await prisma.quiz_items.deleteMany({ where });
+      await prisma.question_banks.deleteMany({
+        where: { home_course_id: courseId },
+      });
       await prisma.lesson_cards.deleteMany({ where });
       await prisma.lessons.deleteMany({ where });
       await seed.chunk_lo_mappings.deleteMany({ where: { chunks: where } });
@@ -558,8 +564,15 @@ describeDb('document results on PostgreSQL', () => {
           status: 'REVIEWING',
         },
       });
+      const bank = await prisma.question_banks.create({
+        data: {
+          title: 'Ngân hàng test',
+          home_course_id: courseId,
+        },
+      });
       const approvedQuiz = await prisma.quiz_items.create({
         data: {
+          bank_id: bank.bank_id,
           lesson_id: lesson.lesson_id,
           course_id: courseId,
           lo_id: loHigh,

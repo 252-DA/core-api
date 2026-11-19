@@ -100,6 +100,7 @@ export class QuizService {
         attempt_id: attemptId,
         user_id: claims.sub,
         quiz_id: quiz.quiz_id,
+        quiz_version_id: quiz.current_version_id ?? null,
         course_id: quiz.course_id,
         resource_link_id: body.resourceLinkId,
         score: grade.score,

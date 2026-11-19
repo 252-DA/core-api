@@ -200,8 +200,19 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
     const lesson = await ensureLessonForLo(tx, lo);
     let count: UpsertCount;
     let statuses: VerificationStatus[];
+    let quizIds: string[] | undefined;
     if (result.content_type === 'quiz') {
-      count = await upsertGeneratedQuizItems(tx, lesson, result.quiz_items);
+      const quizResult = await upsertGeneratedQuizItems(
+        tx,
+        lesson,
+        result.quiz_items,
+        {
+          requestId,
+          requestedBy: request.requested_by ?? null,
+        },
+      );
+      count = { written: quizResult.written, skipped: quizResult.skipped };
+      quizIds = quizResult.writtenIds;
       statuses = result.quiz_items.map((i) => i.verification_status);
     } else {
       count = await upsertGeneratedLessonCards(tx, lesson, result.lesson_cards);
@@ -212,6 +223,7 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
       generated_count: result.generated_count,
       last_error: null,
       verification_summary: verificationSummary(statuses, result.rejected),
+      ...(quizIds !== undefined ? { quiz_ids: quizIds } : {}),
     });
     return {
       applied: true,
@@ -575,6 +587,7 @@ function updateRequest(
     last_error: string | null;
     generated_count?: number;
     verification_summary?: Prisma.InputJsonValue;
+    quiz_ids?: string[];
   },
 ) {
   return tx.content_generation_requests.update({

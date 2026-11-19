@@ -187,6 +187,46 @@ describe('EnrichmentContentResultHandler', () => {
     );
     expect(tx.$executeRaw).toHaveBeenCalledTimes(2);
   });
+
+  it('soft-deletes only GENERATED_DRAFT quiz items and records model_id provenance', async () => {
+    const { handler, tx } = setup({
+      processing_generation: 2,
+      enrichment_generation: null,
+      deleted_at: null,
+    });
+
+    await handler.handle(envelope(payload({ model_id: 'gemini-flash' })));
+
+    const cardDeleteSql = (
+      tx.$executeRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]]
+    )[0].join('?');
+    expect(cardDeleteSql).toContain('UPDATE lesson_cards');
+    expect(cardDeleteSql).toContain('status = ANY(');
+
+    const quizDeleteCall = tx.$executeRaw.mock.calls[1] as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
+    const quizDeleteSql = quizDeleteCall[0].join('?');
+    expect(quizDeleteSql).toContain('UPDATE quiz_items');
+    expect(quizDeleteSql).toContain("status = 'GENERATED_DRAFT'");
+    expect(quizDeleteSql).not.toContain('status = ANY(');
+
+    const quizInsertCall = tx.$executeRaw.mock.calls[3] as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
+    const quizInsertSql = quizInsertCall[0].join('?');
+    expect(quizInsertSql).toContain('INSERT INTO quiz_items');
+    expect(quizInsertSql).toContain('provenance');
+    expect(quizInsertSql).toContain(
+      "WHERE quiz_items.status = 'GENERATED_DRAFT'",
+    );
+    expect(quizInsertSql).not.toContain('bank_id');
+    expect(quizInsertCall.slice(1)).toContain(
+      JSON.stringify({ model_id: 'gemini-flash' }),
+    );
+  });
 });
 
 describe('EnrichmentContentResultHandler.onFinalFailure', () => {

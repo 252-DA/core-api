@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 
 export type QuizSnapshotItem = {
   quiz_id: string;
+  version_id: string | null;
   question: string;
   type: string;
   options: Prisma.JsonValue;

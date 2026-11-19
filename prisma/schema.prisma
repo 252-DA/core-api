@@ -34,6 +34,12 @@ model lms_user_mappings {
   micro_content_progress     micro_content_progress[]
   micro_content_attempts     micro_content_attempts[]
   video_assets               video_assets[]
+  question_banks             question_banks[]
+  question_bank_shares       question_bank_shares[]
+  question_bank_sync_jobs    question_bank_sync_jobs[]
+  quiz_item_versions         quiz_item_versions[]
+  authored_quiz_items        quiz_items[]                @relation("QuizItemAuthor")
+  updated_quiz_items         quiz_items[]                @relation("QuizItemUpdater")
 
   @@unique([lms_type, lms_sub], map: "uq_lms_user")
   @@index([lms_type, lms_sub], map: "idx_lms_mapping")
@@ -48,6 +54,8 @@ model courses {
   course_id                    String                         @id @default(dbgenerated("uuidv7()")) @db.Uuid
   lms_id                       String?                        @unique @db.VarChar(100)
   code                         String                         @unique @db.VarChar(50)
+  /// Mã môn trong đề cương (vd. CO3137). Không unique: nhiều lớp Canvas cùng môn.
+  subject_code                 String?                        @db.VarChar(50)
   name                         String                         @db.VarChar(255)
   description                  String?
   created_at                   DateTime?                      @default(now()) @db.Timestamptz(6)
@@ -78,8 +86,10 @@ model courses {
   micro_contents               micro_contents[]
   video_assets                 video_assets[]
   canvas_sync_runs             canvas_sync_runs[]
+  question_banks               question_banks[]
 
   @@index([lms_id], map: "idx_course_lms")
+  @@index([subject_code], map: "idx_courses_subject_code")
   chat_runs           chat_runs[]
   chat_conversations  chat_conversations[]
   knowledge_relations knowledge_relations[]
@@ -632,34 +642,175 @@ model quiz_set_sessions {
   @@index([quiz_set_id, user_id])
 }
 
+/// Câu hỏi trong ngân hàng (docs/question-bank-design.md). Các cột nội dung là
+/// bản làm việc hiện tại; lịch sử nằm ở `quiz_item_versions`, do trigger
+/// `trg_quiz_items_version` ghi mỗi khi nội dung đổi. `bank_id` để trống lúc
+/// INSERT thì trigger gán ngân hàng mặc định của khoá.
 model quiz_items {
-  quiz_id           String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
-  lesson_id         String             @db.Uuid
-  course_id         String             @db.Uuid
-  lo_id             String?            @db.Uuid
-  type              String             @db.VarChar(30)
-  question          String
-  options           Json?
-  correct_answer    Json
-  explanation       String?
-  bloom_level       Int?
-  source_chunk_ids  String[]           @db.Uuid
-  status            String             @default("GENERATED_DRAFT") @db.VarChar(50)
+  quiz_id                     String                       @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  /// NULL: câu nhập hoặc fork, chưa thuộc bài học nào.
+  lesson_id                   String?                      @db.Uuid
+  course_id                   String                       @db.Uuid
+  lo_id                       String?                      @db.Uuid
+  type                        String                       @db.VarChar(30)
+  question                    String
+  options                     Json?
+  correct_answer              Json
+  explanation                 String?
+  /// Mức Bloom được yêu cầu lúc sinh, chưa được đánh giá; xem `bloom_assessed`.
+  bloom_level                 Int?
+  source_chunk_ids            String[]                     @db.Uuid
+  status                      String                       @default("GENERATED_DRAFT") @db.VarChar(50)
   /// UNVERIFIED | VERIFIED | INCONCLUSIVE | FLAGGED (CHECK trong migration 20261107120000).
-  verification_status   String             @default("UNVERIFIED") @db.VarChar(20)
+  verification_status         String                       @default("UNVERIFIED") @db.VarChar(20)
   /// Kết luận của judge: lý do, model, thời điểm. NULL khi chưa kiểm chứng.
-  verification_evidence Json?
-  published_at      DateTime?          @db.Timestamptz(6)
-  created_at        DateTime?          @default(now()) @db.Timestamptz(6)
-  updated_at        DateTime?          @default(now()) @db.Timestamptz(6)
-  deleted_at        DateTime?          @db.Timestamptz(6)
-  lessons           lessons            @relation(fields: [lesson_id], references: [lesson_id], onDelete: Restrict, onUpdate: NoAction)
-  courses           courses            @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
-  learning_outcomes learning_outcomes? @relation(fields: [lo_id], references: [lo_id], onDelete: Restrict, onUpdate: NoAction)
-  quiz_attempts     quiz_attempts[]
+  verification_evidence       Json?
+  published_at                DateTime?                    @db.Timestamptz(6)
+  created_at                  DateTime?                    @default(now()) @db.Timestamptz(6)
+  updated_at                  DateTime?                    @default(now()) @db.Timestamptz(6)
+  deleted_at                  DateTime?                    @db.Timestamptz(6)
+  bank_id                     String                       @db.Uuid
+  /// AI_GENERATED | MANUAL | CANVAS_IMPORT | FORK
+  origin                      String                       @default("AI_GENERATED") @db.VarChar(20)
+  author_id                   String?                      @db.Uuid
+  /// Người ghi lần cuối; trigger chép sang `quiz_item_versions.created_by`.
+  updated_by                  String?                      @db.Uuid
+  generation_request_id       String?                      @db.Uuid
+  /// Trigger chép sang phiên bản mới; xem `quiz_item_versions.provenance`.
+  provenance                  Json                         @default("{}")
+  forked_from_version_id      String?                      @db.Uuid
+  current_version_id          String?                      @db.Uuid
+  bloom_assessed              Int?
+  lessons                     lessons?                     @relation(fields: [lesson_id], references: [lesson_id], onDelete: Restrict, onUpdate: NoAction)
+  courses                     courses                      @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  learning_outcomes           learning_outcomes?           @relation(fields: [lo_id], references: [lo_id], onDelete: Restrict, onUpdate: NoAction)
+  question_banks              question_banks               @relation(fields: [bank_id], references: [bank_id], onDelete: Restrict, onUpdate: NoAction)
+  author                      lms_user_mappings?           @relation("QuizItemAuthor", fields: [author_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+  updater                     lms_user_mappings?           @relation("QuizItemUpdater", fields: [updated_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+  content_generation_requests content_generation_requests? @relation(fields: [generation_request_id], references: [request_id], onDelete: SetNull, onUpdate: NoAction)
+  forked_from                 quiz_item_versions?          @relation("QuizItemForkedFrom", fields: [forked_from_version_id], references: [version_id], onDelete: SetNull, onUpdate: NoAction)
+  current_version             quiz_item_versions?          @relation("QuizItemCurrentVersion", fields: [current_version_id], references: [version_id], onDelete: SetNull, onUpdate: NoAction)
+  versions                    quiz_item_versions[]         @relation("QuizItemVersions")
+  question_lms_links          question_lms_links[]
+  quiz_attempts               quiz_attempts[]
 
   @@index([lo_id, status], map: "idx_quiz_items_lo_published")
   @@index([status, created_at], map: "idx_quiz_items_review")
+  @@index([bank_id, status], map: "idx_quiz_items_bank")
+  @@index([generation_request_id], map: "idx_quiz_items_generation_request")
+}
+
+/// Phiên bản bất biến của một câu hỏi. Chỉ trigger ghi bảng này.
+model quiz_item_versions {
+  version_id         String               @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  quiz_id            String               @db.Uuid
+  version_no         Int
+  type               String               @db.VarChar(30)
+  question           String
+  options            Json?
+  correct_answer     Json
+  explanation        String?
+  lo_id              String?              @db.Uuid
+  bloom_level        Int?
+  source_chunk_ids   String[]             @default([]) @db.Uuid
+  provenance         Json                 @default("{}")
+  /// NULL: do hệ thống/AI ghi.
+  created_by         String?              @db.Uuid
+  created_at         DateTime             @default(now()) @db.Timestamptz(6)
+  quiz_items         quiz_items           @relation("QuizItemVersions", fields: [quiz_id], references: [quiz_id], onDelete: Restrict, onUpdate: NoAction)
+  creator            lms_user_mappings?   @relation(fields: [created_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+  current_of         quiz_items[]         @relation("QuizItemCurrentVersion")
+  forks              quiz_items[]         @relation("QuizItemForkedFrom")
+  quiz_attempts      quiz_attempts[]
+  question_lms_links question_lms_links[]
+
+  @@unique([quiz_id, version_no], map: "uq_quiz_item_version_no")
+}
+
+/// Ngân hàng câu hỏi. `owner_id` NULL là ngân hàng mặc định của khoá.
+model question_banks {
+  bank_id                 String                    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  title                   String                    @db.VarChar(255)
+  description             String?
+  owner_id                String?                   @db.Uuid
+  home_course_id          String                    @db.Uuid
+  subject_code            String?                   @db.VarChar(50)
+  /// PRIVATE | COURSE | SUBJECT
+  visibility              String                    @default("COURSE") @db.VarChar(20)
+  is_course_default       Boolean                   @default(false)
+  created_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  deleted_at              DateTime?                 @db.Timestamptz(6)
+  owner                   lms_user_mappings?        @relation(fields: [owner_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+  courses                 courses                   @relation(fields: [home_course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  quiz_items              quiz_items[]
+  question_bank_shares    question_bank_shares[]
+  question_bank_sync_jobs question_bank_sync_jobs[]
+
+  @@index([home_course_id], map: "idx_question_banks_course")
+  @@index([subject_code], map: "idx_question_banks_subject")
+}
+
+model question_bank_shares {
+  bank_id           String            @db.Uuid
+  /// USER | COURSE
+  grantee_type      String            @db.VarChar(10)
+  grantee_id        String            @db.Uuid
+  /// VIEW | USE | EDIT
+  role              String            @db.VarChar(10)
+  granted_by        String            @db.Uuid
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  question_banks    question_banks    @relation(fields: [bank_id], references: [bank_id], onDelete: Cascade, onUpdate: NoAction)
+  lms_user_mappings lms_user_mappings @relation(fields: [granted_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@id([bank_id, grantee_type, grantee_id])
+  @@index([grantee_type, grantee_id], map: "idx_question_bank_shares_grantee")
+}
+
+/// Câu ↔ câu bên LMS (Canvas Classic question bank).
+model question_lms_links {
+  link_id            String             @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  quiz_id            String             @db.Uuid
+  version_id         String             @db.Uuid
+  /// EXPORT | IMPORT
+  direction          String             @db.VarChar(10)
+  lms_type           String             @default("canvas") @db.VarChar(20)
+  lms_base_url       String             @db.VarChar(255)
+  /// course | account
+  lms_context_type   String             @db.VarChar(10)
+  lms_context_id     String             @db.VarChar(64)
+  ext_bank_id        String?            @db.VarChar(64)
+  ext_bank_title     String?            @db.VarChar(255)
+  ext_question_id    String?            @db.VarChar(64)
+  migration_id       String?            @db.VarChar(255)
+  synced_at          DateTime           @default(now()) @db.Timestamptz(6)
+  quiz_items         quiz_items         @relation(fields: [quiz_id], references: [quiz_id], onDelete: Cascade, onUpdate: NoAction)
+  quiz_item_versions quiz_item_versions @relation(fields: [version_id], references: [version_id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([quiz_id, direction, lms_base_url, lms_context_type, lms_context_id], name: "uq_question_lms_link", map: "uq_question_lms_link")
+  @@index([lms_base_url, ext_question_id], map: "idx_question_lms_links_ext")
+}
+
+/// Job đẩy/kéo ngân hàng với LMS; chạy trong hàng đợi `question_bank_sync`.
+model question_bank_sync_jobs {
+  job_id            String            @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  bank_id           String            @db.Uuid
+  /// EXPORT | IMPORT
+  direction         String            @db.VarChar(10)
+  requested_by      String            @db.Uuid
+  target            Json
+  /// QUEUED | RUNNING | WAITING_LMS | COMPLETED | FAILED
+  status            String            @default("QUEUED") @db.VarChar(20)
+  lms_migration_ids Json              @default("[]")
+  counts            Json              @default("{}")
+  report            Json              @default("[]")
+  last_error        String?
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime          @default(now()) @db.Timestamptz(6)
+  question_banks    question_banks    @relation(fields: [bank_id], references: [bank_id], onDelete: Cascade, onUpdate: NoAction)
+  lms_user_mappings lms_user_mappings @relation(fields: [requested_by], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@index([bank_id, created_at(sort: Desc)], map: "idx_question_bank_sync_jobs_bank")
 }
 
 model flashcard_reviews {
@@ -694,8 +845,11 @@ model quiz_attempts {
   ags_posted_at      DateTime?           @db.Timestamptz(6)
   attempted_at       DateTime?           @default(now()) @db.Timestamptz(6)
   deleted_at         DateTime?           @db.Timestamptz(6)
+  /// Phiên bản câu người học đã làm (từ snapshot đề); NULL với dữ liệu cũ.
+  quiz_version_id    String?             @db.Uuid
   lms_user_mappings  lms_user_mappings   @relation(fields: [user_id], references: [internal_user_id], onDelete: Restrict, onUpdate: NoAction)
   quiz_items         quiz_items          @relation(fields: [quiz_id], references: [quiz_id], onDelete: Restrict, onUpdate: NoAction)
+  quiz_item_versions quiz_item_versions? @relation(fields: [quiz_version_id], references: [version_id], onDelete: SetNull, onUpdate: NoAction)
   courses            courses             @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
   lti_resource_links lti_resource_links? @relation(fields: [resource_link_id], references: [resource_link_id], onDelete: Restrict, onUpdate: NoAction)
 
@@ -859,9 +1013,12 @@ model content_generation_requests {
   /// Đếm kết luận kiểm chứng của lần sinh (kể cả câu/card bị loại, không lưu
   /// thành dòng nào); core-api ghi khi áp CONTENT_GENERATION_RESULT SUCCEEDED.
   verification_summary Json?
-  created_at      DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime? @default(now()) @db.Timestamptz(6)
-  courses         courses   @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  /// Câu đã lưu vào ngân hàng từ yêu cầu này.
+  quiz_ids             String[]     @default([]) @db.Uuid
+  created_at           DateTime?    @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime?    @default(now()) @db.Timestamptz(6)
+  courses              courses      @relation(fields: [course_id], references: [course_id], onDelete: Restrict, onUpdate: NoAction)
+  quiz_items           quiz_items[]
 }
 
 /// status: PENDING → PROCESSING → PROCESSED, hoặc DEAD_LETTER sau 10 lần relay lỗi.

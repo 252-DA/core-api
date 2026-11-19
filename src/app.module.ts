@@ -27,6 +27,7 @@ import { ModelSettingsModule } from './modules/model-settings/model-settings.mod
 import { EssayProcessorModule } from './modules/essay-processor/essay-processor.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { LearningAgentModule } from './modules/learning-agent/learning-agent.module';
+import { QuestionBankModule } from './modules/question-bank/question-bank.module';
 
 @Module({
   imports: [
@@ -59,6 +60,7 @@ import { LearningAgentModule } from './modules/learning-agent/learning-agent.mod
     EssayProcessorModule,
     ChatModule,
     LearningAgentModule,
+    QuestionBankModule,
   ],
   providers: [BullMqErrorLogger],
 })

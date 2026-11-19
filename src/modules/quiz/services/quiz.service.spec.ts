@@ -25,6 +25,7 @@ function setup() {
       findMany: jest.fn().mockResolvedValue([
         {
           quiz_id: 'q1',
+          current_version_id: 'v-q1',
           course_id: COURSE,
           type: 'MCQ_SINGLE',
           question: 'Q1',
@@ -33,6 +34,7 @@ function setup() {
         },
         {
           quiz_id: 'q2',
+          current_version_id: 'v-q2',
           course_id: COURSE,
           type: 'SHORT_ANSWER',
           question: 'Q2',
@@ -97,6 +99,13 @@ describe('QuizService.submit (lesson quiz)', () => {
     expect(rows[1].grading_input).toEqual(
       event.payload.answers[0].grading_input,
     );
+    expect(
+      rows.map((r: { quiz_version_id: string | null }) => r.quiz_version_id),
+    ).toEqual(['v-q1', 'v-q2']);
+    expect(rows.map((r: { quiz_version_id: string | null }) => r.quiz_version_id)).toEqual([
+      'v-q1',
+      'v-q2',
+    ]);
   });
 
   it('không có tự luận thì không giao worker', async () => {

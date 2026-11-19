@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common';
 import { CONTRACTS_DIR } from '../../../testing/repo-paths';
 import { InvalidWorkerResultError } from '../../../messaging/worker-results/worker-result-envelope';
 import type { WorkerResultEnvelope } from '../../../messaging/worker-results/worker-result-envelope';
+import { aiQuizProvenance } from '../domain/generated-content';
 import {
   ContentGenerationResultHandler,
   verificationSummary,
@@ -300,9 +301,46 @@ describe('verificationSummary', () => {
   });
 });
 
+describe('aiQuizProvenance', () => {
+  it('copies writer_model, judge_model and judge_is_writer only', () => {
+    expect(
+      aiQuizProvenance({
+        criterion: 'source_grounding',
+        judge_verdict: 'supported',
+        writer_model: 'gemini-2.5',
+        judge_model: 'deepseek-r1',
+        judge_is_writer: false,
+      }),
+    ).toEqual({
+      writer_model: 'gemini-2.5',
+      judge_model: 'deepseek-r1',
+      judge_is_writer: false,
+    });
+    expect(
+      aiQuizProvenance({
+        writer_model: null,
+        judge_model: null,
+        judge_is_writer: false,
+      }),
+    ).toEqual({
+      writer_model: null,
+      judge_model: null,
+      judge_is_writer: false,
+    });
+    expect(aiQuizProvenance({ criterion: 'source_grounding' })).toEqual({});
+  });
+});
+
 describe('ContentGenerationResultHandler', () => {
   function setup(
-    request: { status: string; type?: string; course_id?: string } | undefined,
+    request:
+      | {
+          status: string;
+          type?: string;
+          course_id?: string;
+          requested_by?: string | null;
+        }
+      | undefined,
   ) {
     const tx = {
       $queryRaw: jest.fn().mockResolvedValue(
@@ -313,6 +351,10 @@ describe('ContentGenerationResultHandler', () => {
                 course_id: request.course_id ?? COURSE,
                 type: request.type ?? 'quiz',
                 status: request.status,
+                requested_by:
+                  request.requested_by !== undefined
+                    ? request.requested_by
+                    : null,
               },
             ]
           : [],
@@ -402,10 +444,68 @@ describe('ContentGenerationResultHandler', () => {
         status: 'SUCCEEDED',
         generated_count: 1,
         last_error: null,
+        quiz_ids: ['8d3c6a52-5b1e-5c7a-9f0e-2a4b6c8d0e11'],
         verification_summary: expect.objectContaining({
           verified: 1,
           rejected: 1,
         }),
+      }),
+    });
+  });
+
+  it('passes origin, provenance and excludes skipped items from quiz_ids', async () => {
+    const userId = '0193f2a1-7c4e-7d10-9a3b-5e6f7a8b9c88';
+    const { tx, handler } = setup({
+      status: 'RUNNING',
+      requested_by: userId,
+    });
+    const first = quizItem({
+      quiz_id: '8d3c6a52-5b1e-5c7a-9f0e-2a4b6c8d0e11',
+      verification_evidence: {
+        ...evidence,
+        writer_model: 'gemini-pro',
+        judge_model: 'deepseek-chat',
+        judge_is_writer: false,
+      },
+    });
+    const second = quizItem({
+      quiz_id: '8d3c6a52-5b1e-5c7a-9f0e-2a4b6c8d0e12',
+    });
+    tx.$executeRaw.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+
+    const outcome = await handler.handle(
+      envelope(quizPayload([first, second])),
+    );
+
+    expect(outcome).toMatchObject({
+      applied: true,
+      status: 'SUCCEEDED',
+      written: 1,
+      skipped: 1,
+    });
+    const [sqlStrings, ...values] = tx.$executeRaw.mock.calls[0] as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
+    const sql = sqlStrings.join('?');
+    expect(sql).toContain('generation_request_id');
+    expect(sql).toContain('author_id');
+    expect(sql).toContain('updated_by');
+    expect(sql).toContain('provenance');
+    expect(sql).not.toContain('bank_id');
+    expect(values).toContain(REQUEST);
+    expect(values).toContain(userId);
+    expect(values).toContain(
+      JSON.stringify({
+        writer_model: 'gemini-pro',
+        judge_model: 'deepseek-chat',
+        judge_is_writer: false,
+      }),
+    );
+    expect(tx.content_generation_requests.update).toHaveBeenCalledWith({
+      where: { request_id: REQUEST },
+      data: expect.objectContaining({
+        quiz_ids: [first.quiz_id],
       }),
     });
   });

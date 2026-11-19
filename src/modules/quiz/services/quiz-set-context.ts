@@ -69,6 +69,7 @@ export async function loadCanvasQuizContext(
           where: {
             course_id: body.courseId,
             lo_id: { in: learningOutcomes.map((l) => l.lo_id) },
+            status: { not: 'RETIRED' },
             deleted_at: null,
           },
           include: { learning_outcomes: { select: { code: true } } },
@@ -164,6 +165,7 @@ export async function loadQuizBuilderContext(
           where: {
             course_id: body.courseId,
             lo_id: { in: loIds },
+            status: { not: 'RETIRED' },
             deleted_at: null,
           },
           include: { learning_outcomes: { select: { code: true } } },

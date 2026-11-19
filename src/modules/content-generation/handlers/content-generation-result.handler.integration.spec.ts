@@ -160,7 +160,13 @@ describeDb('ContentGenerationResultHandler on PostgreSQL', () => {
 
   afterAll(async () => {
     if (prisma && courseId) {
+      await prisma.quiz_item_versions.deleteMany({
+        where: { quiz_items: { course_id: courseId } },
+      });
       await prisma.quiz_items.deleteMany({ where: { course_id: courseId } });
+      await prisma.question_banks.deleteMany({
+        where: { home_course_id: courseId },
+      });
       await prisma.lesson_cards.deleteMany({ where: { course_id: courseId } });
       await prisma.lessons.deleteMany({ where: { course_id: courseId } });
       await prisma.content_generation_requests.deleteMany({

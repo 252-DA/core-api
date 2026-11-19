@@ -60,7 +60,15 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
         course,
       );
       await prisma.$executeRawUnsafe(
+        `DELETE FROM quiz_item_versions WHERE quiz_id IN (SELECT quiz_id FROM quiz_items WHERE course_id = $1::uuid)`,
+        course,
+      );
+      await prisma.$executeRawUnsafe(
         `DELETE FROM quiz_items WHERE course_id = $1::uuid`,
+        course,
+      );
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM question_banks WHERE home_course_id = $1::uuid`,
         course,
       );
       await prisma.$executeRawUnsafe(

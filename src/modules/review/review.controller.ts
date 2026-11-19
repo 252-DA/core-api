@@ -29,8 +29,9 @@ export class ReviewController {
     @CurrentBffClaims() claims: BffClaims,
     @Query('courseId') courseId = '',
     @Query('kind') kind?: 'card' | 'quiz',
+    @Query('bankId') bankId?: string,
   ) {
-    return this.reviewService.listDrafts(claims, courseId, kind);
+    return this.reviewService.listDrafts(claims, courseId, kind, bankId);
   }
 
   @Post('cards/:id/approve')

@@ -7,12 +7,20 @@ import { AuthModule } from '../../auth/auth.module';
 import { PrismaModule } from '../../infra/prisma/prisma.module';
 import { CanvasModule } from '../../integrations/canvas/canvas.module';
 import { RosterModule } from '../roster/roster.module';
+import { QuestionBankModule } from '../question-bank/question-bank.module';
 import { QuizSetService } from './services/quiz-set.service';
 import { EssayGradingService } from './services/essay-grading.service';
 import { QuizGradingResultHandler } from './handlers/quiz-grading-result.handler';
 
 @Module({
-  imports: [AuthModule, PrismaModule, CanvasModule, AgsModule, RosterModule],
+  imports: [
+    AuthModule,
+    PrismaModule,
+    CanvasModule,
+    AgsModule,
+    RosterModule,
+    QuestionBankModule,
+  ],
   controllers: [QuizController, QuizSetController],
   providers: [
     QuizService,

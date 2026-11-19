@@ -1,3 +1,4 @@
+import { ForbiddenException } from '@nestjs/common';
 import { AuthzService } from '../../../auth/authz.service';
 import type { BffClaims } from '../../../auth/bff-claims';
 import { QuizSetService } from './quiz-set.service';
@@ -24,6 +25,9 @@ const claims: BffClaims = {
 function setup() {
   const items = [Q1, Q2].map((quiz_id) => ({
     quiz_id,
+    version_id: `ver-${quiz_id}`,
+    current_version_id: `ver-${quiz_id}`,
+    bank_id: 'bank-1',
     question: 'Q',
     type: 'MCQ',
     options: ['yes', 'no'],
@@ -99,6 +103,9 @@ function setup() {
   const ags = { isWaitingForPublish: jest.fn().mockReturnValue(false) };
   // Danh sách lớp mặc định chỉ có USER, giữ nguyên số liệu của các test cũ.
   const roster = { activeLearnerIds: jest.fn().mockResolvedValue([USER]) };
+  const bankAccess = {
+    assertAll: jest.fn().mockResolvedValue(undefined),
+  };
   const service = new QuizSetService(
     prisma as never,
     authz as never,
@@ -106,8 +113,17 @@ function setup() {
     {} as never,
     ags as never,
     roster as never,
+    bankAccess as never,
   );
-  return { service, prisma, authz, ags, roster, snapshot };
+  return {
+    service,
+    prisma,
+    authz,
+    ags,
+    roster,
+    bankAccess,
+    snapshot,
+  };
 }
 
 describe('Canvas quiz sets', () => {
@@ -1131,6 +1147,57 @@ describe('Canvas quiz sets', () => {
         chapter_id: CHAPTER,
         chapter_ids: [CHAPTER],
       });
+    });
+
+    it('kiểm quyền USE trên ngân hàng, chụp version_id vào snapshot và ghi quiz_version_id khi nộp bài', async () => {
+      const { service, prisma, bankAccess } = setup();
+      await service.create(claims, {
+        courseId: COURSE,
+        chapterId: CHAPTER,
+        title: 'Quiz',
+        quizIds: [Q1, Q2],
+        selectionId: SET,
+      });
+      expect(bankAccess.assertAll).toHaveBeenCalledWith(
+        claims,
+        ['bank-1', 'bank-1'],
+        'USE',
+      );
+      expect(prisma.quiz_sets.create.mock.calls[0][0].data.items).toEqual([
+        expect.objectContaining({ quiz_id: Q1, version_id: `ver-${Q1}` }),
+        expect.objectContaining({ quiz_id: Q2, version_id: `ver-${Q2}` }),
+      ]);
+
+      await service.submit(claims, {
+        quizSetId: SET,
+        resourceLinkId: LINK,
+        answers: [
+          { quizId: Q1, chosenAnswer: 'yes' },
+          { quizId: Q2, chosenAnswer: 'yes' },
+        ],
+      });
+      const attemptRows = prisma.quiz_attempts.createMany.mock.calls[0][0]
+        .data as Array<{ quiz_version_id: string | null }>;
+      expect(attemptRows.map((r) => r.quiz_version_id)).toEqual([
+        `ver-${Q1}`,
+        `ver-${Q2}`,
+      ]);
+
+      bankAccess.assertAll.mockRejectedValueOnce(
+        new ForbiddenException(
+          'Bạn không có quyền dùng ngân hàng câu hỏi này.',
+        ),
+      );
+      await expect(
+        service.create(claims, {
+          courseId: COURSE,
+          chapterId: CHAPTER,
+          title: 'Quiz bị chặn',
+          quizIds: [Q1, Q2],
+          selectionId: SET,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.quiz_sets.create).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -368,6 +368,42 @@ export interface UpsertCount {
   skipped: number;
 }
 
+export interface GeneratedQuizOrigin {
+  requestId: string;
+  requestedBy: string | null;
+}
+
+export interface QuizUpsertCount extends UpsertCount {
+  /** Danh sách quiz_id thực sự được ghi (thêm mới hoặc cập nhật bản nháp). */
+  writtenIds: string[];
+}
+
+/**
+ * Chép thông tin model sinh/chấm câu từ verification_evidence của worker vào
+ * quiz_items.provenance (trigger sẽ chép sang quiz_item_versions).
+ */
+export function aiQuizProvenance(
+  evidence: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (
+    typeof evidence.writer_model === 'string' ||
+    evidence.writer_model === null
+  ) {
+    out.writer_model = evidence.writer_model;
+  }
+  if (
+    typeof evidence.judge_model === 'string' ||
+    evidence.judge_model === null
+  ) {
+    out.judge_model = evidence.judge_model;
+  }
+  if (typeof evidence.judge_is_writer === 'boolean') {
+    out.judge_is_writer = evidence.judge_is_writer;
+  }
+  return out;
+}
+
 /**
  * LO còn hiện hành, hoặc null. SQL cũ lặng lẽ không ghi câu nào khi LO đã bị
  * thay/xoá (INSERT ... SELECT ra 0 dòng); người gọi phải xử lý null.
@@ -411,27 +447,35 @@ function json(value: unknown): string {
 
 /**
  * Upsert câu theo quiz_id. Câu SQL thô vì cần ON CONFLICT ... WHERE: Prisma
- * upsert không có điều kiện "chỉ ghi đè bản nháp".
+ * upsert không có điều kiện "chỉ ghi đè bản nháp". Không ghi bank_id để
+ * trigger BEFORE INSERT tự gán ngân hàng mặc định khi thêm mới, còn câu đã
+ * có giữ nguyên ngân hàng hiện tại khi cập nhật bản nháp.
  */
 export async function upsertGeneratedQuizItems(
   tx: Prisma.TransactionClient,
   lesson: LessonRef,
   items: GeneratedQuizItem[],
-): Promise<UpsertCount> {
+  origin: GeneratedQuizOrigin,
+): Promise<QuizUpsertCount> {
   let written = 0;
+  const writtenIds: string[] = [];
   for (const item of items) {
-    written += await tx.$executeRaw`
+    const provenance = aiQuizProvenance(item.verification_evidence);
+    const affected = await tx.$executeRaw`
       INSERT INTO quiz_items (
         quiz_id, lesson_id, course_id, lo_id, type, question, options,
         correct_answer, explanation, bloom_level, source_chunk_ids, status,
-        verification_status, verification_evidence, deleted_at
+        verification_status, verification_evidence,
+        generation_request_id, author_id, updated_by, provenance, deleted_at
       ) VALUES (
         ${item.quiz_id}::uuid, ${lesson.lesson_id}::uuid, ${lesson.course_id}::uuid,
         ${lesson.lo_id}::uuid, ${item.type}, ${item.question},
         ${item.options === null ? null : json(item.options)}::jsonb,
         ${json(item.correct_answer)}::jsonb, ${item.explanation},
         ${item.bloom_level}::int, ${item.source_chunk_ids}::uuid[], 'GENERATED_DRAFT',
-        ${item.verification_status}, ${json(item.verification_evidence)}::jsonb, NULL
+        ${item.verification_status}, ${json(item.verification_evidence)}::jsonb,
+        ${origin.requestId}::uuid, ${origin.requestedBy}::uuid, NULL,
+        ${json(provenance)}::jsonb, NULL
       )
       ON CONFLICT (quiz_id) DO UPDATE SET
         lesson_id = EXCLUDED.lesson_id,
@@ -447,11 +491,19 @@ export async function upsertGeneratedQuizItems(
         status = 'GENERATED_DRAFT',
         verification_status = EXCLUDED.verification_status,
         verification_evidence = EXCLUDED.verification_evidence,
+        generation_request_id = EXCLUDED.generation_request_id,
+        author_id = EXCLUDED.author_id,
+        updated_by = NULL,
+        provenance = EXCLUDED.provenance,
         updated_at = NOW(),
         deleted_at = NULL
       WHERE quiz_items.status = 'GENERATED_DRAFT'`;
+    written += affected;
+    if (affected > 0) {
+      writtenIds.push(item.quiz_id);
+    }
   }
-  return { written, skipped: items.length - written };
+  return { written, skipped: items.length - written, writtenIds };
 }
 
 /**

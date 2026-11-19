@@ -34,6 +34,8 @@ import { MicroContentService } from './modules/micro-content/services/micro-cont
 import { MicroContentVideoService } from './modules/micro-content/services/micro-content-video.service';
 import { ModelSettingsController } from './modules/model-settings/model-settings.controller';
 import { ModelSettingsService } from './modules/model-settings/model-settings.service';
+import { QuestionBankController } from './modules/question-bank/question-bank.controller';
+import { QuestionBankService } from './modules/question-bank/question-bank.service';
 import { EssayGradingService } from './modules/quiz/services/essay-grading.service';
 import { QuizController } from './modules/quiz/controllers/quiz.controller';
 import { QuizSetController } from './modules/quiz/controllers/quiz-set.controller';
@@ -197,6 +199,17 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     'deleteAsset',
     'forkAsset',
   ]);
+  const questionBanks = makeMockService([
+    'listBanks',
+    'createBank',
+    'updateBank',
+    'listItems',
+    'createItem',
+    'share',
+    'unshare',
+    'retireItem',
+    'listVersions',
+  ]);
 
   const authHeader = { authorization: 'Bearer valid-token' };
 
@@ -237,6 +250,7 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
         EssayProcessorController,
         MicroContentController,
         VideoAssetController,
+        QuestionBankController,
       ],
       providers: [
         BffJwtGuard,
@@ -261,6 +275,7 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
         { provide: MicroContentVideoService, useValue: microContentVideo },
         { provide: MicroContentAttemptService, useValue: microContentAttempt },
         { provide: VideoAssetService, useValue: videoAsset },
+        { provide: QuestionBankService, useValue: questionBanks },
       ],
     }).compile();
 
@@ -775,5 +790,112 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
       assetId: 'va-1',
       targetCourseId: 'c2',
     });
+
+    await injectJson({
+      method: 'GET',
+      url: '/api/review/drafts?courseId=c1&kind=quiz&bankId=b1',
+    });
+    expect(reviewService.listDrafts).toHaveBeenCalledWith(
+      claims,
+      'c1',
+      'quiz',
+      'b1',
+    );
+
+    await injectJson({
+      method: 'GET',
+      url: '/api/question-banks?courseId=c1',
+    });
+    expect(questionBanks.listBanks).toHaveBeenCalledWith(claims, 'c1');
+
+    await injectJson({
+      method: 'POST',
+      url: '/api/question-banks',
+      payload: {
+        courseId: 'c1',
+        title: 'Ngân hàng 1',
+        visibility: 'COURSE',
+        ignoredField: 'strip',
+      },
+    });
+    expect(questionBanks.createBank).toHaveBeenCalledWith(claims, {
+      courseId: 'c1',
+      title: 'Ngân hàng 1',
+      visibility: 'COURSE',
+    });
+
+    await injectJson({
+      method: 'PATCH',
+      url: '/api/question-banks/b1',
+      payload: { title: 'Tên mới' },
+    });
+    expect(questionBanks.updateBank).toHaveBeenCalledWith(claims, 'b1', {
+      title: 'Tên mới',
+    });
+
+    await injectJson({
+      method: 'GET',
+      url: '/api/question-banks/b1/items?lo=L.O.1&type=MCQ_SINGLE&status=APPROVED&origin=MANUAL&search=abc',
+    });
+    expect(questionBanks.listItems).toHaveBeenCalledWith(claims, 'b1', {
+      lo: 'L.O.1',
+      type: 'MCQ_SINGLE',
+      status: 'APPROVED',
+      origin: 'MANUAL',
+      search: 'abc',
+    });
+
+    await injectJson({
+      method: 'POST',
+      url: '/api/question-banks/b1/items',
+      payload: {
+        type: 'MCQ_SINGLE',
+        question: 'Hỏi?',
+        options: ['A', 'B', 'C', 'D'],
+        correct_answer: 'A',
+        ignored: true,
+      },
+    });
+    expect(questionBanks.createItem).toHaveBeenCalledWith(claims, 'b1', {
+      type: 'MCQ_SINGLE',
+      question: 'Hỏi?',
+      options: ['A', 'B', 'C', 'D'],
+      correct_answer: 'A',
+    });
+
+    await injectJson({
+      method: 'POST',
+      url: '/api/question-banks/b1/shares',
+      payload: { granteeType: 'USER', granteeId: 'u2', role: 'USE' },
+    });
+    expect(questionBanks.share).toHaveBeenCalledWith(claims, 'b1', {
+      granteeType: 'USER',
+      granteeId: 'u2',
+      role: 'USE',
+    });
+
+    await injectJson({
+      method: 'DELETE',
+      url: '/api/question-banks/b1/shares?granteeType=USER&granteeId=u2',
+    });
+    expect(questionBanks.unshare).toHaveBeenCalledWith(claims, 'b1', {
+      granteeType: 'USER',
+      granteeId: 'u2',
+    });
+
+    await injectJson({
+      method: 'POST',
+      url: '/api/question-banks/b1/items/q1/retire',
+      payload: { restore: true },
+    });
+    expect(questionBanks.retireItem).toHaveBeenCalledWith(claims, 'b1', 'q1', {
+      restore: true,
+    });
+
+    await injectJson({
+      method: 'GET',
+      url: '/api/quiz-items/q1/versions',
+    });
+    expect(questionBanks.listVersions).toHaveBeenCalledWith(claims, 'q1');
   });
 });

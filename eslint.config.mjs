@@ -22,6 +22,7 @@ const ALL_MODULES = [
   'micro-content',
   'model-settings',
   'question',
+  'question-bank',
   'quiz',
   'review',
   'roster',
@@ -35,8 +36,9 @@ const MODULE_ALLOWED_DEPS = {
   'learning-agent': ['question', 'quiz', 'roster'],
   lti: ['canvas-sync', 'roster'],
   'micro-content': ['question'],
-  quiz: ['ags', 'question', 'roster'],
-  review: ['question'],
+  'question-bank': ['question'],
+  quiz: ['ags', 'question', 'question-bank', 'roster'],
+  review: ['question', 'question-bank'],
 };
 
 const forbiddenModulePatterns = (mod) => {

@@ -9,6 +9,7 @@ import { PrismaService } from '../../infra/prisma/prisma.service';
 import { AuthzService } from '../../auth/authz.service';
 import type { BffClaims } from '../../auth/bff-claims';
 import { normalizeAnswerKey } from '../question/question-types';
+import { BankAccessService } from '../question-bank/bank-access.service';
 
 const DRAFT_STATUSES = [
   'GENERATED_DRAFT',
@@ -54,17 +55,40 @@ export class ReviewService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly authz: AuthzService,
+    private readonly bankAccess: BankAccessService,
   ) {}
 
   async listDrafts(
     claims: BffClaims,
     courseId: string,
     kind?: 'card' | 'quiz',
+    bankId?: string,
   ) {
-    await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
+    const hasBankId = typeof bankId === 'string' && bankId.trim().length > 0;
+    let quizWhere: Prisma.quiz_itemsWhereInput;
+    if (hasBankId) {
+      await this.bankAccess.assertRole(claims, bankId.trim(), 'VIEW');
+      if (kind !== 'quiz' && courseId) {
+        await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
+      }
+      quizWhere = {
+        bank_id: bankId.trim(),
+        status: { in: DRAFT_STATUSES },
+        deleted_at: null,
+      };
+    } else {
+      await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
+      const viewer = await this.bankAccess.viewer(claims);
+      quizWhere = {
+        course_id: courseId,
+        status: { in: DRAFT_STATUSES },
+        deleted_at: null,
+        question_banks: this.bankAccess.visibleWhere(viewer),
+      };
+    }
 
     const [cards, quizItems] = await Promise.all([
-      kind === 'quiz'
+      kind === 'quiz' || (hasBankId && !courseId)
         ? Promise.resolve([])
         : this.prisma.lesson_cards.findMany({
             where: {
@@ -80,12 +104,12 @@ export class ReviewService {
       kind === 'card'
         ? Promise.resolve([])
         : this.prisma.quiz_items.findMany({
-            where: {
-              course_id: courseId,
-              status: { in: DRAFT_STATUSES },
-              deleted_at: null,
+            where: quizWhere,
+            include: {
+              lessons: true,
+              learning_outcomes: true,
+              question_banks: { select: { bank_id: true, title: true } },
             },
-            include: { lessons: true, learning_outcomes: true },
             orderBy: { created_at: 'asc' },
           }),
     ]);
@@ -206,10 +230,11 @@ export class ReviewService {
     if (quizzes.length !== uniqueIds.length) {
       throw new NotFoundException('Có câu hỏi không tồn tại.');
     }
-    const courseIds = [...new Set(quizzes.map((q) => q.course_id))];
-    for (const courseId of courseIds) {
-      await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
-    }
+    await this.bankAccess.assertAll(
+      claims,
+      quizzes.map((q) => q.bank_id),
+      'EDIT',
+    );
     for (const quiz of quizzes) {
       normalizeAnswerKey(quiz.type, quiz.question, {
         options: quiz.options,
@@ -291,7 +316,7 @@ export class ReviewService {
         : null;
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
-      const updated = await tx.quiz_items.update({
+      await tx.quiz_items.update({
         where: { quiz_id: quizId },
         data: {
           question,
@@ -304,9 +329,15 @@ export class ReviewService {
             : {}),
           explanation: data.explanation,
           status: 'REVIEWING',
+          updated_by: claims.sub,
+          provenance: {},
           updated_at: now,
           ...unverifiedAfterEdit(quiz.verification_evidence, now),
         },
+      });
+      // Giá trị trả về từ UPDATE không thấy current_version_id do trigger AFTER ghi.
+      const updated = await tx.quiz_items.findUniqueOrThrow({
+        where: { quiz_id: quizId },
       });
       await tx.review_audit_logs.create({
         data: {
@@ -317,6 +348,8 @@ export class ReviewService {
           raw_changes: {
             before: quiz,
             after: data,
+            before_version_id: quiz.current_version_id ?? null,
+            after_version_id: updated.current_version_id ?? null,
           } as Prisma.InputJsonValue,
         },
       });
@@ -342,7 +375,7 @@ export class ReviewService {
     if (!quiz) {
       throw new NotFoundException(`Quiz item not found: ${quizId}`);
     }
-    await this.authz.assertCourseAccess(claims, quiz.course_id, STAFF_ROLES);
+    await this.bankAccess.assertRole(claims, quiz.bank_id, 'EDIT');
     return quiz;
   }
 }
