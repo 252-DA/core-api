@@ -254,4 +254,47 @@ describe('BankAccessService', () => {
       service.assertAll(claims, [BANK_ID, BANK_2], 'USE'),
     ).rejects.toThrow(ForbiddenException);
   });
+
+  it('accessibleBanks lọc đúng ngân hàng đạt ngưỡng USE (gồm SUBJECT cùng môn, bỏ PRIVATE người khác)', async () => {
+    const BANK_SUBJ = '00000000-0000-4000-8000-000000000023';
+    const BANK_VIEW = '00000000-0000-4000-8000-000000000024';
+    const BANK_DIFF = '00000000-0000-4000-8000-000000000025';
+    const { service } = setup({
+      banks: [
+        {
+          bank_id: BANK_SUBJ,
+          owner_id: OTHER_USER,
+          home_course_id: COURSE_OTHER,
+          subject_code: 'CO3137',
+          visibility: 'SUBJECT',
+          question_bank_shares: [],
+          courses: { course_id: COURSE_OTHER, name: 'Lớp L02' },
+        },
+        {
+          bank_id: BANK_VIEW,
+          owner_id: OTHER_USER,
+          home_course_id: COURSE_OTHER,
+          subject_code: 'CO3137',
+          visibility: 'PRIVATE',
+          question_bank_shares: [
+            { grantee_type: 'USER', grantee_id: USER, role: 'VIEW' },
+          ],
+          courses: { course_id: COURSE_OTHER, name: 'Lớp L02' },
+        },
+        {
+          bank_id: BANK_DIFF,
+          owner_id: OTHER_USER,
+          home_course_id: COURSE_OTHER,
+          subject_code: 'CO3011',
+          visibility: 'SUBJECT',
+          question_bank_shares: [],
+          courses: { course_id: COURSE_OTHER, name: 'Môn khác' },
+        },
+      ],
+    });
+    const usable = await service.accessibleBanks(claims, 'USE');
+    expect(usable.map((x) => [x.bank.bank_id, x.role, x.relation])).toEqual([
+      [BANK_SUBJ, 'USE', 'subject'],
+    ]);
+  });
 });

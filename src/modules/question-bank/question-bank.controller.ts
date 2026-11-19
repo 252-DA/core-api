@@ -15,6 +15,7 @@ import { CurrentBffClaims } from '../../auth/current-bff-claims.decorator';
 import {
   CreateQuestionBankDto,
   CreateQuestionBankItemDto,
+  ForkQuestionBankItemDto,
   RetireQuestionBankItemDto,
   ShareQuestionBankDto,
   UnshareQuestionBankDto,
@@ -80,6 +81,14 @@ export class QuestionBankController {
     return this.questionBanks.createItem(claims, id, body);
   }
 
+  @Get('question-banks/:id/share-candidates')
+  async shareCandidates(
+    @CurrentBffClaims() claims: BffClaims,
+    @Param('id') id: string,
+  ) {
+    return this.questionBanks.shareCandidates(claims, id);
+  }
+
   @Post('question-banks/:id/shares')
   async share(
     @CurrentBffClaims() claims: BffClaims,
@@ -101,6 +110,16 @@ export class QuestionBankController {
       granteeType: qGranteeType ?? body?.granteeType,
       granteeId: qGranteeId ?? body?.granteeId,
     });
+  }
+
+  @Post('question-banks/:id/items/:quizId/fork')
+  async forkItem(
+    @CurrentBffClaims() claims: BffClaims,
+    @Param('id') id: string,
+    @Param('quizId') quizId: string,
+    @Body() body: ForkQuestionBankItemDto,
+  ) {
+    return this.questionBanks.forkItem(claims, id, quizId, body);
   }
 
   @Post('question-banks/:id/items/:quizId/retire')

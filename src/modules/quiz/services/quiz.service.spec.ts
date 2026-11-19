@@ -102,10 +102,9 @@ describe('QuizService.submit (lesson quiz)', () => {
     expect(
       rows.map((r: { quiz_version_id: string | null }) => r.quiz_version_id),
     ).toEqual(['v-q1', 'v-q2']);
-    expect(rows.map((r: { quiz_version_id: string | null }) => r.quiz_version_id)).toEqual([
-      'v-q1',
-      'v-q2',
-    ]);
+    expect(
+      rows.map((r: { quiz_version_id: string | null }) => r.quiz_version_id),
+    ).toEqual(['v-q1', 'v-q2']);
   });
 
   it('không có tự luận thì không giao worker', async () => {

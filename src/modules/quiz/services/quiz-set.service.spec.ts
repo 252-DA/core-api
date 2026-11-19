@@ -28,12 +28,14 @@ function setup() {
     version_id: `ver-${quiz_id}`,
     current_version_id: `ver-${quiz_id}`,
     bank_id: 'bank-1',
+    course_id: COURSE,
     question: 'Q',
     type: 'MCQ',
     options: ['yes', 'no'],
     correct_answer: 'yes',
     explanation: 'Because',
-    lo_id: null,
+    lo_id: LO,
+    learning_outcomes: { lo_id: LO, code: 'L.O.1.1', deleted_at: null },
     bloom_level: 2,
     source_chunk_ids: [],
   }));
@@ -53,11 +55,23 @@ function setup() {
     },
     chapters: {
       findFirst: jest.fn().mockResolvedValue({ chapter_id: CHAPTER }),
-      findMany: jest
-        .fn()
-        .mockResolvedValue([
-          { chapter_id: CHAPTER, chapter_los: [{ lo_id: LO }] },
-        ]),
+      findMany: jest.fn().mockResolvedValue([
+        {
+          chapter_id: CHAPTER,
+          chapter_los: [
+            {
+              lo_id: LO,
+              learning_outcomes: {
+                lo_id: LO,
+                code: 'L.O.1.1',
+                is_current: true,
+                deleted_at: null,
+                version: 1,
+              },
+            },
+          ],
+        },
+      ]),
     },
     quiz_items: { findMany: jest.fn().mockResolvedValue(items) },
     lti_resource_links: {
@@ -147,7 +161,7 @@ describe('Canvas quiz sets', () => {
   });
   it('does not publish unapproved or out-of-chapter questions', async () => {
     const { service, prisma } = setup();
-    prisma.quiz_items.findMany.mockResolvedValue([]);
+    prisma.quiz_items.findMany.mockResolvedValueOnce([]);
     await expect(
       service.create(claims, {
         courseId: COURSE,
@@ -161,14 +175,37 @@ describe('Canvas quiz sets', () => {
     expect(prisma.quiz_items.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          course_id: COURSE,
+          quiz_id: { in: [Q1] },
+          deleted_at: null,
           status: { in: ['APPROVED', 'PUBLISHED'] },
-          learning_outcomes: expect.objectContaining({
-            chapter_los: { some: { chapter_id: { in: [CHAPTER] } } },
-          }),
         }),
       }),
     );
+
+    // Câu cùng khoá nhưng thuộc LO ngoài các chương đã chọn cũng bị từ chối.
+    prisma.quiz_items.findMany.mockResolvedValueOnce([
+      {
+        quiz_id: Q1,
+        bank_id: 'bank-1',
+        course_id: COURSE,
+        lo_id: CHAPTER2,
+        learning_outcomes: {
+          lo_id: CHAPTER2,
+          code: 'L.O.2.1',
+          deleted_at: null,
+        },
+      },
+    ]);
+    await expect(
+      service.create(claims, {
+        courseId: COURSE,
+        chapterId: CHAPTER,
+        title: 'Quiz',
+        quizIds: [Q1],
+        selectionId: SET,
+      }),
+    ).rejects.toThrow(/L\.O\.2\.1/);
+    expect(prisma.quiz_sets.create).not.toHaveBeenCalled();
   });
   it('reuses a snapshot on retry of the same deep linking selection', async () => {
     const { service, prisma, snapshot } = setup();
@@ -1090,7 +1127,21 @@ describe('Canvas quiz sets', () => {
     it('lưu mọi chương, bỏ trống chương chính, kèm ma trận đề', async () => {
       const { service, prisma } = setup();
       prisma.chapters.findMany.mockResolvedValue([
-        { chapter_id: CHAPTER, chapter_los: [{ lo_id: LO }] },
+        {
+          chapter_id: CHAPTER,
+          chapter_los: [
+            {
+              lo_id: LO,
+              learning_outcomes: {
+                lo_id: LO,
+                code: 'L.O.1.1',
+                is_current: true,
+                deleted_at: null,
+                version: 1,
+              },
+            },
+          ],
+        },
         { chapter_id: CHAPTER2, chapter_los: [] },
       ]);
       await create(service, {
@@ -1104,12 +1155,6 @@ describe('Canvas quiz sets', () => {
         chapter_id: null,
         chapter_ids: [CHAPTER, CHAPTER2],
         blueprint: { cells: [{ lo_id: LO, bloom_level: 3, count: 2 }] },
-      });
-      expect(
-        prisma.quiz_items.findMany.mock.calls[0][0].where.learning_outcomes,
-      ).toEqual({
-        deleted_at: null,
-        chapter_los: { some: { chapter_id: { in: [CHAPTER, CHAPTER2] } } },
       });
     });
 
@@ -1198,6 +1243,70 @@ describe('Canvas quiz sets', () => {
         }),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.quiz_sets.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('dùng câu khoá khác map lo_id sang khoá đích và báo lỗi kèm mã LO thiếu khi không map được', async () => {
+      const OTHER_COURSE = '00000000-0000-0000-0000-000000000099';
+      const FOREIGN_LO = '00000000-0000-0000-0000-000000000088';
+      const { service, prisma } = setup();
+      prisma.quiz_items.findMany.mockResolvedValueOnce([
+        {
+          quiz_id: Q1,
+          version_id: `ver-${Q1}`,
+          current_version_id: `ver-${Q1}`,
+          bank_id: 'bank-other',
+          course_id: OTHER_COURSE,
+          question: 'Câu khoá khác khớp LO?',
+          type: 'MCQ_SINGLE',
+          options: ['yes', 'no'],
+          correct_answer: 'yes',
+          explanation: 'Vì',
+          lo_id: FOREIGN_LO,
+          learning_outcomes: {
+            lo_id: FOREIGN_LO,
+            code: 'L.O.1.1',
+            deleted_at: null,
+          },
+          bloom_level: 2,
+          source_chunk_ids: [],
+        },
+      ]);
+      await service.create(claims, {
+        courseId: COURSE,
+        chapterId: CHAPTER,
+        title: 'Quiz dùng câu lớp khác',
+        quizIds: [Q1],
+        selectionId: SET,
+      });
+      expect(prisma.quiz_sets.create.mock.calls[0][0].data.items).toEqual([
+        expect.objectContaining({
+          quiz_id: Q1,
+          lo_id: LO,
+        }),
+      ]);
+
+      prisma.quiz_items.findMany.mockResolvedValueOnce([
+        {
+          quiz_id: Q2,
+          bank_id: 'bank-other',
+          course_id: OTHER_COURSE,
+          lo_id: FOREIGN_LO,
+          learning_outcomes: {
+            lo_id: FOREIGN_LO,
+            code: 'L.O.9.9',
+            deleted_at: null,
+          },
+        },
+      ]);
+      await expect(
+        service.create(claims, {
+          courseId: COURSE,
+          chapterId: CHAPTER,
+          title: 'Quiz thiếu LO',
+          quizIds: [Q2],
+          selectionId: SET,
+        }),
+      ).rejects.toThrow(/Thiếu LO: L\.O\.9\.9/);
     });
   });
 });

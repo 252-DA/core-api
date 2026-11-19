@@ -305,7 +305,7 @@ export class CurriculumImportService {
       }, APPLY_TRANSACTION);
     } catch (err) {
       if (err instanceof HttpException) throw err;
-      throw await this.applyFailed(importId, curriculum, err);
+      throw await this.applyFailed(importId, err);
     }
     return this.prisma.curriculum_imports.findUnique({
       where: { import_id: importId },
@@ -359,16 +359,10 @@ export class CurriculumImportService {
   }
 
   /** Ghi lỗi lên lần nạp (vẫn READY để bấm lại được) và trả lỗi cho người gọi. */
-  private async applyFailed(
-    importId: string,
-    curriculum: NormalizedCurriculum,
-    err: unknown,
-  ): Promise<Error> {
+  private async applyFailed(importId: string, err: unknown): Promise<Error> {
     const raw = errorNameAndMessage(err);
     this.logger.error(`Áp dụng đề cương ${importId} thất bại: ${raw}`);
-    const message = raw.includes('courses_code_key')
-      ? `Mã học phần ${curriculum.course.code} trong đề cương đã thuộc một khoá học khác trên hệ thống, nên chưa áp dụng được.`
-      : `Không ghi được đề cương: ${raw}`.slice(0, MAX_ERROR);
+    const message = `Không ghi được đề cương: ${raw}`.slice(0, MAX_ERROR);
     try {
       await this.prisma.curriculum_imports.updateMany({
         where: { import_id: importId, status: 'READY' },

@@ -1,4 +1,10 @@
-import { Allow, IsBoolean, IsOptional, IsString } from 'class-validator';
+import {
+  Allow,
+  IsBoolean,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class CreateQuestionBankDto {
   @IsOptional()
@@ -87,4 +93,9 @@ export class RetireQuestionBankItemDto {
   @IsOptional()
   @IsBoolean()
   restore?: boolean;
+}
+
+export class ForkQuestionBankItemDto {
+  @IsUUID()
+  targetBankId!: string;
 }

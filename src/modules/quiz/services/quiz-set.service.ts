@@ -92,7 +92,9 @@ export class QuizSetService {
         prisma: this.prisma,
         canvas: this.canvas,
         canvasCourses: this.canvasCourses,
+        bankAccess: this.bankAccess,
       },
+      claims,
       body,
     );
   }
@@ -106,7 +108,11 @@ export class QuizSetService {
     body: { courseId: string; loIds?: string[] },
   ) {
     await this.authz.assertSessionCourse(claims, body.courseId, STAFF_ROLES);
-    return loadQuizBuilderContext(this.prisma, body);
+    return loadQuizBuilderContext(
+      { prisma: this.prisma, bankAccess: this.bankAccess },
+      claims,
+      body,
+    );
   }
 
   async create(
@@ -159,14 +165,46 @@ export class QuizSetService {
         course_id: body.courseId,
         deleted_at: null,
       },
-      include: { chapter_los: { select: { lo_id: true } } },
+      include: {
+        chapter_los: {
+          include: {
+            learning_outcomes: {
+              select: {
+                lo_id: true,
+                code: true,
+                is_current: true,
+                deleted_at: true,
+                version: true,
+              },
+            },
+          },
+        },
+      },
     });
     if (chapters.length !== chapterIds.length)
       throw new BadRequestException('Chương không thuộc khóa học.');
-    const blueprint = parseBlueprint(
-      body.blueprint,
-      new Set(chapters.flatMap((c) => c.chapter_los.map((l) => l.lo_id))),
-    );
+    const chapterLoIds = new Set<string>();
+    const chapterLoByCode = new Map<
+      string,
+      { lo_id: string; version: number; is_current: boolean }
+    >();
+    for (const c of chapters) {
+      for (const link of c.chapter_los) {
+        chapterLoIds.add(link.lo_id);
+        const lo = link.learning_outcomes;
+        if (!lo || lo.deleted_at) continue;
+        if (!lo.is_current) continue;
+        const prev = chapterLoByCode.get(lo.code);
+        if (!prev || (lo.version ?? 0) > prev.version) {
+          chapterLoByCode.set(lo.code, {
+            lo_id: lo.lo_id,
+            version: lo.version ?? 0,
+            is_current: lo.is_current,
+          });
+        }
+      }
+    }
+    const blueprint = parseBlueprint(body.blueprint, chapterLoIds);
     return this.prisma.$transaction(async (tx) => {
       // The selection ID is generated and retained on the server for one deep
       // linking launch, so retries never create a second snapshot.
@@ -190,12 +228,12 @@ export class QuizSetService {
       const quizzes = await tx.quiz_items.findMany({
         where: {
           quiz_id: { in: body.quizIds },
-          course_id: body.courseId,
           deleted_at: null,
           status: { in: ['APPROVED', 'PUBLISHED'] },
+        },
+        include: {
           learning_outcomes: {
-            deleted_at: null,
-            chapter_los: { some: { chapter_id: { in: chapterIds } } },
+            select: { lo_id: true, code: true, deleted_at: true },
           },
         },
       });
@@ -208,6 +246,44 @@ export class QuizSetService {
         quizzes.map((q) => q.bank_id),
         'USE',
       );
+      const resolvedLoId = new Map<string, string>();
+      const missingLoCodes: string[] = [];
+      let hasUnmappedLo = false;
+      for (const q of quizzes) {
+        const srcLo =
+          q.learning_outcomes && !q.learning_outcomes.deleted_at
+            ? q.learning_outcomes
+            : null;
+        if (q.course_id === body.courseId) {
+          if (
+            q.lo_id &&
+            chapterLoIds.has(q.lo_id) &&
+            !(q.learning_outcomes && q.learning_outcomes.deleted_at)
+          ) {
+            resolvedLoId.set(q.quiz_id, q.lo_id);
+          } else {
+            hasUnmappedLo = true;
+            if (srcLo?.code) missingLoCodes.push(srcLo.code);
+          }
+        } else {
+          const target = srcLo ? chapterLoByCode.get(srcLo.code) : undefined;
+          if (target) {
+            // Câu từ khoá khác: snapshot ghi lo_id của khoá đích để thống kê/mastery khớp chương trình lớp này.
+            resolvedLoId.set(q.quiz_id, target.lo_id);
+          } else {
+            hasUnmappedLo = true;
+            if (srcLo?.code) missingLoCodes.push(srcLo.code);
+          }
+        }
+      }
+      if (hasUnmappedLo) {
+        const uniqueCodes = [...new Set(missingLoCodes)];
+        throw new BadRequestException(
+          uniqueCodes.length
+            ? `Chỉ thêm các câu đã duyệt và thuộc LO của chương. Thiếu LO: ${uniqueCodes.join(', ')}.`
+            : 'Chỉ thêm các câu đã duyệt và thuộc LO của chương.',
+        );
+      }
       const items: QuizSnapshotItem[] = body.quizIds.map((id) => {
         const q = quizzes.find((row) => row.quiz_id === id)!;
         return {
@@ -218,7 +294,7 @@ export class QuizSetService {
           options: q.options,
           correct_answer: q.correct_answer,
           explanation: q.explanation,
-          lo_id: q.lo_id,
+          lo_id: resolvedLoId.get(q.quiz_id) ?? q.lo_id,
           bloom_level: q.bloom_level,
           source_chunk_ids: q.source_chunk_ids,
         };

@@ -1,3 +1,4 @@
+import { BankAccessService } from '../../question-bank/bank-access.service';
 import {
   loadCanvasQuizContext,
   loadQuizBuilderContext,
@@ -5,6 +6,18 @@ import {
 
 const COURSE = '00000000-0000-0000-0000-000000000001';
 const CHAPTER = '00000000-0000-0000-0000-000000000002';
+const USER = '00000000-0000-0000-0000-000000000003';
+const BANK_LOCAL = '00000000-0000-0000-0000-000000000011';
+const LO_LOCAL = '00000000-0000-4000-8000-000000000010';
+const claims = {
+  sub: USER,
+  courseId: COURSE,
+  roles: ['instructor'],
+  scope: 'course' as const,
+  jti: 'j1',
+  iat: 0,
+  exp: 1,
+};
 
 function setup() {
   const prisma = {
@@ -15,7 +28,19 @@ function setup() {
           code: '1',
           title: 'Giới thiệu',
           sort_order: 1,
-          chapter_los: [],
+          chapter_los: [
+            {
+              lo_id: LO_LOCAL,
+              learning_outcomes: {
+                lo_id: LO_LOCAL,
+                code: 'L.O.1.1',
+                statement_vi: 'Hiểu MapReduce và HDFS',
+                bloom_level: 2,
+                is_current: true,
+                deleted_at: null,
+              },
+            },
+          ],
         },
       ]),
     },
@@ -28,12 +53,32 @@ function setup() {
     listModules: jest.fn().mockResolvedValue([{ id: 17, name: 'Chương 1' }]),
   };
   const canvasCourses = { contextId: jest.fn().mockResolvedValue('8') };
+  const bankAccess = {
+    accessibleBanks: jest.fn().mockResolvedValue([
+      {
+        bank: {
+          bank_id: BANK_LOCAL,
+          title: 'Ngân hàng chung',
+          home_course_id: COURSE,
+          is_course_default: true,
+          courses: { name: 'Big Data L01' },
+        },
+        role: 'EDIT' as const,
+        relation: 'course' as const,
+      },
+    ]),
+  } as unknown as BankAccessService;
   return {
     prisma,
     canvas,
     canvasCourses,
-    load: (body: Parameters<typeof loadCanvasQuizContext>[1]) =>
-      loadCanvasQuizContext({ prisma, canvas, canvasCourses } as never, body),
+    bankAccess,
+    load: (body: Parameters<typeof loadCanvasQuizContext>[2]) =>
+      loadCanvasQuizContext(
+        { prisma, canvas, canvasCourses, bankAccess } as never,
+        claims,
+        body,
+      ),
   };
 }
 
@@ -76,27 +121,144 @@ describe('loadCanvasQuizContext', () => {
     );
   });
 
-  it('ẩn câu đã RETIRED khỏi danh sách gợi ý ở cả context Canvas và Soạn đề', async () => {
-    const { prisma, load } = setup();
+  it('ẩn câu đã RETIRED và lọc theo ngân hàng >= USE (không lấy PRIVATE người khác)', async () => {
+    const { prisma, bankAccess, load } = setup();
     await load({ courseId: COURSE, chapterId: CHAPTER });
     expect(prisma.quiz_items.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
+          bank_id: { in: [BANK_LOCAL] },
           status: { not: 'RETIRED' },
         }),
       }),
     );
 
-    await loadQuizBuilderContext(prisma as never, {
+    await loadQuizBuilderContext({ prisma, bankAccess } as never, claims, {
       courseId: COURSE,
-      loIds: ['00000000-0000-4000-8000-000000000010'],
+      loIds: [LO_LOCAL],
     });
     expect(prisma.quiz_items.findMany).toHaveBeenLastCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
+          bank_id: { in: [BANK_LOCAL] },
           status: { not: 'RETIRED' },
         }),
       }),
     );
+  });
+
+  it('map LO khác khoá: khớp, cảnh báo khác phát biểu, và đưa câu thiếu LO vào unmappedForeignItems', async () => {
+    const OTHER_COURSE = '00000000-0000-0000-0000-000000000099';
+    const BANK_FOREIGN = '00000000-0000-0000-0000-000000000022';
+    const LO_OTHER_MATCH = '00000000-0000-4000-8000-000000000051';
+    const LO_OTHER_DIFF = '00000000-0000-4000-8000-000000000052';
+    const LO_OTHER_MISSING = '00000000-0000-4000-8000-000000000053';
+    const { prisma, bankAccess } = setup();
+    (bankAccess.accessibleBanks as jest.Mock).mockResolvedValue([
+      {
+        bank: {
+          bank_id: BANK_LOCAL,
+          title: 'Ngân hàng lớp này',
+          home_course_id: COURSE,
+          is_course_default: true,
+          courses: { name: 'Lớp L01' },
+        },
+        role: 'EDIT',
+        relation: 'course',
+      },
+      {
+        bank: {
+          bank_id: BANK_FOREIGN,
+          title: 'Ngân hàng cùng môn L02',
+          home_course_id: OTHER_COURSE,
+          is_course_default: true,
+          courses: { name: 'Lớp L02' },
+        },
+        role: 'USE',
+        relation: 'subject',
+      },
+    ]);
+    prisma.quiz_items.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        quiz_id: 'q-match',
+        bank_id: BANK_FOREIGN,
+        course_id: OTHER_COURSE,
+        lo_id: LO_OTHER_MATCH,
+        question: 'Câu khớp LO?',
+        type: 'MCQ_SINGLE',
+        bloom_level: 2,
+        learning_outcomes: {
+          lo_id: LO_OTHER_MATCH,
+          code: 'L.O.1.1',
+          statement_vi: '  Hiểu   MapReduce và HDFS ',
+          deleted_at: null,
+        },
+      },
+      {
+        quiz_id: 'q-diff',
+        bank_id: BANK_FOREIGN,
+        course_id: OTHER_COURSE,
+        lo_id: LO_OTHER_DIFF,
+        question: 'Câu khác phát biểu?',
+        type: 'MCQ_SINGLE',
+        bloom_level: 2,
+        learning_outcomes: {
+          lo_id: LO_OTHER_DIFF,
+          code: 'L.O.1.1',
+          statement_vi: 'Hiểu Spark Streaming (CTĐT 2024)',
+          deleted_at: null,
+        },
+      },
+      {
+        quiz_id: 'q-missing',
+        bank_id: BANK_FOREIGN,
+        course_id: OTHER_COURSE,
+        lo_id: LO_OTHER_MISSING,
+        question: 'Câu thiếu LO ở lớp đích?',
+        type: 'MCQ_SINGLE',
+        bloom_level: 3,
+        learning_outcomes: {
+          lo_id: LO_OTHER_MISSING,
+          code: 'L.O.9.9',
+          statement_vi: 'LO không tồn tại ở lớp L01',
+          deleted_at: null,
+        },
+      },
+    ]);
+
+    const res = await loadQuizBuilderContext(
+      { prisma, bankAccess } as never,
+      claims,
+      { courseId: COURSE, loIds: [LO_LOCAL] },
+    );
+
+    expect(res.banks).toHaveLength(2);
+    expect(res.quizItems).toHaveLength(2);
+    expect(res.quizItems[0]).toMatchObject({
+      quiz_id: 'q-match',
+      lo_id: LO_LOCAL,
+      source_lo_id: LO_OTHER_MATCH,
+      foreign: true,
+      can_edit: false,
+      lo_mapping: { status: 'matched' },
+    });
+    expect(res.quizItems[1]).toMatchObject({
+      quiz_id: 'q-diff',
+      lo_id: LO_LOCAL,
+      foreign: true,
+      can_edit: false,
+      lo_mapping: {
+        status: 'statement_differs',
+        source_lo_code: 'L.O.1.1',
+        source_statement_vi: 'Hiểu Spark Streaming (CTĐT 2024)',
+        target_statement_vi: 'Hiểu MapReduce và HDFS',
+      },
+    });
+    expect(res.unmappedForeignItems).toEqual([
+      expect.objectContaining({
+        quiz_id: 'q-missing',
+        source_lo_code: 'L.O.9.9',
+      }),
+    ]);
   });
 });

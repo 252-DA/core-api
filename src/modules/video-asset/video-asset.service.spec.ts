@@ -286,6 +286,60 @@ describe('VideoAssetService', () => {
     });
   });
 
+  describe('listAssets & courseCode', () => {
+    it('ưu tiên subject_code khi trả courseCode, rỗng thì fallback về courses.code', async () => {
+      const { prisma } = setup();
+      (prisma.video_assets as Record<string, jest.Mock>).findMany = jest
+        .fn()
+        .mockResolvedValue([
+          {
+            ...asset({ asset_id: 'a-1', visibility: 'PUBLIC' }),
+            creator: { display_name: 'GV A' },
+            courses: {
+              code: 'LMS-1234567890AB',
+              subject_code: 'CO3137',
+              name: 'Big Data A',
+            },
+          },
+          {
+            ...asset({ asset_id: 'a-2', visibility: 'PUBLIC' }),
+            creator: { display_name: 'GV B' },
+            courses: {
+              code: 'CO3011',
+              subject_code: null,
+              name: 'Legacy',
+            },
+          },
+        ]);
+      (prisma.video_assets as Record<string, jest.Mock>).count = jest
+        .fn()
+        .mockResolvedValue(2);
+      const service = new VideoAssetService(
+        prisma as never,
+        { assertCourseAccess: jest.fn() } as never,
+        {} as never,
+      );
+      const listed = await service.listAssets(claims(owner), {});
+      expect(listed.items.map((x) => x.courseCode)).toEqual([
+        'CO3137',
+        'CO3011',
+      ]);
+
+      prisma.video_assets.findFirst.mockResolvedValue({
+        ...asset({ visibility: 'PUBLIC' }),
+        creator: { display_name: 'GV A' },
+        courses: {
+          code: 'LMS-1234567890AB',
+          subject_code: 'CO3137',
+          name: 'Big Data A',
+        },
+      });
+      await expect(
+        service.getAsset(claims(other), { assetId: 'asset-1' }),
+      ).resolves.toMatchObject({ courseCode: 'CO3137' });
+    });
+  });
+
   describe('updateAsset', () => {
     it('chỉ chủ sở hữu sửa được và visibility phải hợp lệ', async () => {
       const { service, prisma } = setup();

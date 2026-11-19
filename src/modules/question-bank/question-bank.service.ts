@@ -17,7 +17,14 @@ import {
   effectiveBankRole,
   relationOf,
   type BankRole,
+  type BankShare,
 } from './bank-access.service';
+
+export function normalizeLoStatement(text: string | null | undefined): string {
+  return typeof text === 'string'
+    ? text.trim().replace(/\s+/g, ' ').toLowerCase()
+    : '';
+}
 
 const VISIBILITIES = ['PRIVATE', 'COURSE', 'SUBJECT'] as const;
 const SHARE_ROLES = ['VIEW', 'USE', 'EDIT'] as const;
@@ -125,6 +132,15 @@ export class QuestionBankService {
           _count: { _all: true },
         })
       : [];
+    const editableShares = banks
+      .filter((bank) =>
+        atLeast(
+          effectiveBankRole(viewer, bank, bank.question_bank_shares),
+          'EDIT',
+        ),
+      )
+      .flatMap((bank) => bank.question_bank_shares);
+    const shareLabels = await this.shareLabelMaps(editableShares);
     return banks.map((bank) => {
       const role = effectiveBankRole(
         viewer,
@@ -137,13 +153,18 @@ export class QuestionBankService {
           byStatus[c.status] = c._count._all;
         }
       }
+      const canChangeVisibility =
+        viewer.isAdmin ||
+        bank.owner_id === viewer.userId ||
+        (bank.owner_id === null &&
+          viewer.staffCourseIds.has(bank.home_course_id));
       return {
         bank_id: bank.bank_id,
         title: bank.title,
         description: bank.description,
         visibility: bank.visibility,
         is_course_default: bank.is_course_default,
-        subject_code: bank.subject_code,
+        subject_code: bank.subject_code ?? bank.courses.subject_code,
         home_course: {
           course_id: bank.courses.course_id,
           name: bank.courses.name,
@@ -156,6 +177,7 @@ export class QuestionBankService {
             }
           : null,
         role,
+        can_change_visibility: canChangeVisibility,
         relation: relationOf(viewer, bank, bank.question_bank_shares),
         is_current_course: bank.home_course_id === courseId,
         counts: {
@@ -167,7 +189,12 @@ export class QuestionBankService {
           retired: byStatus.RETIRED ?? 0,
           by_status: byStatus,
         },
-        shares: atLeast(role, 'EDIT') ? bank.question_bank_shares : undefined,
+        shares: atLeast(role, 'EDIT')
+          ? bank.question_bank_shares.map((s) => ({
+              ...s,
+              grantee_label: this.labelForShare(shareLabels, s),
+            }))
+          : undefined,
       };
     });
   }
@@ -199,6 +226,11 @@ export class QuestionBankService {
     });
     if (!course) {
       throw new NotFoundException('Không tìm thấy khoá học.');
+    }
+    if (visibility === 'SUBJECT' && !course.subject_code) {
+      throw new BadRequestException(
+        'Khoá học chưa có mã môn (hãy nạp đề cương trước khi chia sẻ theo môn).',
+      );
     }
     return this.prisma.$transaction(async (tx) => {
       const bank = await tx.question_banks.create({
@@ -258,6 +290,19 @@ export class QuestionBankService {
           'Ngân hàng chung của khoá không thể để riêng tư.',
         );
       }
+      if (visibility === 'SUBJECT') {
+        const homeCourse = await this.prisma.courses.findFirst({
+          where: { course_id: bank.home_course_id, deleted_at: null },
+          select: { subject_code: true },
+        });
+        const subjectCode = homeCourse?.subject_code ?? bank.subject_code;
+        if (!subjectCode) {
+          throw new BadRequestException(
+            'Khoá học chưa có mã môn (hãy nạp đề cương trước khi chia sẻ theo môn).',
+          );
+        }
+        data.subject_code = subjectCode;
+      }
       data.visibility = visibility;
     }
     return this.prisma.$transaction(async (tx) => {
@@ -291,7 +336,11 @@ export class QuestionBankService {
       search?: string;
     },
   ) {
-    const { bank, role } = await this.access.assertRole(claims, bankId, 'VIEW');
+    const { bank, role, viewer } = await this.access.assertRole(
+      claims,
+      bankId,
+      'VIEW',
+    );
     const where: Prisma.quiz_itemsWhereInput = {
       bank_id: bank.bank_id,
       deleted_at: null,
@@ -321,33 +370,67 @@ export class QuestionBankService {
         mode: 'insensitive',
       };
     }
-    const items = await this.prisma.quiz_items.findMany({
-      where,
-      include: {
-        learning_outcomes: {
-          select: { lo_id: true, code: true, statement_vi: true },
-        },
-        current_version: { select: { version_id: true, version_no: true } },
-        author: { select: { display_name: true } },
-        question_lms_links: {
-          select: {
-            direction: true,
-            lms_type: true,
-            lms_context_type: true,
-            lms_context_id: true,
-            ext_bank_id: true,
-            ext_bank_title: true,
-            ext_question_id: true,
-            version_id: true,
-            synced_at: true,
+    const [homeCourse, items, shareLabels] = await Promise.all([
+      this.prisma.courses.findFirst({
+        where: { course_id: bank.home_course_id, deleted_at: null },
+        select: { course_id: true, name: true, code: true, subject_code: true },
+      }),
+      this.prisma.quiz_items.findMany({
+        where,
+        include: {
+          learning_outcomes: {
+            select: { lo_id: true, code: true, statement_vi: true },
+          },
+          current_version: { select: { version_id: true, version_no: true } },
+          author: { select: { display_name: true } },
+          question_lms_links: {
+            select: {
+              direction: true,
+              lms_type: true,
+              lms_context_type: true,
+              lms_context_id: true,
+              ext_bank_id: true,
+              ext_bank_title: true,
+              ext_question_id: true,
+              version_id: true,
+              synced_at: true,
+            },
           },
         },
-      },
-      orderBy: { created_at: 'desc' },
-      take: 500,
-    });
+        orderBy: { created_at: 'desc' },
+        take: 500,
+      }),
+      atLeast(role, 'EDIT')
+        ? this.shareLabelMaps(bank.question_bank_shares)
+        : Promise.resolve({
+            users: new Map<string, string>(),
+            courses: new Map<string, string>(),
+          }),
+    ]);
+    const canChangeVisibility =
+      viewer.isAdmin ||
+      bank.owner_id === viewer.userId ||
+      (bank.owner_id === null &&
+        viewer.staffCourseIds.has(bank.home_course_id));
     return {
-      bank: { bank_id: bank.bank_id, title: bank.title, role },
+      bank: {
+        bank_id: bank.bank_id,
+        title: bank.title,
+        description: bank.description,
+        visibility: bank.visibility,
+        is_course_default: bank.is_course_default,
+        subject_code: bank.subject_code ?? homeCourse?.subject_code ?? null,
+        home_course_id: bank.home_course_id,
+        home_course_name: homeCourse?.name ?? null,
+        can_change_visibility: canChangeVisibility,
+        role,
+        shares: atLeast(role, 'EDIT')
+          ? bank.question_bank_shares.map((s) => ({
+              ...s,
+              grantee_label: this.labelForShare(shareLabels, s),
+            }))
+          : undefined,
+      },
       items: items.map(({ question_lms_links, ...item }) => ({
         ...item,
         lms_links: question_lms_links.map((link) => ({
@@ -425,6 +508,203 @@ export class QuestionBankService {
         bank_id: bank.bank_id,
       });
       return item;
+    });
+  }
+
+  /**
+   * Ứng viên chia sẻ: các khoá cùng mã môn với ngân hàng và giảng viên của chúng.
+   * Nếu khoá chưa nạp đề cương (chưa có subject_code), trả về giảng viên của chính khoá gốc.
+   */
+  async shareCandidates(claims: BffClaims, bankId: string) {
+    const { bank } = await this.access.assertRole(claims, bankId, 'EDIT');
+    const homeCourse = await this.prisma.courses.findFirst({
+      where: { course_id: bank.home_course_id, deleted_at: null },
+      select: { subject_code: true },
+    });
+    const subjectCode = bank.subject_code ?? homeCourse?.subject_code ?? null;
+    const courses = await this.prisma.courses.findMany({
+      where: subjectCode
+        ? { subject_code: subjectCode, deleted_at: null }
+        : { course_id: bank.home_course_id, deleted_at: null },
+      select: {
+        course_id: true,
+        name: true,
+        course_memberships: {
+          where: { role: { in: [...STAFF_ROLES] }, status: 'active' },
+          select: {
+            role: true,
+            lms_user_mappings: {
+              select: {
+                internal_user_id: true,
+                display_name: true,
+                deleted_at: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { created_at: 'asc' },
+    });
+    const users = new Map<
+      string,
+      { user_id: string; display_name: string; courses: string[] }
+    >();
+    for (const course of courses) {
+      for (const m of course.course_memberships) {
+        const u = m.lms_user_mappings;
+        if (u.deleted_at || u.internal_user_id === claims.sub) continue;
+        const entry = users.get(u.internal_user_id) ?? {
+          user_id: u.internal_user_id,
+          display_name: u.display_name,
+          courses: [],
+        };
+        if (!entry.courses.includes(course.name)) {
+          entry.courses.push(course.name);
+        }
+        users.set(u.internal_user_id, entry);
+      }
+    }
+    return {
+      subject_code: subjectCode,
+      courses: courses
+        .filter((c) => c.course_id !== bank.home_course_id)
+        .map((c) => ({ course_id: c.course_id, name: c.name })),
+      users: [...users.values()],
+    };
+  }
+
+  /**
+   * Nhân bản (fork) câu hỏi sang ngân hàng khác mà người dùng có quyền EDIT (§6.3).
+   * Dùng uuidv7() mới, map LO theo mã sang khoá của ngân hàng đích, ghi audit FORK_QUIZ.
+   */
+  async forkItem(
+    claims: BffClaims,
+    bankId: string,
+    quizId: string,
+    body: { targetBankId?: unknown },
+  ) {
+    if (!isUuid(quizId)) {
+      throw new BadRequestException('Câu hỏi không hợp lệ.');
+    }
+    const { bank: source } = await this.access.assertRole(
+      claims,
+      bankId,
+      'USE',
+    );
+    const { bank: target } = await this.access.assertRole(
+      claims,
+      body.targetBankId,
+      'EDIT',
+    );
+    if (target.bank_id === source.bank_id) {
+      throw new BadRequestException(
+        'Ngân hàng đích phải khác ngân hàng nguồn.',
+      );
+    }
+    const src = await this.prisma.quiz_items.findFirst({
+      where: { quiz_id: quizId, bank_id: source.bank_id, deleted_at: null },
+      include: {
+        learning_outcomes: {
+          select: {
+            lo_id: true,
+            code: true,
+            statement_vi: true,
+            deleted_at: true,
+          },
+        },
+        current_version: true,
+      },
+    });
+    if (!src) {
+      throw new NotFoundException('Không tìm thấy câu hỏi trong ngân hàng.');
+    }
+
+    const sourceLo =
+      src.learning_outcomes && !src.learning_outcomes.deleted_at
+        ? src.learning_outcomes
+        : null;
+    const loCode = sourceLo?.code ?? null;
+    let loId: string | null = null;
+    let loStatementDiffers = false;
+
+    if (sourceLo) {
+      if (src.course_id === target.home_course_id) {
+        loId = sourceLo.lo_id;
+      } else {
+        const targetLo = await this.prisma.learning_outcomes.findFirst({
+          where: {
+            course_id: target.home_course_id,
+            code: sourceLo.code,
+            is_current: true,
+            deleted_at: null,
+          },
+          orderBy: { version: 'desc' },
+          select: { lo_id: true, statement_vi: true },
+        });
+        if (targetLo) {
+          loId = targetLo.lo_id;
+          loStatementDiffers =
+            normalizeLoStatement(sourceLo.statement_vi) !==
+            normalizeLoStatement(targetLo.statement_vi);
+        }
+      }
+    }
+
+    const snapshot = src.current_version ?? src;
+    const loMapped = !loCode || loId !== null;
+    return this.prisma.$transaction(async (tx) => {
+      // Không đặt quiz_id để Postgres sinh uuidv7() mới, tránh trùng id câu gốc.
+      const created = await tx.quiz_items.create({
+        data: {
+          bank_id: target.bank_id,
+          course_id: target.home_course_id,
+          lesson_id: null,
+          lo_id: loId,
+          type: snapshot.type,
+          question: snapshot.question,
+          options: (snapshot.options === null
+            ? Prisma.DbNull
+            : snapshot.options) as Prisma.InputJsonValue,
+          correct_answer: snapshot.correct_answer as Prisma.InputJsonValue,
+          explanation: snapshot.explanation,
+          bloom_level: snapshot.bloom_level,
+          source_chunk_ids: snapshot.source_chunk_ids,
+          status: USABLE_STATUSES.includes(src.status)
+            ? 'APPROVED'
+            : 'GENERATED_DRAFT',
+          origin: 'FORK',
+          forked_from_version_id: src.current_version_id,
+          author_id: claims.sub,
+          updated_by: claims.sub,
+          provenance: {
+            forked_from_quiz_id: src.quiz_id,
+            forked_from_bank_id: source.bank_id,
+            ...(src.current_version_id
+              ? { forked_from_version_id: src.current_version_id }
+              : {}),
+            ...(loCode && !loId ? { unmapped_lo_code: loCode } : {}),
+          },
+        },
+      });
+      // Đọc lại để lấy current_version_id do trigger AFTER INSERT ghi.
+      const item = await tx.quiz_items.findUniqueOrThrow({
+        where: { quiz_id: created.quiz_id },
+      });
+      await this.audit(tx, claims, 'FORK_QUIZ', 'quiz_item', item.quiz_id, {
+        from: src.quiz_id,
+        from_version: src.current_version_id,
+        from_bank: source.bank_id,
+        to_bank: target.bank_id,
+        lo_mapped: loMapped,
+      });
+      return {
+        item,
+        source_quiz_id: src.quiz_id,
+        target_bank_id: target.bank_id,
+        lo_mapped: loMapped,
+        unmapped_lo_code: loCode && !loId ? loCode : null,
+        lo_statement_differs: loStatementDiffers,
+      };
     });
   }
 
@@ -606,6 +886,51 @@ export class QuestionBankService {
         updated: true,
       };
     });
+  }
+
+  private async shareLabelMaps(shares: BankShare[]) {
+    const userIds = [
+      ...new Set(
+        shares
+          .filter((s) => s.grantee_type === 'USER')
+          .map((s) => s.grantee_id),
+      ),
+    ];
+    const courseIds = [
+      ...new Set(
+        shares
+          .filter((s) => s.grantee_type === 'COURSE')
+          .map((s) => s.grantee_id),
+      ),
+    ];
+    const [users, courses] = await Promise.all([
+      userIds.length
+        ? this.prisma.lms_user_mappings.findMany({
+            where: { internal_user_id: { in: userIds } },
+            select: { internal_user_id: true, display_name: true },
+          })
+        : Promise.resolve([]),
+      courseIds.length
+        ? this.prisma.courses.findMany({
+            where: { course_id: { in: courseIds } },
+            select: { course_id: true, name: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    return {
+      users: new Map(users.map((u) => [u.internal_user_id, u.display_name])),
+      courses: new Map(courses.map((c) => [c.course_id, c.name])),
+    };
+  }
+
+  private labelForShare(
+    maps: { users: Map<string, string>; courses: Map<string, string> },
+    share: BankShare,
+  ) {
+    if (share.grantee_type === 'USER') {
+      return maps.users.get(share.grantee_id) ?? share.grantee_id;
+    }
+    return maps.courses.get(share.grantee_id) ?? share.grantee_id;
   }
 
   private async loOfCourse(loId: unknown, courseId: string) {

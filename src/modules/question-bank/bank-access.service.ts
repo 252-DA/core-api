@@ -280,6 +280,39 @@ export class BankAccessService {
     }
     return { viewer, roles };
   }
+
+  /** Mọi ngân hàng người dùng có quyền ít nhất `min`, kèm vai trò và quan hệ. */
+  async accessibleBanks(claims: BffClaims, min: BankRole) {
+    const viewer = await this.viewer(claims);
+    if (viewer.isLearnerOnly) return [];
+    const banks = await this.prisma.question_banks.findMany({
+      where: this.visibleWhere(viewer),
+      include: {
+        question_bank_shares: true,
+        courses: {
+          select: {
+            course_id: true,
+            name: true,
+            code: true,
+            subject_code: true,
+          },
+        },
+      },
+      orderBy: [{ is_course_default: 'desc' }, { created_at: 'asc' }],
+      take: 200,
+    });
+    return banks.flatMap((bank) => {
+      const role = effectiveBankRole(viewer, bank, bank.question_bank_shares);
+      if (!role || !atLeast(role, min)) return [];
+      return [
+        {
+          bank,
+          role,
+          relation: relationOf(viewer, bank, bank.question_bank_shares),
+        },
+      ];
+    });
+  }
 }
 
 function forbiddenMessage(min: BankRole): string {

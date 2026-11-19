@@ -280,4 +280,13 @@ describe('writeCurriculum', () => {
       writeCurriculum(tx as never, GOLDEN_COURSE_ID, CO3011_CURRICULUM),
     ).rejects.toThrow(/Không thấy học phần/);
   });
+
+  it('writes course code into subject_code without touching courses.code', async () => {
+    const { tx, sql } = fakeTx();
+
+    await writeCurriculum(tx as never, GOLDEN_COURSE_ID, CO3011_CURRICULUM);
+
+    expect(sql[0]).toContain('SET subject_code =');
+    expect(sql[0]).not.toMatch(/\bSET\s+code\s*=/);
+  });
 });

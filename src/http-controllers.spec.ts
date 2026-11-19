@@ -205,8 +205,10 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     'updateBank',
     'listItems',
     'createItem',
+    'shareCandidates',
     'share',
     'unshare',
+    'forkItem',
     'retireItem',
     'listVersions',
   ]);
@@ -864,6 +866,12 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     });
 
     await injectJson({
+      method: 'GET',
+      url: '/api/question-banks/b1/share-candidates',
+    });
+    expect(questionBanks.shareCandidates).toHaveBeenCalledWith(claims, 'b1');
+
+    await injectJson({
       method: 'POST',
       url: '/api/question-banks/b1/shares',
       payload: { granteeType: 'USER', granteeId: 'u2', role: 'USE' },
@@ -881,6 +889,16 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     expect(questionBanks.unshare).toHaveBeenCalledWith(claims, 'b1', {
       granteeType: 'USER',
       granteeId: 'u2',
+    });
+
+    const targetBank = '00000000-0000-4000-8000-000000000099';
+    await injectJson({
+      method: 'POST',
+      url: '/api/question-banks/b1/items/q1/fork',
+      payload: { targetBankId: targetBank, ignored: 1 },
+    });
+    expect(questionBanks.forkItem).toHaveBeenCalledWith(claims, 'b1', 'q1', {
+      targetBankId: targetBank,
     });
 
     await injectJson({

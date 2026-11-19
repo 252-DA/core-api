@@ -441,19 +441,5 @@ describe('CurriculumImportService', () => {
         }),
       });
     });
-
-    it('explains a course code that already belongs to another course', async () => {
-      const { service, prisma, tx } = setup();
-      prisma.curriculum_imports.findUnique.mockResolvedValue(readyImport());
-      tx.$executeRaw.mockRejectedValueOnce(
-        new Error(
-          'duplicate key value violates unique constraint "courses_code_key"',
-        ),
-      );
-
-      await expect(service.applyImport(claims, importId)).rejects.toThrow(
-        /Mã học phần CO3011 .* khoá học khác/,
-      );
-    });
   });
 });

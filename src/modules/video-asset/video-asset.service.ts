@@ -250,7 +250,7 @@ export class VideoAssetService {
         orderBy: { created_at: 'desc' },
         include: {
           creator: { select: { display_name: true } },
-          courses: { select: { code: true, name: true } },
+          courses: { select: { code: true, subject_code: true, name: true } },
         },
       }),
       this.prisma.video_assets.count({ where }),
@@ -261,7 +261,7 @@ export class VideoAssetService {
         ...serializeVideoAsset(item),
         creatorName: item.creator?.display_name,
         courseName: item.courses?.name,
-        courseCode: item.courses?.code,
+        courseCode: item.courses?.subject_code ?? item.courses?.code,
       })),
       total,
       limit: take,
@@ -277,7 +277,7 @@ export class VideoAssetService {
       where: { asset_id: input.assetId },
       include: {
         creator: { select: { display_name: true } },
-        courses: { select: { code: true, name: true } },
+        courses: { select: { code: true, subject_code: true, name: true } },
       },
     });
     if (!asset || asset.deleted_at || !(await this.canView(claims, asset))) {
@@ -288,7 +288,7 @@ export class VideoAssetService {
       ...serializeVideoAsset(asset),
       creatorName: asset.creator?.display_name,
       courseName: asset.courses?.name,
-      courseCode: asset.courses?.code,
+      courseCode: asset.courses?.subject_code ?? asset.courses?.code,
     };
   }
 

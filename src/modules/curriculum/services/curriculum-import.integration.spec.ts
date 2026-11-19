@@ -64,6 +64,37 @@ describeDb('Curriculum import on PostgreSQL', () => {
     return sortDump(JSON.parse(dump));
   }
 
+  async function courseRow(courseId: string) {
+    const [row] = await prisma.$queryRawUnsafe<
+      Array<{
+        code: string;
+        subject_code: string | null;
+        name: string;
+        description: string | null;
+      }>
+    >(
+      'SELECT code, subject_code, name, description FROM courses WHERE course_id = $1::uuid',
+      courseId,
+    );
+    return row;
+  }
+
+  function expectMatchesPython(
+    actual: TableDump,
+    expectedCourseCode = `canvas-it-${GOLDEN_COURSE_ID}`,
+  ) {
+    const expected = sortDump(PYTHON_ROWS);
+    expect(actual.courses).toEqual([
+      {
+        ...expected.courses[0],
+        code: expectedCourseCode,
+      },
+    ]);
+    const { courses: _actualCourses, ...actualRest } = actual;
+    const { courses: _expectedCourses, ...expectedRest } = expected;
+    expect(actualRest).toEqual(expectedRest);
+  }
+
   async function createCourse(courseId: string = randomUUID()) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO courses (course_id, lms_id, code, name) VALUES ($1::uuid, $2, $3, 'LMS course')
@@ -147,10 +178,16 @@ describeDb('Curriculum import on PostgreSQL', () => {
 
     it('writes the same nine tables as upsert_curriculum did, and again without duplicates', async () => {
       await write(GOLDEN_COURSE_ID, CO3011_CURRICULUM);
-      expect(await dump(GOLDEN_COURSE_ID)).toEqual(sortDump(PYTHON_ROWS));
+      expectMatchesPython(await dump(GOLDEN_COURSE_ID));
+      expect(await courseRow(GOLDEN_COURSE_ID)).toEqual({
+        code: `canvas-it-${GOLDEN_COURSE_ID}`,
+        subject_code: 'CO3011',
+        name: CO3011_CURRICULUM.course.title_vi,
+        description: CO3011_CURRICULUM.course.title_en,
+      });
 
       await write(GOLDEN_COURSE_ID, CO3011_CURRICULUM);
-      expect(await dump(GOLDEN_COURSE_ID)).toEqual(sortDump(PYTHON_ROWS));
+      expectMatchesPython(await dump(GOLDEN_COURSE_ID));
     });
 
     it('updates rows the Python writer left behind instead of adding new ones', async () => {
@@ -179,7 +216,8 @@ describeDb('Curriculum import on PostgreSQL', () => {
         after.curriculum_extraction_issues.filter(
           (i) => i.code !== 'old.resolved',
         );
-      expect(after).toEqual(sortDump(PYTHON_ROWS));
+      expectMatchesPython(after, 'CO3011');
+      expect((await courseRow(GOLDEN_COURSE_ID)).subject_code).toBe('CO3011');
     });
   });
 
@@ -302,7 +340,11 @@ describeDb('Curriculum import on PostgreSQL', () => {
         curriculum_extraction_issues: 7,
       });
       const written = await dump(courseId);
-      expect(written.courses[0].code).toBe(code);
+      expect(written.courses[0].code).toBe(`canvas-it-${courseId}`);
+      expect(await courseRow(courseId)).toMatchObject({
+        code: `canvas-it-${courseId}`,
+        subject_code: code,
+      });
       expect(written.learning_outcomes.map((lo) => lo.lo_id).sort()).toEqual(
         CO3011_CURRICULUM.learning_outcomes
           .map((lo) => curriculumIds.learningOutcome(courseId, lo.code))
@@ -327,18 +369,47 @@ describeDb('Curriculum import on PostgreSQL', () => {
       expect((await importRow(importId)).status).toBe('APPLIED');
     });
 
-    it('rolls everything back and keeps the import ready when the course code is taken', async () => {
+    it('allows multiple courses to import the same subject code without violating courses_code_key', async () => {
       const { service, handler } = services();
-      const owner = await createCourse();
-      const code = `CO3011-TAKEN-${owner.slice(0, 8)}`;
-      await prisma.$executeRawUnsafe(
-        'UPDATE courses SET code = $2 WHERE course_id = $1::uuid',
-        owner,
-        code,
-      );
+      const firstCourse = await createCourse();
+      const secondCourse = await createCourse();
+      const sharedSubjectCode = `CO3137-IT-${firstCourse.slice(0, 6)}`;
+
+      const firstImport = await createImport(firstCourse);
+      await handler.handle(envelopeFor(firstImport, sharedSubjectCode));
+      await expect(
+        service.applyImport(claims, firstImport),
+      ).resolves.toMatchObject({
+        status: 'APPLIED',
+      });
+
+      const secondImport = await createImport(secondCourse);
+      await handler.handle(envelopeFor(secondImport, sharedSubjectCode));
+      await expect(
+        service.applyImport(claims, secondImport),
+      ).resolves.toMatchObject({
+        status: 'APPLIED',
+      });
+
+      expect(await courseRow(firstCourse)).toMatchObject({
+        code: `canvas-it-${firstCourse}`,
+        subject_code: sharedSubjectCode,
+      });
+      expect(await courseRow(secondCourse)).toMatchObject({
+        code: `canvas-it-${secondCourse}`,
+        subject_code: sharedSubjectCode,
+      });
+    });
+
+    it('rolls everything back and keeps the import ready when writing curriculum fails in DB', async () => {
+      const { service, handler } = services();
       const courseId = await createCourse();
       const importId = await createImport(courseId);
-      await handler.handle(envelopeFor(importId, code));
+      const code = `CO3011-ERR-${courseId.slice(0, 8)}`;
+      const broken = envelopeFor(importId, code);
+      // Vượt quá VARCHAR(20) của chapters.code sau khi UPDATE courses đã chạy.
+      broken.payload.curriculum.chapters[0].code = 'CH-' + 'X'.repeat(25);
+      await handler.handle(broken);
 
       await expect(service.applyImport(claims, importId)).rejects.toThrow(
         InternalServerErrorException,
@@ -346,7 +417,11 @@ describeDb('Curriculum import on PostgreSQL', () => {
 
       const row = await importRow(importId);
       expect(row.status).toBe('READY');
-      expect(row.error).toMatch(/khoá học khác/);
+      expect(row.error).toMatch(/Không ghi được đề cương/);
+      expect(await courseRow(courseId)).toMatchObject({
+        code: `canvas-it-${courseId}`,
+        subject_code: null,
+      });
       const counts = await countRows(courseId);
       expect(
         counts.chapters + counts.learning_outcomes + counts.assessments,

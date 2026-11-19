@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -154,16 +154,27 @@ describeDb('QuestionBank P1 triggers, writers & backfill on PostgreSQL', () => {
           where: { performed_by: { in: userIds } },
         });
       }
-      for (const cid of courseIds) {
-        await prisma.quiz_attempts.deleteMany({ where: { course_id: cid } });
-        await prisma.quiz_sets.deleteMany({ where: { course_id: cid } });
+      if (courseIds.length) {
+        await prisma.quiz_attempts.deleteMany({
+          where: { course_id: { in: courseIds } },
+        });
+        await prisma.quiz_sets.deleteMany({
+          where: { course_id: { in: courseIds } },
+        });
         await prisma.quiz_item_versions.deleteMany({
-          where: { quiz_items: { course_id: cid } },
+          where: { quiz_items: { course_id: { in: courseIds } } },
         });
-        await prisma.quiz_items.deleteMany({ where: { course_id: cid } });
+        await prisma.quiz_items.deleteMany({
+          where: { course_id: { in: courseIds } },
+        });
+        await prisma.question_bank_shares.deleteMany({
+          where: { question_banks: { home_course_id: { in: courseIds } } },
+        });
         await prisma.question_banks.deleteMany({
-          where: { home_course_id: cid },
+          where: { home_course_id: { in: courseIds } },
         });
+      }
+      for (const cid of courseIds) {
         await prisma.lesson_cards.deleteMany({ where: { course_id: cid } });
         await prisma.lessons.deleteMany({ where: { course_id: cid } });
         await prisma.content_generation_requests.deleteMany({
@@ -1152,5 +1163,210 @@ describeDb('QuestionBank P1 triggers, writers & backfill on PostgreSQL', () => {
         selectionId: randomUUID(),
       }),
     ).rejects.toThrow('đã duyệt');
+  });
+
+  it('P3: chia sẻ SUBJECT cùng mã môn, map LO khác khoá khi soạn đề/builderContext, và fork độc lập', async () => {
+    const courseB = await prisma.courses.create({
+      data: {
+        code: `LMS-${randomUUID().slice(0, 12).toUpperCase()}`,
+        subject_code: 'CO3137',
+        name: 'IT Question Bank Lớp L02',
+      },
+    });
+    courseIds.push(courseB.course_id);
+
+    const loB = await prisma.learning_outcomes.create({
+      data: {
+        course_id: courseB.course_id,
+        code: 'L.O.1.1',
+        statement_vi: 'Hiểu sâu về ngân hàng câu hỏi (lớp L02)',
+      },
+    });
+    const chapterB = await prisma.chapters.create({
+      data: {
+        course_id: courseB.course_id,
+        code: '1',
+        title: 'Chương 1 L02',
+        sort_order: 1,
+      },
+    });
+    await prisma.chapter_los.create({
+      data: { chapter_id: chapterB.chapter_id, lo_id: loB.lo_id },
+    });
+
+    const loMissingInB = await prisma.learning_outcomes.create({
+      data: {
+        course_id: courseId,
+        code: 'L.O.9.9',
+        statement_vi: 'LO chỉ có ở lớp L01',
+      },
+    });
+
+    const instB = await prisma.lms_user_mappings.create({
+      data: {
+        lms_sub: `it-qb-inst-b-${randomUUID()}`,
+        display_name: 'Giảng viên L02',
+        role: 'instructor',
+      },
+    });
+    userIds.push(instB.internal_user_id);
+    await prisma.course_memberships.create({
+      data: {
+        user_id: instB.internal_user_id,
+        course_id: courseB.course_id,
+        role: 'instructor',
+      },
+    });
+    const instBClaims: BffClaims = {
+      sub: instB.internal_user_id,
+      courseId: courseB.course_id,
+      roles: ['instructor'],
+      scope: 'course',
+      jti: 'it-qb-inst-b-jti',
+      iat: 0,
+      exp: 1,
+    };
+
+    const subjectBank = await bankService.createBank(instructorClaims, {
+      courseId,
+      title: 'Ngân hàng cùng môn P3',
+      visibility: 'SUBJECT',
+    });
+    const qMatched = await bankService.createItem(
+      instructorClaims,
+      subjectBank.bank_id,
+      {
+        type: 'MCQ_SINGLE',
+        question: 'Câu SUBJECT khớp LO P3?',
+        options: ['A', 'B', 'C', 'D'],
+        correct_answer: 'A',
+        loId,
+      },
+    );
+    const qMissingLo = await bankService.createItem(
+      instructorClaims,
+      subjectBank.bank_id,
+      {
+        type: 'TRUE_FALSE',
+        question: 'Câu SUBJECT thiếu LO ở L02?',
+        options: ['Đúng', 'Sai'],
+        correct_answer: 'Đúng',
+        loId: loMissingInB.lo_id,
+      },
+    );
+
+    // 1. GV lớp B thấy subjectBank qua relation = 'subject' (role = USE) và thấy câu ở Soạn đề kèm cảnh báo.
+    const visibleInB = await bankService.listBanks(
+      instBClaims,
+      courseB.course_id,
+    );
+    expect(visibleInB).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          bank_id: subjectBank.bank_id,
+          relation: 'subject',
+          role: 'USE',
+        }),
+      ]),
+    );
+    const defaultBankB = visibleInB.find(
+      (b) => b.is_current_course && b.is_course_default,
+    )!;
+
+    const builderCtx = await quizSetService.builderContext(instBClaims, {
+      courseId: courseB.course_id,
+      loIds: [loB.lo_id],
+    });
+    const matchedCtxItem = builderCtx.quizItems.find(
+      (i) => i.quiz_id === qMatched.quiz_id,
+    );
+    expect(matchedCtxItem).toMatchObject({
+      quiz_id: qMatched.quiz_id,
+      lo_id: loB.lo_id,
+      source_lo_id: loId,
+      foreign: true,
+      can_edit: false,
+      lo_mapping: { status: 'statement_differs', source_lo_code: 'L.O.1.1' },
+    });
+    expect(builderCtx.unmappedForeignItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          quiz_id: qMissingLo.quiz_id,
+          source_lo_code: 'L.O.9.9',
+        }),
+      ]),
+    );
+
+    // 2. Tạo đề ở lớp B dùng câu của lớp A: snapshot ghi lo_id của lớp B; thiếu LO -> báo mã LO thiếu.
+    const foreignSet = await quizSetService.create(instBClaims, {
+      courseId: courseB.course_id,
+      chapterId: chapterB.chapter_id,
+      title: 'Đề lớp B dùng câu SUBJECT',
+      quizIds: [qMatched.quiz_id],
+      selectionId: randomUUID(),
+    });
+    const savedForeignSet = await prisma.quiz_sets.findUniqueOrThrow({
+      where: { quiz_set_id: foreignSet.quiz_set_id },
+    });
+    expect(savedForeignSet.items).toEqual([
+      expect.objectContaining({
+        quiz_id: qMatched.quiz_id,
+        lo_id: loB.lo_id,
+        version_id: qMatched.current_version_id,
+      }),
+    ]);
+
+    await expect(
+      quizSetService.create(instBClaims, {
+        courseId: courseB.course_id,
+        chapterId: chapterB.chapter_id,
+        title: 'Đề thiếu LO',
+        quizIds: [qMissingLo.quiz_id],
+        selectionId: randomUUID(),
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    // 3. Fork câu sang ngân hàng mặc định lớp B rồi sửa bản fork: câu gốc không đổi.
+    const forked = await bankService.forkItem(
+      instBClaims,
+      subjectBank.bank_id,
+      qMatched.quiz_id,
+      { targetBankId: defaultBankB.bank_id },
+    );
+    expect(forked.item.quiz_id).not.toBe(qMatched.quiz_id);
+    expect(forked).toMatchObject({
+      lo_mapped: true,
+      lo_statement_differs: true,
+    });
+    expect(forked.item).toMatchObject({
+      origin: 'FORK',
+      forked_from_version_id: qMatched.current_version_id,
+      course_id: courseB.course_id,
+      lo_id: loB.lo_id,
+      lesson_id: null,
+      status: 'APPROVED',
+    });
+
+    const editedFork = await reviewService.updateQuizItem(
+      instBClaims,
+      forked.item.quiz_id,
+      { question: 'Bản fork đã sửa ở lớp B?' },
+    );
+    expect(editedFork.current_version_id).not.toBe(
+      forked.item.current_version_id,
+    );
+
+    const originalAfterFork = await prisma.quiz_items.findUniqueOrThrow({
+      where: { quiz_id: qMatched.quiz_id },
+    });
+    expect(originalAfterFork.question).toBe('Câu SUBJECT khớp LO P3?');
+    expect(originalAfterFork.current_version_id).toBe(
+      qMatched.current_version_id,
+    );
+
+    const forkAudits = await prisma.review_audit_logs.findMany({
+      where: { entity_id: forked.item.quiz_id, action: 'FORK_QUIZ' },
+    });
+    expect(forkAudits).toHaveLength(1);
   });
 });

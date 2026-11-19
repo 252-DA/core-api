@@ -318,9 +318,11 @@ export async function writeCurriculum(
   const c = Prisma.sql`${courseId}::uuid`;
 
   // courses: hàng do LTI tạo luôn có sẵn (curriculum_imports tham chiếu nó).
+  // Mã học phần ghi vào subject_code, giữ nguyên code (mã LTI) để nhiều lớp
+  // cùng môn nạp đề cương không đụng ràng buộc unique courses_code_key.
   const updated = await tx.$executeRaw`
     UPDATE courses
-       SET code = ${rows.course.code}::text, name = ${rows.course.name}::text,
+       SET subject_code = ${rows.course.code}::text, name = ${rows.course.name}::text,
            description = ${rows.course.description}::text, updated_at = NOW()
      WHERE course_id = ${c}`;
   if (updated !== 1)
