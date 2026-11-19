@@ -11,7 +11,7 @@ export class AuthzService {
   async assertSessionCourse(
     claims: BffClaims,
     courseId: string,
-    roles?: string[],
+    roles?: readonly string[],
   ) {
     if (
       !isUuid(courseId) ||
@@ -25,7 +25,7 @@ export class AuthzService {
   async assertCourseAccess(
     claims: BffClaims,
     courseId: string,
-    allowedRoles?: string[],
+    allowedRoles?: readonly string[],
   ) {
     if (claims.scope === 'admin') {
       return;
@@ -35,7 +35,7 @@ export class AuthzService {
       where: {
         user_id: claims.sub,
         course_id: courseId,
-        ...(allowedRoles?.length ? { role: { in: allowedRoles } } : {}),
+        ...(allowedRoles?.length ? { role: { in: [...allowedRoles] } } : {}),
       },
     });
 
@@ -59,7 +59,7 @@ export class AuthzService {
       where: {
         user_id: claims.sub,
         course_id: courseId,
-        role: { in: STAFF_ROLES },
+        role: { in: [...STAFF_ROLES] },
       },
       select: { role: true },
     });

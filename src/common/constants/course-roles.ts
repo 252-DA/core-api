@@ -4,7 +4,7 @@ export const COURSE_ROLES = {
   LEARNER: 'learner',
 } as const;
 
-export const STAFF_ROLES: string[] = [
+export const STAFF_ROLES: readonly string[] = [
   COURSE_ROLES.INSTRUCTOR,
   COURSE_ROLES.TA,
 ];

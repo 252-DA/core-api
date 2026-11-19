@@ -71,7 +71,7 @@ export class QuizSetService {
         where: {
           user_id: claims.sub,
           course_id: courseId,
-          role: { in: STAFF_ROLES },
+          role: { in: [...STAFF_ROLES] },
         },
       })) > 0
     );
@@ -249,7 +249,11 @@ export class QuizSetService {
     });
   }
 
-  private async snapshot(claims: BffClaims, id: string, roles?: string[]) {
+  private async snapshot(
+    claims: BffClaims,
+    id: string,
+    roles?: readonly string[],
+  ) {
     if (!isUuid(id)) throw new BadRequestException('Quiz không hợp lệ.');
     const set = await this.prisma.quiz_sets.findFirst({
       where: { quiz_set_id: id, deleted_at: null },

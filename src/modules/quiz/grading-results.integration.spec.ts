@@ -13,7 +13,7 @@ import { EssayGradingService } from './services/essay-grading.service';
  * để `npx jest` mặc định không cần DB.
  *
  *   GRADING_IT_DATABASE_URL=postgresql://postgres:scratch@localhost:55432/chunking_g \
- *     npx jest src/quiz/grading-results.integration.spec.ts
+ *     npx jest src/modules/quiz/grading-results.integration.spec.ts
  *
  * Mỗi test tạo khoá học riêng và xoá dữ liệu của nó khi xong; vẫn chỉ trỏ vào DB tạm.
  */

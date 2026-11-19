@@ -17,7 +17,7 @@ import {
  * Bỏ qua khi không đặt DOCUMENT_RESULT_IT_DATABASE_URL.
  *
  *   DOCUMENT_RESULT_IT_DATABASE_URL=postgresql://postgres:scratch@localhost:55432/chunking_d \
- *     npx jest src/document/document-processing-result.handler.integration.spec.ts
+ *     npx jest src/modules/document/handlers/document-processing-result.handler.integration.spec.ts
  *
  * Test tạo khoá học riêng và xoá khi xong; chỉ trỏ vào DB tạm.
  *

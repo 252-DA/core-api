@@ -38,7 +38,7 @@ export interface AgsConfig {
   toolUrl?: string;
 }
 
-// Giữ riêng vì chỉ nhận số nguyên dương (> 0), khác readIntEnv.
+// Chỉ nhận số nguyên dương (> 0); giá trị sai hoặc <= 0 thì dùng fallback.
 function intEnv(name: string, fallback: number): number {
   const raw = readEnv(name);
   if (!raw) {

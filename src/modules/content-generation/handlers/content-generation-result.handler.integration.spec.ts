@@ -14,7 +14,7 @@ import { ContentGenerationResultHandler } from './content-generation-result.hand
  * CONTENT_GENERATION_IT_DATABASE_URL.
  *
  *   CONTENT_GENERATION_IT_DATABASE_URL=postgresql://postgres:scratch@localhost:55432/chunking_c \
- *     npx jest src/content-generation/content-generation-result.handler.integration.spec.ts
+ *     npx jest src/modules/content-generation/handlers/content-generation-result.handler.integration.spec.ts
  *
  * Test tạo khoá học riêng và xoá khi xong; chỉ trỏ vào DB tạm.
  */

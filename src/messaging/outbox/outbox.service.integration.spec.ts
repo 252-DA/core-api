@@ -8,7 +8,7 @@ import { OutboxService } from './outbox.service';
  * không đặt OUTBOX_IT_DATABASE_URL, để `npx jest` mặc định không cần DB.
  *
  *   OUTBOX_IT_DATABASE_URL=postgresql://postgres:scratch@localhost:55432/chunking_s \
- *     npx jest src/outbox/outbox.service.integration.spec.ts
+ *     npx jest src/messaging/outbox/outbox.service.integration.spec.ts
  *
  * Test XOÁ toàn bộ outbox_events của DB đó: chỉ trỏ vào DB tạm.
  */

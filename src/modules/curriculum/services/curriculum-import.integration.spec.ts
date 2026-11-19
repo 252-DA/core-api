@@ -25,7 +25,7 @@ import {
  * CURRICULUM_IT_DATABASE_URL, để `npx jest` mặc định không cần DB.
  *
  *   CURRICULUM_IT_DATABASE_URL=postgresql://postgres:scratch@localhost:55432/chunking_i \
- *     npx jest src/curriculum/curriculum-import.integration.spec.ts
+ *     npx jest src/modules/curriculum/services/curriculum-import.integration.spec.ts
  *
  * Test XOÁ đề cương của học phần GOLDEN_COURSE_ID và tạo học phần/lần nạp mới:
  * chỉ trỏ vào DB tạm.

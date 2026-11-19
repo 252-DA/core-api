@@ -8,7 +8,7 @@ export interface CanvasSyncConfig {
   launchCooldownMs: number;
 }
 
-// Giữ riêng vì ném lỗi khi chuỗi không phải số nguyên dương (khác readIntEnv).
+// Ném lỗi khi chuỗi không phải số nguyên dương: cấu hình sai thì dừng khởi động.
 function positiveMs(value: string | undefined, fallback: number): number {
   if (!value?.trim()) return fallback;
   const result = Number(value);

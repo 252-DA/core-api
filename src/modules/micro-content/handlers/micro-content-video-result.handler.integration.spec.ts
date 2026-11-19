@@ -12,7 +12,7 @@ import { MicroContentVideoResultHandler } from './micro-content-video-result.han
  * Bỏ qua khi không đặt VIDEO_RESULT_IT_DATABASE_URL.
  *
  *   VIDEO_RESULT_IT_DATABASE_URL=postgresql://postgres:scratch@localhost:55432/chunking_m \
- *     npx jest src/micro-content/micro-content-video-result.handler.integration.spec.ts
+ *     npx jest src/modules/micro-content/handlers/micro-content-video-result.handler.integration.spec.ts
  *
  * Test tạo khoá học/người dùng riêng và xoá chúng khi xong; chỉ trỏ vào DB tạm.
  */
