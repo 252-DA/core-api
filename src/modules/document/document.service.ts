@@ -1,0 +1,293 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import type { documents } from '@prisma/client';
+import { STAFF_ROLES } from '../../common/constants/course-roles';
+import { safeFileName } from '../../common/utils/file-name';
+import { PrismaService } from '../../infra/prisma/prisma.service';
+import type { BffClaims } from '../../auth/bff-claims';
+import { AuthzService } from '../../auth/authz.service';
+import { DocumentStorageService } from '../../infra/storage/document-storage.service';
+import { DOCUMENT_DELETED } from '../../messaging/event-types';
+import { DOCUMENT_PROCESSING_QUEUE } from '../../messaging/queues';
+import { toDocumentView } from './document.mapper';
+
+function fileNameFromStorageKey(storageKey: string, fallback: string) {
+  return storageKey.split('/').filter(Boolean).pop() || fallback;
+}
+
+/**
+ * Mỗi lần đưa tài liệu vào hàng đợi xử lý là một lượt mới: tăng lượt và về 0
+ * thứ tự kết quả. Worker gửi lượt kèm mọi kết quả trạng thái; handler
+ * DOCUMENT_PROCESSING_RESULT bỏ kết quả của lượt khác (kết quả đến trễ không
+ * đè lần xử lý lại). Dùng cùng câu UPDATE đặt status = 'QUEUED'.
+ */
+export const NEXT_PROCESSING_GENERATION = {
+  processing_generation: { increment: 1 },
+  processing_seq: 0,
+} as const;
+
+/**
+ * Số chunk của tài liệu chỉ đếm chunk còn dùng: chunk bị xoá mềm (worker chunk
+ * lại tài liệu) không còn được tìm kiếm, nên không được tính vào "đã có N chunk".
+ */
+const CHUNK_COUNT = {
+  _count: { select: { chunks: { where: { deleted_at: null } } } },
+} as const;
+
+@Injectable()
+export class DocumentService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly authz: AuthzService,
+    @InjectQueue(DOCUMENT_PROCESSING_QUEUE)
+    private readonly processingQueue: Queue,
+    private readonly storage: DocumentStorageService,
+  ) {}
+
+  async listDocuments(
+    claims: BffClaims,
+    courseId: string,
+    limit = 50,
+    offset = 0,
+  ) {
+    await this.authz.assertCourseAccess(claims, courseId, [
+      ...STAFF_ROLES,
+      'observer',
+    ]);
+
+    // Observer cũng vào được đây nhưng không phải nhân sự: tài liệu đã ẩn trên LMS
+    // (lms_published = false) chỉ giảng viên/trợ giảng/admin được liệt kê.
+    const staff = await this.authz.isCourseStaff(claims, courseId);
+    const docs = await this.prisma.documents.findMany({
+      where: {
+        course_id: courseId,
+        deleted_at: null,
+        ...(staff ? {} : { OR: [{ lms_published: null }, { lms_published: true }] }),
+      },
+      take: limit,
+      skip: offset,
+      orderBy: { created_at: 'desc' },
+      include: CHUNK_COUNT,
+    });
+
+    return docs.map(toDocumentView);
+  }
+
+  /**
+   * Mọi đường đọc nội dung/file một tài liệu (chunks, file-url) đều qua đây.
+   * Tài liệu bị ẩn trên LMS (lms_published = false; null = không đến từ Canvas
+   * nên vẫn hiện) chỉ nhân sự của khoá đọc được; người khác nhận 404 như thể
+   * tài liệu không tồn tại. Kiểm tra trước assertCourseAccess để người ngoài
+   * khoá cũng không phân biệt được tài liệu ẩn với tài liệu không có.
+   */
+  async getDocument(claims: BffClaims, documentId: string) {
+    const doc = await this.prisma.documents.findFirst({
+      where: { document_id: documentId, deleted_at: null },
+      include: CHUNK_COUNT,
+    });
+    if (!doc) {
+      throw new NotFoundException(`Document not found: ${documentId}`);
+    }
+    if (
+      doc.lms_published === false &&
+      !(await this.authz.isCourseStaff(claims, doc.course_id))
+    ) {
+      throw new NotFoundException(`Document not found: ${documentId}`);
+    }
+    await this.authz.assertCourseAccess(claims, doc.course_id);
+    return toDocumentView(doc);
+  }
+
+  /**
+   * Chunk của một tài liệu, theo thứ tự đọc. `page` giới hạn về đúng một trang
+   * — "giải thích trang này" là một phép tra cứu chính xác theo
+   * (document_id, page_number), không phải similarity search.
+   */
+  async getDocumentChunks(claims: BffClaims, documentId: string, page?: number) {
+    await this.getDocument(claims, documentId);
+    if (page !== undefined && (!Number.isInteger(page) || page < 1)) {
+      throw new BadRequestException('page phải là số nguyên >= 1.');
+    }
+    return this.prisma.chunks.findMany({
+      where: {
+        document_id: documentId,
+        deleted_at: null,
+        ...(page === undefined ? {} : { page_number: page }),
+      },
+      orderBy: { sort_order: 'asc' },
+      select: {
+        chunk_id: true,
+        document_id: true,
+        course_id: true,
+        content: true,
+        heading_path: true,
+        page_number: true,
+        sort_order: true,
+        language: true,
+        created_at: true,
+      },
+    });
+  }
+
+  /**
+   * URL đọc file của tài liệu, hạn ngắn, chỉ dành cho phía server của web gọi
+   * lại. Trả kèm mime_type để route biết đặt Content-Type nào cho trình duyệt.
+   */
+  async getDocumentFileUrl(claims: BffClaims, documentId: string) {
+    const doc = await this.getDocument(claims, documentId);
+    if (doc.status === 'UPLOADING') {
+      throw new BadRequestException('Tài liệu chưa upload xong.');
+    }
+    const expiresInSeconds = 5 * 60;
+    const url = await this.storage.createPresignedDownloadUrl(
+      doc.file_path,
+      expiresInSeconds,
+    );
+    return {
+      document_id: doc.document_id,
+      url,
+      mime_type: doc.mime_type || 'application/octet-stream',
+      file_name: fileNameFromStorageKey(doc.file_path, doc.title),
+      expires_in: expiresInSeconds,
+    };
+  }
+
+  async createUploadSession(
+    claims: BffClaims,
+    data: {
+      courseId: string;
+      title: string;
+      fileName: string;
+      mimeType?: string;
+      checksum?: string;
+    },
+  ) {
+    await this.authz.assertCourseAccess(claims, data.courseId, STAFF_ROLES);
+
+    const [{ id: documentId }] = await this.prisma.$queryRaw<
+      Array<{ id: string }>
+    >`SELECT uuidv7()::text AS id`;
+    const cleanName = safeFileName(data.fileName);
+    const filePath = `documents/${data.courseId}/${documentId}/${cleanName}`;
+    const uploadUrl = await this.storage.createPresignedUploadUrl(filePath);
+
+    const doc = await this.prisma.documents.create({
+      data: {
+        document_id: documentId,
+        course_id: data.courseId,
+        title: data.title || cleanName,
+        file_path: filePath,
+        mime_type: data.mimeType || 'application/octet-stream',
+        checksum: data.checksum,
+        status: 'UPLOADING',
+        created_by: claims.sub,
+      },
+    });
+
+    return {
+      document_id: doc.document_id,
+      upload_url: uploadUrl,
+      file_path: filePath,
+      status: doc.status,
+    };
+  }
+
+  async confirmUpload(claims: BffClaims, documentId: string) {
+    const doc = await this.prisma.documents.findFirst({
+      where: { document_id: documentId, deleted_at: null },
+    });
+    if (!doc) {
+      throw new NotFoundException(`Document not found: ${documentId}`);
+    }
+    await this.authz.assertCourseAccess(claims, doc.course_id, STAFF_ROLES);
+    if (doc.status !== 'UPLOADING' && doc.status !== 'UPLOADED') {
+      throw new BadRequestException(
+        `Document in status ${doc.status} cannot be confirmed`,
+      );
+    }
+
+    // Lượt xử lý mới: kết quả trạng thái của lượt trước (nếu có) bị bỏ.
+    const updated = await this.prisma.documents.update({
+      where: { document_id: documentId },
+      data: { status: 'QUEUED', ...NEXT_PROCESSING_GENERATION },
+    });
+
+    const job = await this.processingQueue.add(
+      'process_document',
+      {
+        document_id: updated.document_id,
+        storage_key: updated.file_path,
+        file_name: fileNameFromStorageKey(updated.file_path, updated.title),
+        language: 'vi',
+        metadata: {
+          course_id: updated.course_id,
+          owner_id: updated.created_by,
+          storage_key: updated.file_path,
+        },
+        processing_generation: updated.processing_generation,
+      },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+      },
+    );
+
+    return {
+      document_id: updated.document_id,
+      status: updated.status,
+      job_id: job.id,
+    };
+  }
+
+  async deleteDocument(claims: BffClaims, documentId: string) {
+    const doc = await this.prisma.documents.findFirst({
+      where: { document_id: documentId, deleted_at: null },
+    });
+    if (!doc) {
+      throw new NotFoundException(`Document not found: ${documentId}`);
+    }
+    await this.authz.assertCourseAccess(claims, doc.course_id, STAFF_ROLES);
+
+    return this.softDelete(doc);
+  }
+
+  /** Internal sync operation; restricted to a Canvas document in this course. */
+  async deleteCanvasDocument(courseId: string, documentId: string) {
+    const doc = await this.prisma.documents.findFirst({
+      where: { document_id: documentId, course_id: courseId, source: 'canvas', deleted_at: null },
+    });
+    if (!doc) throw new NotFoundException(`Canvas document not found: ${documentId}`);
+    return this.softDelete(doc);
+  }
+
+  private async softDelete(doc: documents) {
+    const documentId = doc.document_id;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.outbox_events.deleteMany({
+        where: {
+          aggregate_id: documentId,
+          status: 'PENDING',
+        },
+      });
+      await tx.outbox_events.create({
+        data: {
+          event_type: DOCUMENT_DELETED,
+          aggregate_type: 'document',
+          aggregate_id: documentId,
+          payload: { document_id: documentId, course_id: doc.course_id },
+        },
+      });
+      await tx.documents.update({
+        where: { document_id: documentId },
+        data: { deleted_at: new Date() },
+      });
+    });
+
+    return { document_id: documentId, success: true };
+  }
+}

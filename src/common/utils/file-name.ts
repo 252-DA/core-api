@@ -1,0 +1,3 @@
+export function safeFileName(value: string, fallback = 'document'): string {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 160) || fallback;
+}

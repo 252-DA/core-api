@@ -4,12 +4,13 @@ import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Logger as PinoNestLogger, PinoLogger } from 'nestjs-pino';
 import pino from 'pino';
 import { AppModule } from './app.module';
-import { HttpExceptionLoggingFilter } from './logging/http-exception-logging.filter';
+import { loadAppConfig } from './config/app.config';
+import { HttpExceptionLoggingFilter } from './infra/logging/http-exception-logging.filter';
 import {
   buildPinoOptions,
   createBootstrapLogger,
   createFastifyAdapter,
-} from './logging/pino-config';
+} from './infra/logging/pino-config';
 
 (BigInt.prototype as any).toJSON = function () {
   return Number(this);
@@ -51,7 +52,7 @@ async function bootstrap() {
     }),
   );
 
-  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 4000;
+  const { port } = loadAppConfig();
   await app.listen(port, '0.0.0.0');
   new Logger('Bootstrap').log(`Core API running on: http://localhost:${port}`);
 }
