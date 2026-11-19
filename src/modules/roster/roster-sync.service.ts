@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { COURSE_ROLES } from '../../common/constants/course-roles';
 import { resolvePlatformUrl } from '../../config/ags.config';
 import { CanvasApiClient } from '../../integrations/canvas/canvas-api.client';
@@ -10,7 +15,11 @@ import {
   type MembershipWrite,
 } from './course-roster.repository';
 import { NrpsClientService, type NrpsMember } from './nrps-client.service';
-import { courseRoleFromNrps, platformRoleFor, type CourseRole } from './nrps-roles';
+import {
+  courseRoleFromNrps,
+  platformRoleFor,
+  type CourseRole,
+} from './nrps-roles';
 
 const LMS_TYPE = 'canvas';
 /** Số giá trị tối đa trong một mệnh đề IN khi tra lms_user_mappings. */
@@ -35,13 +44,17 @@ type Resolved = { member: NrpsMember; role: CourseRole };
 
 function chunks<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  for (let i = 0; i < items.length; i += size)
+    out.push(items.slice(i, i + size));
   return out;
 }
 
 /** Tên có thật từ Canvas (không tính lùi về user_id), hoặc undefined. */
 function realName(member: NrpsMember): string | undefined {
-  const joined = [member.given_name, member.family_name].filter(Boolean).join(' ').trim();
+  const joined = [member.given_name, member.family_name]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
   return member.name || joined || member.email || undefined;
 }
 
@@ -63,7 +76,8 @@ export class RosterSyncService {
 
   async syncCourse(courseId: string): Promise<RosterSyncSummary> {
     const ref = await this.roster.courseRef(courseId);
-    if (!ref) throw new NotFoundException('Khóa học chưa có liên kết với Canvas.');
+    if (!ref)
+      throw new NotFoundException('Khóa học chưa có liên kết với Canvas.');
     const url = await this.resolveNrpsUrl(ref);
     const members = await this.nrps.listMembers(url);
 
@@ -77,7 +91,9 @@ export class RosterSyncService {
 
     const userIds = await this.ensureUsers([...resolved.values()]);
     const existing = await this.roster.memberships(courseId);
-    const existingByKey = new Map(existing.map((m) => [`${m.user_id}:${m.role}`, m]));
+    const existingByKey = new Map(
+      existing.map((m) => [`${m.user_id}:${m.role}`, m]),
+    );
 
     const writes: MembershipWrite[] = [];
     const wanted = new Set<string>();
@@ -87,7 +103,8 @@ export class RosterSyncService {
     for (const { member, role } of resolved.values()) {
       const userId = userIds.get(member.user_id);
       if (!userId) continue;
-      const status = member.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active';
+      const status =
+        member.status?.toLowerCase() === 'inactive' ? 'inactive' : 'active';
       const key = `${userId}:${role}`;
       wanted.add(key);
       if (role === COURSE_ROLES.LEARNER && status === 'active') learners++;
@@ -106,34 +123,51 @@ export class RosterSyncService {
     // viên), nên không dùng nó để cho cả lớp nghỉ học.
     let deactivated = 0;
     if (wanted.size > 0) {
-      const gone = existing.filter((m) => m.status !== 'inactive' && !wanted.has(`${m.user_id}:${m.role}`));
+      const gone = existing.filter(
+        (m) => m.status !== 'inactive' && !wanted.has(`${m.user_id}:${m.role}`),
+      );
       await this.roster.deactivateMemberships(
         courseId,
         gone.map((m) => ({ userId: m.user_id, role: m.role })),
       );
       deactivated = gone.length;
     } else if (existing.length > 0) {
-      this.logger.warn(`Danh sách lớp Canvas của ${courseId} không có thành viên hợp lệ, giữ nguyên membership hiện có.`);
+      this.logger.warn(
+        `Danh sách lớp Canvas của ${courseId} không có thành viên hợp lệ, giữ nguyên membership hiện có.`,
+      );
     }
 
     await this.roster.markRosterSynced(ref.course_ref_id);
-    return { total: members.length, created, updated, deactivated, skipped, learners };
+    return {
+      total: members.length,
+      created,
+      updated,
+      deactivated,
+      skipped,
+      learners,
+    };
   }
 
   /** URL đã lưu từ lần launch, hoặc suy ra từ id khóa học Canvas rồi lưu lại. */
   private async resolveNrpsUrl(ref: CourseRefRow): Promise<string> {
-    if (ref.nrps_context_memberships_url) return ref.nrps_context_memberships_url;
+    if (ref.nrps_context_memberships_url)
+      return ref.nrps_context_memberships_url;
     const platform = resolvePlatformUrl();
     if (!platform)
-      throw new ServiceUnavailableException('Chưa cấu hình LTI_PLATFORM_URL nên không suy ra được địa chỉ danh sách lớp.');
+      throw new ServiceUnavailableException(
+        'Chưa cấu hình LTI_PLATFORM_URL nên không suy ra được địa chỉ danh sách lớp.',
+      );
     let platformCourseId = canvasNumericId(ref.lms_platform_course_id);
     let learned = false;
     if (!platformCourseId) {
-      const course = await this.canvas.getCourseByLtiContext(ref.lms_context_id);
+      const course = await this.canvas.getCourseByLtiContext(
+        ref.lms_context_id,
+      );
       platformCourseId = canvasNumericId(course.id);
       learned = true;
     }
-    if (!platformCourseId) throw new NotFoundException('Không tìm thấy khóa học này trên Canvas.');
+    if (!platformCourseId)
+      throw new NotFoundException('Không tìm thấy khóa học này trên Canvas.');
     const nrpsUrl = `${platform}/api/lti/courses/${platformCourseId}/names_and_roles`;
     await this.roster.saveCourseLocation(ref.course_ref_id, {
       nrpsUrl,

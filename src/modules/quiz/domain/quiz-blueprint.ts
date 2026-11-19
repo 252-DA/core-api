@@ -25,7 +25,11 @@ export function parseBlueprint(
     throw new BadRequestException(`Ma trận đề tối đa ${MAX_CELLS} ô.`);
   const seen = new Set<string>();
   const cells = input.cells.map((cell) => {
-    const c = cell as { lo_id?: unknown; bloom_level?: unknown; count?: unknown };
+    const c = cell as {
+      lo_id?: unknown;
+      bloom_level?: unknown;
+      count?: unknown;
+    };
     const loId = String(c?.lo_id ?? '');
     const bloom = Number(c?.bloom_level);
     const count = Number(c?.count);
@@ -40,11 +44,15 @@ export function parseBlueprint(
       count > 50 ||
       seen.has(`${loId}:${bloom}`)
     )
-      throw new BadRequestException('Ô trong ma trận đề không hợp lệ hoặc LO không thuộc các chương đã chọn.');
+      throw new BadRequestException(
+        'Ô trong ma trận đề không hợp lệ hoặc LO không thuộc các chương đã chọn.',
+      );
     seen.add(`${loId}:${bloom}`);
     return { lo_id: loId, bloom_level: bloom, count };
   });
-  const docs = Array.isArray(input.source_document_ids) ? input.source_document_ids : [];
+  const docs = Array.isArray(input.source_document_ids)
+    ? input.source_document_ids
+    : [];
   if (docs.length > 30 || !docs.every(isUuid))
     throw new BadRequestException('Danh sách tài liệu nguồn không hợp lệ.');
   return { cells, source_document_ids: [...new Set(docs as string[])] };

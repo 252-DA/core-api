@@ -71,7 +71,9 @@ function intIn(value: unknown, min: number, max: number, label: string) {
   if (value === undefined || value === null || value === '') return null;
   const n = Number(value);
   if (!Number.isInteger(n) || n < min || n > max)
-    throw new BadRequestException(`${label} phải là số nguyên từ ${min} đến ${max}.`);
+    throw new BadRequestException(
+      `${label} phải là số nguyên từ ${min} đến ${max}.`,
+    );
   return n;
 }
 
@@ -88,7 +90,10 @@ function dateOrNull(value: unknown, label: string) {
  * hạn nộp vì đáp án chỉ mở cho sinh viên sau khi đóng bài.
  */
 export function parseSettings(raw: unknown, now = new Date()): QuizSetSettings {
-  const input = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const input = (raw && typeof raw === 'object' ? raw : {}) as Record<
+    string,
+    unknown
+  >;
   const mode = input.mode === undefined ? 'practice' : input.mode;
   if (mode !== 'practice' && mode !== 'exam')
     throw new BadRequestException('Chế độ phải là Luyện tập hoặc Kiểm tra.');
@@ -97,7 +102,9 @@ export function parseSettings(raw: unknown, now = new Date()): QuizSetSettings {
       ? 100
       : Number(input.pointsPossible);
   if (!Number.isFinite(points) || points <= 0 || points > 1000)
-    throw new BadRequestException('Điểm tối đa phải lớn hơn 0 và không quá 1000.');
+    throw new BadRequestException(
+      'Điểm tối đa phải lớn hơn 0 và không quá 1000.',
+    );
   if (mode === 'practice')
     return {
       mode,
@@ -114,7 +121,12 @@ export function parseSettings(raw: unknown, now = new Date()): QuizSetSettings {
     mode,
     points_possible: Math.round(points * 100) / 100,
     max_attempts: intIn(input.maxAttempts, 1, 20, 'Số lần làm'),
-    time_limit_minutes: intIn(input.timeLimitMinutes, 1, 600, 'Thời gian làm bài'),
+    time_limit_minutes: intIn(
+      input.timeLimitMinutes,
+      1,
+      600,
+      'Thời gian làm bài',
+    ),
     shuffle: input.shuffle === true || input.shuffle === 'true',
     available_from: dateOrNull(input.availableFrom, 'Thời điểm mở bài'),
     available_until: dateOrNull(input.availableUntil, 'Thời điểm đóng bài'),
@@ -129,7 +141,9 @@ export function parseSettings(raw: unknown, now = new Date()): QuizSetSettings {
     settings.available_until &&
     settings.available_from >= settings.available_until
   )
-    throw new BadRequestException('Thời điểm mở bài phải trước thời điểm đóng bài.');
+    throw new BadRequestException(
+      'Thời điểm mở bài phải trước thời điểm đóng bài.',
+    );
   if (settings.available_until && settings.due_at > settings.available_until)
     throw new BadRequestException('Hạn nộp không được sau thời điểm đóng bài.');
   if (settings.available_from && settings.due_at <= settings.available_from)

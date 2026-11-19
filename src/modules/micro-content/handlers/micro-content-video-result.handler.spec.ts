@@ -120,8 +120,20 @@ describe('MicroContentVideoResultHandler', () => {
     const { handler, prisma } = setup();
     const vttKey = `micro-content/c/${MC}/ai-${RENDER}.vtt`;
     const timeline = [
-      { scene_index: 0, title: 'Giới thiệu', start_ms: 0, end_ms: 3500, duration_ms: 3500 },
-      { scene_index: 1, title: 'Chi tiết', start_ms: 3500, end_ms: 7700, duration_ms: 4200 },
+      {
+        scene_index: 0,
+        title: 'Giới thiệu',
+        start_ms: 0,
+        end_ms: 3500,
+        duration_ms: 3500,
+      },
+      {
+        scene_index: 1,
+        title: 'Chi tiết',
+        start_ms: 3500,
+        end_ms: 7700,
+        duration_ms: 4200,
+      },
     ];
 
     const out = await handler.handle(
@@ -268,10 +280,14 @@ describe('MicroContentVideoResultHandler.onFinalFailure', () => {
       where: { asset_id: ASSET, ai_render_id: RENDER, status: 'PROCESSING' },
       data: expect.objectContaining({
         status: 'FAILED',
-        error_message: expect.stringContaining('Không lưu được kết quả render video') as string,
+        error_message: expect.stringContaining(
+          'Không lưu được kết quả render video',
+        ) as string,
       }),
     });
-    expect(prisma.video_assets.updateMany.mock.calls[0][0].data).not.toHaveProperty('object_key');
+    expect(
+      prisma.video_assets.updateMany.mock.calls[0][0].data,
+    ).not.toHaveProperty('object_key');
     expect(prisma.micro_contents.updateMany).toHaveBeenCalledWith({
       where: { video_asset_id: ASSET, video_status: 'PROCESSING' },
       data: expect.objectContaining({ video_status: 'FAILED' }),
@@ -282,7 +298,12 @@ describe('MicroContentVideoResultHandler.onFinalFailure', () => {
     const { handler, prisma } = setup();
 
     await handler.onFinalFailure(
-      envelope({ asset_id: ASSET, render_id: RENDER, status: 'READY', junk: 1 }),
+      envelope({
+        asset_id: ASSET,
+        render_id: RENDER,
+        status: 'READY',
+        junk: 1,
+      }),
       new Error('x'),
     );
 
@@ -320,17 +341,25 @@ describe('MicroContentVideoResultHandler.onFinalFailure', () => {
   it('keeps the stored error within the column limit by code point', async () => {
     const { handler, prisma } = setup();
 
-    await handler.onFinalFailure(envelope(ready()), new Error('𝑓'.repeat(3000)));
+    await handler.onFinalFailure(
+      envelope(ready()),
+      new Error('𝑓'.repeat(3000)),
+    );
 
-    const { error_message } = prisma.video_assets.updateMany.mock.calls[0][0].data as {
+    const { error_message } = prisma.video_assets.updateMany.mock.calls[0][0]
+      .data as {
       error_message: string;
     };
     expect(Array.from(error_message)).toHaveLength(1000);
-    expect(Buffer.from(error_message, 'utf8').toString('utf8')).toBe(error_message);
+    expect(Buffer.from(error_message, 'utf8').toString('utf8')).toBe(
+      error_message,
+    );
   });
 
   it('never throws when the database is down', async () => {
-    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     const { handler, prisma } = setup();
     prisma.$transaction.mockRejectedValue(new Error('db down'));
 
@@ -366,7 +395,13 @@ describe('micro-content-video-result: độ dài tính theo code point', () => {
       parse(
         ready({
           scene_timeline: [
-            { scene_index: 0, title: 'Cảnh 1', start_ms: 2000, end_ms: 1000, duration_ms: 1000 },
+            {
+              scene_index: 0,
+              title: 'Cảnh 1',
+              start_ms: 2000,
+              end_ms: 1000,
+              duration_ms: 1000,
+            },
           ],
         }),
       ),

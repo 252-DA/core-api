@@ -12,9 +12,17 @@ import { MicroContentController } from './micro-content.controller';
 @Module({
   imports: [PrismaModule, AuthModule, StorageModule],
   controllers: [MicroContentController],
-  providers: [MicroContentService, MicroContentVideoService, MicroContentAttemptService,
-    MicroContentGradingResultHandler, MicroContentVideoResultHandler],
-  exports: [MicroContentService, MicroContentVideoService, MicroContentAttemptService],
+  providers: [
+    MicroContentService,
+    MicroContentVideoService,
+    MicroContentAttemptService,
+    MicroContentGradingResultHandler,
+    MicroContentVideoResultHandler,
+  ],
+  exports: [
+    MicroContentService,
+    MicroContentVideoService,
+    MicroContentAttemptService,
+  ],
 })
 export class MicroContentModule {}
-

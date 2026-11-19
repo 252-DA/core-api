@@ -5,7 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { COURSE_ROLES, STAFF_ROLES } from '../../../common/constants/course-roles';
+import {
+  COURSE_ROLES,
+  STAFF_ROLES,
+} from '../../../common/constants/course-roles';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
 import { AuthzService } from '../../../auth/authz.service';
 import type { BffClaims } from '../../../auth/bff-claims';
@@ -120,9 +123,15 @@ export class MicroContentAttemptService {
         requestedPlayedMs !== undefined
           ? requestedPlayedMs
           : Math.max(0, rawPosMs - existing.max_position_ms);
-      const actualIncrementMs = Math.min(maxAllowedIncrementMs, candidateDeltaMs);
+      const actualIncrementMs = Math.min(
+        maxAllowedIncrementMs,
+        candidateDeltaMs,
+      );
 
-      newWatchedMs = Math.min(videoDurationMs, existing.watched_ms + actualIncrementMs);
+      newWatchedMs = Math.min(
+        videoDurationMs,
+        existing.watched_ms + actualIncrementMs,
+      );
       newMaxPosMs = Math.max(existing.max_position_ms, rawPosMs);
     } else {
       // Lần đầu tiên ghi nhận, tối đa 15 giây
@@ -158,7 +167,8 @@ export class MicroContentAttemptService {
       Math.round((saved.watched_ms / (videoDurationMs || 1)) * 100),
     );
     const unlocked =
-      item.required_watch_percent === 0 || watchedPercent >= item.required_watch_percent;
+      item.required_watch_percent === 0 ||
+      watchedPercent >= item.required_watch_percent;
 
     return {
       watchedPercent,
@@ -207,7 +217,10 @@ export class MicroContentAttemptService {
 
       const videoDurationMs = item.video_duration_ms || 60000;
       const watchedPercent = progress
-        ? Math.min(100, Math.round((progress.watched_ms / videoDurationMs) * 100))
+        ? Math.min(
+            100,
+            Math.round((progress.watched_ms / videoDurationMs) * 100),
+          )
         : 0;
 
       if (watchedPercent < item.required_watch_percent) {
@@ -227,9 +240,16 @@ export class MicroContentAttemptService {
       throw new BadRequestException('Bài học này chưa có câu hỏi nào.');
     }
 
-    const answerMap = new Map(input.answers.map((a) => [a.questionId, a.chosenAnswer]));
-    if (questions.length !== input.answers.length || questions.some((q) => !answerMap.has(q.question_id))) {
-      throw new BadRequestException('Vui lòng trả lời đầy đủ tất cả các câu hỏi.');
+    const answerMap = new Map(
+      input.answers.map((a) => [a.questionId, a.chosenAnswer]),
+    );
+    if (
+      questions.length !== input.answers.length ||
+      questions.some((q) => !answerMap.has(q.question_id))
+    ) {
+      throw new BadRequestException(
+        'Vui lòng trả lời đầy đủ tất cả các câu hỏi.',
+      );
     }
 
     // 3. Chấm từng câu hỏi
@@ -284,7 +304,9 @@ export class MicroContentAttemptService {
         },
       });
 
-      const pendingAnswers: Parameters<typeof microContentGradingEvent>[0]['answers'] = [];
+      const pendingAnswers: Parameters<
+        typeof microContentGradingEvent
+      >[0]['answers'] = [];
       for (const g of gradedList) {
         const createdAns = await tx.micro_content_answers.create({
           data: {

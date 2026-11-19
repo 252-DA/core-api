@@ -217,9 +217,15 @@ describe('CurriculumImportResultHandler.onFinalFailure', () => {
     });
     expect(args.data).toMatchObject({
       status: 'FAILED',
-      error: expect.stringContaining('Không áp dụng được kết quả trích xuất đề cương'),
+      error: expect.stringContaining(
+        'Không áp dụng được kết quả trích xuất đề cương',
+      ),
     });
-    expect(Object.keys(args.data).sort()).toEqual(['error', 'status', 'updated_at']);
+    expect(Object.keys(args.data).sort()).toEqual([
+      'error',
+      'status',
+      'updated_at',
+    ]);
   });
 
   it('keeps the stored technical reason short and by code point', async () => {
@@ -236,7 +242,8 @@ describe('CurriculumImportResultHandler.onFinalFailure', () => {
   it('does not touch an import whose result_id names another import', async () => {
     const { handler, prisma } = setup();
     const envelope = readyEnvelope();
-    envelope.result_id = 'CURRICULUM_IMPORT_RESULT.01900000-0000-7000-8000-0000000000bb';
+    envelope.result_id =
+      'CURRICULUM_IMPORT_RESULT.01900000-0000-7000-8000-0000000000bb';
 
     await handler.onFinalFailure(envelope, new Error('x'));
 
@@ -278,9 +285,13 @@ describe('CurriculumImportResultHandler.onFinalFailure', () => {
   });
 
   it('never throws when the database is down', async () => {
-    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     const { handler, prisma } = setup();
-    prisma.curriculum_imports.updateMany.mockRejectedValue(new Error('db down'));
+    prisma.curriculum_imports.updateMany.mockRejectedValue(
+      new Error('db down'),
+    );
 
     await expect(
       handler.onFinalFailure(readyEnvelope(), new Error('x')),

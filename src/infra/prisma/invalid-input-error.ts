@@ -32,7 +32,10 @@ export function detectInvalidInputSqlState(
   if (!isRecord(error)) return null;
 
   // Dạng A: Prisma bọc lỗi driver trong PrismaClientKnownRequestError (P2007).
-  if (error.name === 'PrismaClientKnownRequestError' && error.code === 'P2007') {
+  if (
+    error.name === 'PrismaClientKnownRequestError' &&
+    error.code === 'P2007'
+  ) {
     const meta = isRecord(error.meta) ? error.meta : null;
     const driverError =
       meta && isRecord(meta.driverAdapterError)

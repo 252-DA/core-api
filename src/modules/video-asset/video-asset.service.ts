@@ -29,8 +29,15 @@ export class VideoAssetService {
    * thành viên khoá học khi video để COURSE. Fork và gắn vào bài học dùng chung
    * điều kiện này vì cả hai đều cho người gọi phát được file gốc.
    */
-  private async canView(claims: BffClaims, asset: video_assets): Promise<boolean> {
-    if (asset.visibility === 'PUBLIC' || asset.owner_id === claims.sub || claims.scope === 'admin') {
+  private async canView(
+    claims: BffClaims,
+    asset: video_assets,
+  ): Promise<boolean> {
+    if (
+      asset.visibility === 'PUBLIC' ||
+      asset.owner_id === claims.sub ||
+      claims.scope === 'admin'
+    ) {
       return true;
     }
     if (asset.visibility === 'COURSE' && asset.course_id) {
@@ -48,7 +55,9 @@ export class VideoAssetService {
   /** Sửa, xoá, xác nhận upload: chủ sở hữu hoặc admin nền tảng. */
   private assertOwner(claims: BffClaims, asset: video_assets) {
     if (asset.owner_id !== claims.sub && claims.scope !== 'admin') {
-      throw new ForbiddenException('Chỉ người tạo video mới được thay đổi video này.');
+      throw new ForbiddenException(
+        'Chỉ người tạo video mới được thay đổi video này.',
+      );
     }
   }
 
@@ -64,10 +73,7 @@ export class VideoAssetService {
       where: {
         file_hash: input.fileHash,
         deleted_at: null,
-        OR: [
-          { owner_id: claims.sub },
-          { visibility: 'PUBLIC' },
-        ],
+        OR: [{ owner_id: claims.sub }, { visibility: 'PUBLIC' }],
       },
       include: {
         creator: { select: { display_name: true } },
@@ -109,7 +115,9 @@ export class VideoAssetService {
 
     const ext = extname(input.filename || '').toLowerCase();
     if (!['.mp4', '.webm'].includes(ext)) {
-      throw new BadRequestException('Chỉ chấp nhận video định dạng .mp4 hoặc .webm.');
+      throw new BadRequestException(
+        'Chỉ chấp nhận video định dạng .mp4 hoặc .webm.',
+      );
     }
 
     const asset = await this.prisma.video_assets.create({
@@ -122,7 +130,8 @@ export class VideoAssetService {
         transcript_status: 'PENDING',
         file_hash: input.fileHash,
         size_bytes: input.sizeBytes ? BigInt(input.sizeBytes) : undefined,
-        mime_type: input.mimeType || (ext === '.webm' ? 'video/webm' : 'video/mp4'),
+        mime_type:
+          input.mimeType || (ext === '.webm' ? 'video/webm' : 'video/mp4'),
         visibility: input.courseId ? 'COURSE' : 'PRIVATE',
         owner_id: claims.sub,
         course_id: input.courseId || null,
@@ -130,7 +139,10 @@ export class VideoAssetService {
     });
 
     const objectKey = `video-assets/${claims.sub}/${asset.asset_id}/video${ext}`;
-    const uploadUrl = await this.storage.createPresignedUploadUrl(objectKey, 15 * 60);
+    const uploadUrl = await this.storage.createPresignedUploadUrl(
+      objectKey,
+      15 * 60,
+    );
 
     await this.prisma.video_assets.update({
       where: { asset_id: asset.asset_id },
@@ -163,8 +175,11 @@ export class VideoAssetService {
       where: { asset_id: asset.asset_id },
       data: {
         status: 'READY',
-        size_bytes: input.sizeBytes ? BigInt(input.sizeBytes) : asset.size_bytes,
-        duration_ms: input.durationMs && input.durationMs > 0 ? input.durationMs : 60000,
+        size_bytes: input.sizeBytes
+          ? BigInt(input.sizeBytes)
+          : asset.size_bytes,
+        duration_ms:
+          input.durationMs && input.durationMs > 0 ? input.durationMs : 60000,
         updated_at: new Date(),
       },
     });
@@ -193,15 +208,15 @@ export class VideoAssetService {
     } else if (input.scope === 'course' && input.courseId) {
       await this.authz.assertCourseAccess(claims, input.courseId);
       where.course_id = input.courseId;
-      where.OR = [{ visibility: { in: ['COURSE', 'PUBLIC'] } }, { owner_id: claims.sub }];
+      where.OR = [
+        { visibility: { in: ['COURSE', 'PUBLIC'] } },
+        { owner_id: claims.sub },
+      ];
     } else if (input.scope === 'public') {
       where.visibility = 'PUBLIC';
     } else {
       // Mặc định: hiện các video công khai hoặc của chính người dùng
-      where.OR = [
-        { owner_id: claims.sub },
-        { visibility: 'PUBLIC' },
-      ];
+      where.OR = [{ owner_id: claims.sub }, { visibility: 'PUBLIC' }];
       if (input.courseId) {
         where.OR.push({ course_id: input.courseId, visibility: 'COURSE' });
       }
@@ -280,7 +295,10 @@ export class VideoAssetService {
   /**
    * Lấy Presigned GET URL kèm kiểm tra Quyền truy cập bắc cầu (Transitive Access).
    */
-  async getStreamUrl(claims: BffClaims, input: { assetId: string; microContentId?: string }) {
+  async getStreamUrl(
+    claims: BffClaims,
+    input: { assetId: string; microContentId?: string },
+  ) {
     const asset = await this.prisma.video_assets.findUnique({
       where: { asset_id: input.assetId },
     });
@@ -294,7 +312,10 @@ export class VideoAssetService {
     // Quyền bắc cầu: thành viên khoá học của bài micro-content đang dùng video này.
     if (!authorized && input.microContentId) {
       const mc = await this.prisma.micro_contents.findFirst({
-        where: { micro_content_id: input.microContentId, video_asset_id: asset.asset_id },
+        where: {
+          micro_content_id: input.microContentId,
+          video_asset_id: asset.asset_id,
+        },
       });
       if (mc) {
         try {
@@ -314,7 +335,10 @@ export class VideoAssetService {
       throw new BadRequestException('Video chưa sẵn sàng để phát.');
     }
 
-    const url = await this.storage.createPresignedDownloadUrl(asset.object_key, 2 * 3600);
+    const url = await this.storage.createPresignedDownloadUrl(
+      asset.object_key,
+      2 * 3600,
+    );
 
     return {
       url,
@@ -345,21 +369,33 @@ export class VideoAssetService {
       throw new NotFoundException('Video asset not found');
     }
     this.assertOwner(claims, asset);
-    if (input.visibility !== undefined && !VISIBILITIES.includes(input.visibility)) {
-      throw new BadRequestException('visibility phải là PRIVATE, COURSE hoặc PUBLIC.');
+    if (
+      input.visibility !== undefined &&
+      !VISIBILITIES.includes(input.visibility)
+    ) {
+      throw new BadRequestException(
+        'visibility phải là PRIVATE, COURSE hoặc PUBLIC.',
+      );
     }
     if (input.visibility === 'COURSE' && !asset.course_id) {
-      throw new BadRequestException('Video chưa thuộc khoá học nào nên không thể để COURSE.');
+      throw new BadRequestException(
+        'Video chưa thuộc khoá học nào nên không thể để COURSE.',
+      );
     }
 
     const updated = await this.prisma.video_assets.update({
       where: { asset_id: asset.asset_id },
       data: {
         title: input.title !== undefined ? input.title : asset.title,
-        description: input.description !== undefined ? input.description : asset.description,
+        description:
+          input.description !== undefined
+            ? input.description
+            : asset.description,
         tags: input.tags !== undefined ? input.tags : asset.tags,
-        visibility: input.visibility !== undefined ? input.visibility : asset.visibility,
-        allow_fork: input.allowFork !== undefined ? input.allowFork : asset.allow_fork,
+        visibility:
+          input.visibility !== undefined ? input.visibility : asset.visibility,
+        allow_fork:
+          input.allowFork !== undefined ? input.allowFork : asset.allow_fork,
         updated_at: new Date(),
       },
     });
@@ -415,10 +451,16 @@ export class VideoAssetService {
       throw new NotFoundException('Video asset not found');
     }
     if (!source.allow_fork && source.owner_id !== claims.sub) {
-      throw new BadRequestException('Video này không cho phép nhân bản kịch bản.');
+      throw new BadRequestException(
+        'Video này không cho phép nhân bản kịch bản.',
+      );
     }
     if (input.targetCourseId) {
-      await this.authz.assertCourseAccess(claims, input.targetCourseId, STAFF_ROLES);
+      await this.authz.assertCourseAccess(
+        claims,
+        input.targetCourseId,
+        STAFF_ROLES,
+      );
     }
 
     const forked = await this.prisma.video_assets.create({
@@ -459,18 +501,28 @@ export class VideoAssetService {
   ) {
     // Web gửi assetId: null để gỡ video. Thiếu hẳn trường thì không đoán là gỡ.
     if (input.assetId === undefined) {
-      throw new BadRequestException('Thiếu assetId (gửi null để gỡ video khỏi bài).');
+      throw new BadRequestException(
+        'Thiếu assetId (gửi null để gỡ video khỏi bài).',
+      );
     }
     const assetId = input.assetId;
     return this.prisma.$transaction(async (tx) => {
       const currentLesson = await tx.micro_contents.findFirst({
         where: { micro_content_id: input.microContentId, deleted_at: null },
-        select: { micro_content_id: true, video_asset_id: true, course_id: true },
+        select: {
+          micro_content_id: true,
+          video_asset_id: true,
+          course_id: true,
+        },
       });
       if (!currentLesson) {
         throw new NotFoundException('Micro content not found');
       }
-      await this.authz.assertCourseAccess(claims, currentLesson.course_id, STAFF_ROLES);
+      await this.authz.assertCourseAccess(
+        claims,
+        currentLesson.course_id,
+        STAFF_ROLES,
+      );
 
       if (currentLesson.video_asset_id === assetId) {
         return { success: true, unchanged: true };
@@ -510,7 +562,8 @@ export class VideoAssetService {
           video_duration_ms: assetRecord?.duration_ms || null,
           video_size_bytes: assetRecord?.size_bytes || null,
           video_status: assetRecord?.status || 'NONE',
-          video_source: assetRecord?.source_type === 'AI_STUDIO' ? 'AI' : 'UPLOAD',
+          video_source:
+            assetRecord?.source_type === 'AI_STUDIO' ? 'AI' : 'UPLOAD',
           updated_at: new Date(),
         },
       });
@@ -523,4 +576,3 @@ export class VideoAssetService {
     });
   }
 }
-

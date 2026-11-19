@@ -34,11 +34,19 @@ function text(value: unknown) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function distinctTexts(values: unknown, min: number, max: number, label: string) {
+function distinctTexts(
+  values: unknown,
+  min: number,
+  max: number,
+  label: string,
+) {
   if (!Array.isArray(values) || values.length < min || values.length > max)
-    throw new BadRequestException(`${label} phải có ${min === max ? min : `${min}–${max}`} mục.`);
+    throw new BadRequestException(
+      `${label} phải có ${min === max ? min : `${min}–${max}`} mục.`,
+    );
   const out = values.map(text);
-  if (out.some((v) => !v)) throw new BadRequestException(`${label} không được để trống.`);
+  if (out.some((v) => !v))
+    throw new BadRequestException(`${label} không được để trống.`);
   if (new Set(out.map((v) => v.toLocaleLowerCase('vi'))).size !== out.length)
     throw new BadRequestException(`${label} phải khác nhau.`);
   return out;
@@ -58,16 +66,22 @@ export function normalizeAnswerKey(
       const options = distinctTexts(key.options, 4, 4, 'Phương án');
       const correct = text(key.correct_answer);
       if (!options.includes(correct))
-        throw new BadRequestException('Đáp án đúng phải là một trong các phương án.');
+        throw new BadRequestException(
+          'Đáp án đúng phải là một trong các phương án.',
+        );
       return { options, correct_answer: correct };
     }
     case 'MCQ_MULTI': {
       const options = distinctTexts(key.options, 4, 6, 'Phương án');
-      const chosen = Array.isArray(key.correct_answer) ? key.correct_answer.map(text) : [];
+      const chosen = Array.isArray(key.correct_answer)
+        ? key.correct_answer.map(text)
+        : [];
       // Giữ thứ tự của phương án: chấm so theo tập nên thứ tự không đổi điểm.
       const correct = options.filter((o) => chosen.includes(o));
       if (correct.length !== new Set(chosen).size || !correct.length)
-        throw new BadRequestException('Đáp án đúng phải là các phương án có trong câu.');
+        throw new BadRequestException(
+          'Đáp án đúng phải là các phương án có trong câu.',
+        );
       if (correct.length === options.length)
         throw new BadRequestException('Phải có ít nhất một phương án sai.');
       return { options, correct_answer: correct };
@@ -75,21 +89,34 @@ export function normalizeAnswerKey(
     case 'TRUE_FALSE': {
       const correct = text(key.correct_answer);
       if (!TRUE_FALSE_OPTIONS.includes(correct))
-        throw new BadRequestException('Đáp án câu Đúng/Sai phải là "Đúng" hoặc "Sai".');
+        throw new BadRequestException(
+          'Đáp án câu Đúng/Sai phải là "Đúng" hoặc "Sai".',
+        );
       return { options: TRUE_FALSE_OPTIONS, correct_answer: correct };
     }
     case 'FILL_BLANK': {
       if (!BLANK.test(question))
-        throw new BadRequestException('Câu điền khuyết phải có chỗ trống "____".');
-      const raw = typeof key.correct_answer === 'string' ? [key.correct_answer] : key.correct_answer;
-      return { options: null, correct_answer: distinctTexts(raw, 1, 10, 'Đáp án chấp nhận') };
+        throw new BadRequestException(
+          'Câu điền khuyết phải có chỗ trống "____".',
+        );
+      const raw =
+        typeof key.correct_answer === 'string'
+          ? [key.correct_answer]
+          : key.correct_answer;
+      return {
+        options: null,
+        correct_answer: distinctTexts(raw, 1, 10, 'Đáp án chấp nhận'),
+      };
     }
     case 'SHORT_ANSWER': {
       const value = (key.correct_answer ?? {}) as Record<string, unknown>;
       const modelAnswer = text(value.model_answer);
       if (!modelAnswer) throw new BadRequestException('Thiếu bài làm mẫu.');
       const rubric = distinctTexts(value.rubric, 1, 6, 'Ý chấm điểm');
-      return { options: null, correct_answer: { model_answer: modelAnswer, rubric } };
+      return {
+        options: null,
+        correct_answer: { model_answer: modelAnswer, rubric },
+      };
     }
     default:
       throw new BadRequestException(`Kiểu câu hỏi không hỗ trợ: ${type}`);
@@ -113,7 +140,11 @@ export type ItemGrade = {
   pending: boolean;
 };
 
-const graded = (ok: boolean): ItemGrade => ({ score: ok ? 100 : 0, isCorrect: ok, pending: false });
+const graded = (ok: boolean): ItemGrade => ({
+  score: ok ? 100 : 0,
+  isCorrect: ok,
+  pending: false,
+});
 
 export function gradeAnswer(
   item: { type: string; correct_answer: unknown },
@@ -121,7 +152,9 @@ export function gradeAnswer(
 ): ItemGrade {
   switch (item.type) {
     case 'MCQ_MULTI': {
-      const correct = Array.isArray(item.correct_answer) ? item.correct_answer : [];
+      const correct = Array.isArray(item.correct_answer)
+        ? item.correct_answer
+        : [];
       if (!Array.isArray(chosen)) return graded(false);
       const picked = new Set(chosen.map((c) => JSON.stringify(c)));
       return graded(
@@ -135,14 +168,20 @@ export function gradeAnswer(
         ? item.correct_answer
         : [item.correct_answer];
       const answer = normalizeBlank(chosen);
-      return graded(Boolean(answer) && accepted.some((a) => normalizeBlank(a) === answer));
+      return graded(
+        Boolean(answer) && accepted.some((a) => normalizeBlank(a) === answer),
+      );
     }
     case 'SHORT_ANSWER':
       // Bỏ trống thì 0 điểm ngay, không tốn một lần gọi LLM.
-      return text(chosen) ? { score: 0, isCorrect: false, pending: true } : graded(false);
+      return text(chosen)
+        ? { score: 0, isCorrect: false, pending: true }
+        : graded(false);
     default:
       // MCQ_SINGLE, TRUE_FALSE: so theo giá trị phương án, không theo vị trí.
-      return graded(JSON.stringify(chosen) === JSON.stringify(item.correct_answer));
+      return graded(
+        JSON.stringify(chosen) === JSON.stringify(item.correct_answer),
+      );
   }
 }
 

@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { runBestEffort } from '../../../common/utils/best-effort';
 import { isWithinCodePoints } from '../../../common/utils/text-length';
-import { extraKeys, isIntIn, isPlainObject } from '../../../common/utils/type-guards';
+import {
+  extraKeys,
+  isIntIn,
+  isPlainObject,
+} from '../../../common/utils/type-guards';
 import { isUuid } from '../../../common/utils/uuid';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
 import {
@@ -108,7 +112,9 @@ export function statusSequence(
 
 function isText(value: unknown, max: number): value is string {
   return (
-    typeof value === 'string' && value.length > 0 && isWithinCodePoints(value, max)
+    typeof value === 'string' &&
+    value.length > 0 &&
+    isWithinCodePoints(value, max)
   );
 }
 
@@ -315,8 +321,7 @@ export class DocumentProcessingResultHandler implements WorkerResultHandler<
         const payload: unknown = envelope.payload;
         if (!isPlainObject(payload) || !isPlainObject(payload.status)) return;
         const documentId = payload.document_id;
-        const { stage, value, processing_generation, attempt } =
-          payload.status;
+        const { stage, value, processing_generation, attempt } = payload.status;
         if (!isUuid(documentId)) return;
         if (stage !== 'processing' && stage !== 'enrichment') return;
         if (typeof value !== 'string' || STEPS[stage][value] === undefined) {

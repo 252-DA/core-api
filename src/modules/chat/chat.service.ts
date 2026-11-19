@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { AuthzService } from '../../auth/authz.service';
@@ -27,12 +32,18 @@ const TITLE_CHARS = 80;
 const MAX_CATALOG_HEADINGS = 30;
 
 export function isChatMode(value: unknown): value is ChatMode {
-  return typeof value === 'string' && (CHAT_MODES as readonly string[]).includes(value);
+  return (
+    typeof value === 'string' &&
+    (CHAT_MODES as readonly string[]).includes(value)
+  );
 }
 
 /** review_audit_logs.entity_id là UUID: lấy UUID cố định (kiểu v5) theo tên cài đặt. */
 export function settingEntityId(key: string) {
-  const bytes = createHash('sha1').update(`chat_setting:${key}`).digest().subarray(0, 16);
+  const bytes = createHash('sha1')
+    .update(`chat_setting:${key}`)
+    .digest()
+    .subarray(0, 16);
   bytes[6] = (bytes[6] & 0x0f) | 0x50;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = bytes.toString('hex');
@@ -40,7 +51,9 @@ export function settingEntityId(key: string) {
 }
 
 const asInt = (value: unknown): number | null =>
-  typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.round(value)) : null;
+  typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.round(value))
+    : null;
 const asText = (value: unknown, max = MAX_TEXT_CHARS): string | null =>
   typeof value === 'string' && value.length ? value.slice(0, max) : null;
 const asJsonArray = (value: unknown): Prisma.InputJsonValue =>
@@ -48,7 +61,9 @@ const asJsonArray = (value: unknown): Prisma.InputJsonValue =>
 
 function conversationTitle(question: string): string {
   const clean = question.replace(/\s+/g, ' ').trim();
-  return clean.length > TITLE_CHARS ? `${clean.slice(0, TITLE_CHARS)}…` : clean || 'Cuộc trò chuyện';
+  return clean.length > TITLE_CHARS
+    ? `${clean.slice(0, TITLE_CHARS)}…`
+    : clean || 'Cuộc trò chuyện';
 }
 
 @Injectable()
@@ -75,11 +90,15 @@ export class ChatService {
   async setMode(claims: BffClaims, body: { mode?: unknown }) {
     await this.authz.assertPlatformAdmin(claims);
     if (!isChatMode(body.mode)) {
-      throw new BadRequestException(`Chế độ không hợp lệ: ${String(body.mode ?? '(trống)')}`);
+      throw new BadRequestException(
+        `Chế độ không hợp lệ: ${String(body.mode ?? '(trống)')}`,
+      );
     }
     const mode = body.mode;
     await this.prisma.$transaction(async (tx) => {
-      const before = await tx.chat_settings.findUnique({ where: { key: MODE_KEY } });
+      const before = await tx.chat_settings.findUnique({
+        where: { key: MODE_KEY },
+      });
       const from = before?.value ?? null;
       if (from === mode) return;
       await tx.chat_settings.upsert({
@@ -100,7 +119,11 @@ export class ChatService {
     return this.getSettings(claims);
   }
 
-  private async assertOwnConversation(claims: BffClaims, courseId: string, conversationId: string) {
+  private async assertOwnConversation(
+    claims: BffClaims,
+    courseId: string,
+    conversationId: string,
+  ) {
     const conv = await this.prisma.chat_conversations.findUnique({
       where: { conversation_id: conversationId },
       select: {
@@ -117,7 +140,9 @@ export class ChatService {
       throw new NotFoundException('Không tìm thấy cuộc trò chuyện.');
     }
     if (conv.user_id !== claims.sub || conv.course_id !== courseId) {
-      throw new ForbiddenException('Không có quyền truy cập cuộc trò chuyện này.');
+      throw new ForbiddenException(
+        'Không có quyền truy cập cuộc trò chuyện này.',
+      );
     }
     return conv;
   }
@@ -127,7 +152,8 @@ export class ChatService {
     const courseId = asText(body.courseId, 64);
     if (!courseId) throw new BadRequestException('Thiếu courseId.');
     await this.authz.assertCourseAccess(claims, courseId);
-    if (!isChatMode(body.mode)) throw new BadRequestException('Chế độ không hợp lệ.');
+    if (!isChatMode(body.mode))
+      throw new BadRequestException('Chế độ không hợp lệ.');
     const question = asText(body.question);
     if (!question) throw new BadRequestException('Thiếu câu hỏi.');
 
@@ -252,7 +278,12 @@ export class ChatService {
     });
 
     const history = runs
-      .filter((r) => r.status === 'OK' && typeof r.answer === 'string' && r.answer.trim().length > 0)
+      .filter(
+        (r) =>
+          r.status === 'OK' &&
+          typeof r.answer === 'string' &&
+          r.answer.trim().length > 0,
+      )
       .slice(-MAX_HISTORY_RUNS)
       .flatMap((r) => [
         { role: 'user' as const, content: r.question },
@@ -323,7 +354,8 @@ export class ChatService {
     for (const chunk of chunks) {
       const list = headings.get(chunk.document_id) ?? [];
       const title = chunk.heading_path[chunk.heading_path.length - 1]?.trim();
-      if (title && !list.includes(title) && list.length < MAX_CATALOG_HEADINGS) list.push(title);
+      if (title && !list.includes(title) && list.length < MAX_CATALOG_HEADINGS)
+        list.push(title);
       headings.set(chunk.document_id, list);
     }
     return {
@@ -334,16 +366,21 @@ export class ChatService {
   }
 
   /** Người dùng chấm 👍 (1) / 👎 (-1) cho câu trả lời của chính mình; 0 để bỏ chấm. */
-  async rateRun(claims: BffClaims, body: { runId?: unknown; rating?: unknown }) {
+  async rateRun(
+    claims: BffClaims,
+    body: { runId?: unknown; rating?: unknown },
+  ) {
     const rating = Number(body.rating);
-    if (![-1, 0, 1].includes(rating)) throw new BadRequestException('rating phải là -1, 0 hoặc 1.');
+    if (![-1, 0, 1].includes(rating))
+      throw new BadRequestException('rating phải là -1, 0 hoặc 1.');
     const runId = typeof body.runId === 'string' ? body.runId : '';
     const run = await this.prisma.chat_runs.findUnique({
       where: { run_id: runId },
       select: { user_id: true },
     });
     if (!run) throw new NotFoundException('Không tìm thấy lượt hỏi đáp.');
-    if (run.user_id !== claims.sub) throw new ForbiddenException('Chỉ người hỏi được chấm câu trả lời.');
+    if (run.user_id !== claims.sub)
+      throw new ForbiddenException('Chỉ người hỏi được chấm câu trả lời.');
     await this.prisma.chat_runs.update({
       where: { run_id: runId },
       data: { rating: rating === 0 ? null : rating },
@@ -356,60 +393,102 @@ export class ChatService {
    * nhất, và tình trạng đồ thị quan hệ của khóa học. Giảng viên/TA xem được của
    * khóa mình; admin xem được tất cả khi không chỉ định khóa học.
    */
-  async stats(claims: BffClaims, body: { courseId?: unknown; source?: unknown }) {
+  async stats(
+    claims: BffClaims,
+    body: { courseId?: unknown; source?: unknown },
+  ) {
     const courseId = asText(body.courseId, 64);
     if (courseId) {
       await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
     } else {
       await this.authz.assertPlatformAdmin(claims);
     }
-    const source = body.source === 'eval' || body.source === 'web' ? body.source : undefined;
+    const source =
+      body.source === 'eval' || body.source === 'web' ? body.source : undefined;
     const where: Prisma.chat_runsWhereInput = {
       ...(courseId ? { course_id: courseId } : {}),
       ...(source ? { source } : {}),
     };
 
-    const [settings, byMode, byStatus, byRating, recent, graph] = await Promise.all([
-      this.getSettings(claims),
-      this.prisma.chat_runs.groupBy({
-        by: ['mode'],
-        where,
-        _count: { _all: true },
-        _avg: { latency_ms: true, steps: true, input_tokens: true, output_tokens: true },
-      }),
-      this.prisma.chat_runs.groupBy({ by: ['mode', 'status'], where, _count: { _all: true } }),
-      this.prisma.chat_runs.groupBy({
-        by: ['mode', 'rating'],
-        where: { ...where, rating: { not: null } },
-        _count: { _all: true },
-      }),
-      this.prisma.chat_runs.findMany({
-        where,
-        orderBy: { created_at: 'desc' },
-        take: RECENT_RUNS,
-        select: {
-          run_id: true, created_at: true, mode: true, source: true, question_type: true,
-          question: true, answer: true, citations: true, tool_calls: true, model: true,
-          steps: true, latency_ms: true, status: true, error: true, rating: true,
-        },
-      }),
-      courseId ? this.graphStatus(courseId) : Promise.resolve(null),
-    ]);
+    const [settings, byMode, byStatus, byRating, recent, graph] =
+      await Promise.all([
+        this.getSettings(claims),
+        this.prisma.chat_runs.groupBy({
+          by: ['mode'],
+          where,
+          _count: { _all: true },
+          _avg: {
+            latency_ms: true,
+            steps: true,
+            input_tokens: true,
+            output_tokens: true,
+          },
+        }),
+        this.prisma.chat_runs.groupBy({
+          by: ['mode', 'status'],
+          where,
+          _count: { _all: true },
+        }),
+        this.prisma.chat_runs.groupBy({
+          by: ['mode', 'rating'],
+          where: { ...where, rating: { not: null } },
+          _count: { _all: true },
+        }),
+        this.prisma.chat_runs.findMany({
+          where,
+          orderBy: { created_at: 'desc' },
+          take: RECENT_RUNS,
+          select: {
+            run_id: true,
+            created_at: true,
+            mode: true,
+            source: true,
+            question_type: true,
+            question: true,
+            answer: true,
+            citations: true,
+            tool_calls: true,
+            model: true,
+            steps: true,
+            latency_ms: true,
+            status: true,
+            error: true,
+            rating: true,
+          },
+        }),
+        courseId ? this.graphStatus(courseId) : Promise.resolve(null),
+      ]);
 
-    const count = (rows: { mode: string; _count: { _all: number } }[], mode: string) =>
-      rows.filter((r) => r.mode === mode).reduce((sum, r) => sum + r._count._all, 0);
+    const count = (
+      rows: { mode: string; _count: { _all: number } }[],
+      mode: string,
+    ) =>
+      rows
+        .filter((r) => r.mode === mode)
+        .reduce((sum, r) => sum + r._count._all, 0);
     const modes = CHAT_MODES.map((mode) => {
       const row = byMode.find((r) => r.mode === mode);
-      const errors = count(byStatus.filter((r) => r.status === 'ERROR'), mode);
-      const up = count(byRating.filter((r) => r.rating === 1), mode);
-      const down = count(byRating.filter((r) => r.rating === -1), mode);
-      const round = (n: number | null | undefined) => (n == null ? null : Math.round(n));
+      const errors = count(
+        byStatus.filter((r) => r.status === 'ERROR'),
+        mode,
+      );
+      const up = count(
+        byRating.filter((r) => r.rating === 1),
+        mode,
+      );
+      const down = count(
+        byRating.filter((r) => r.rating === -1),
+        mode,
+      );
+      const round = (n: number | null | undefined) =>
+        n == null ? null : Math.round(n);
       return {
         mode,
         runs: row?._count._all ?? 0,
         errors,
         avg_latency_ms: round(row?._avg.latency_ms),
-        avg_steps: row?._avg.steps == null ? null : Math.round(row._avg.steps * 10) / 10,
+        avg_steps:
+          row?._avg.steps == null ? null : Math.round(row._avg.steps * 10) / 10,
         avg_input_tokens: round(row?._avg.input_tokens),
         avg_output_tokens: round(row?._avg.output_tokens),
         rated_up: up,
@@ -422,9 +501,10 @@ export class ChatService {
       modes,
       recent: recent.map((r) => ({
         ...r,
-        answer: r.answer && r.answer.length > ANSWER_PREVIEW_CHARS
-          ? `${r.answer.slice(0, ANSWER_PREVIEW_CHARS)}…`
-          : r.answer,
+        answer:
+          r.answer && r.answer.length > ANSWER_PREVIEW_CHARS
+            ? `${r.answer.slice(0, ANSWER_PREVIEW_CHARS)}…`
+            : r.answer,
       })),
       graph,
     };
@@ -434,8 +514,17 @@ export class ChatService {
   private async graphStatus(courseId: string) {
     const [documents, chapters, relationCounts, requests] = await Promise.all([
       this.prisma.documents.findMany({
-        where: { course_id: courseId, deleted_at: null, chunks: { some: { deleted_at: null } } },
-        select: { document_id: true, title: true, role: true, chapter_code: true },
+        where: {
+          course_id: courseId,
+          deleted_at: null,
+          chunks: { some: { deleted_at: null } },
+        },
+        select: {
+          document_id: true,
+          title: true,
+          role: true,
+          chapter_code: true,
+        },
         orderBy: [{ chapter_code: 'asc' }, { title: 'asc' }],
       }),
       this.prisma.chapters.findMany({
@@ -454,12 +543,24 @@ export class ChatService {
         where: { course_id: courseId, type: 'relations' },
         orderBy: { created_at: 'desc' },
         take: 5,
-        select: { request_id: true, status: true, generated_count: true, last_error: true, created_at: true, scope: true },
+        select: {
+          request_id: true,
+          status: true,
+          generated_count: true,
+          last_error: true,
+          created_at: true,
+          scope: true,
+        },
       }),
     ]);
-    const perDocument = new Map(relationCounts.map((r) => [r.document_id, r.n]));
+    const perDocument = new Map(
+      relationCounts.map((r) => [r.document_id, r.n]),
+    );
     return {
-      documents: documents.map((d) => ({ ...d, relations: perDocument.get(d.document_id) ?? 0 })),
+      documents: documents.map((d) => ({
+        ...d,
+        relations: perDocument.get(d.document_id) ?? 0,
+      })),
       chapters,
       total_relations: relationCounts.reduce((sum, r) => sum + r.n, 0),
       requests,

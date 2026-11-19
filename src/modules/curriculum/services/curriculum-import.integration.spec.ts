@@ -477,8 +477,14 @@ describeDb('Curriculum import on PostgreSQL', () => {
         ).resolves.toMatchObject({ applied: false, reason: 'not_awaiting' });
         expect((await importRow(stale)).status).toBe('FAILED');
         // Lần đồng bộ kế tiếp dùng lại lần nạp mới (còn chờ, chưa quá hạn).
-        const again = await syncService().service.syncFromCanvas(claims, courseId);
-        expect(again).toMatchObject({ import_id: result.import_id, reused: true });
+        const again = await syncService().service.syncFromCanvas(
+          claims,
+          courseId,
+        );
+        expect(again).toMatchObject({
+          import_id: result.import_id,
+          reused: true,
+        });
       });
 
       it('still reuses a recent QUEUED import and a READY one of any age', async () => {
@@ -488,11 +494,15 @@ describeDb('Curriculum import on PostgreSQL', () => {
         const readyCourse = await createCourse();
         const ready = await previousImport(readyCourse, 'READY', 60 * 24 * 30);
 
-        await expect(service.syncFromCanvas(claims, recentCourse)).resolves.toMatchObject({
+        await expect(
+          service.syncFromCanvas(claims, recentCourse),
+        ).resolves.toMatchObject({
           import_id: recent,
           reused: true,
         });
-        await expect(service.syncFromCanvas(claims, readyCourse)).resolves.toMatchObject({
+        await expect(
+          service.syncFromCanvas(claims, readyCourse),
+        ).resolves.toMatchObject({
           import_id: ready,
           reused: true,
         });

@@ -5,7 +5,10 @@ const M = 'http://purl.imsglobal.org/vocab/lis/v2/membership';
 describe('courseRoleFromNrps', () => {
   it('trợ giảng Canvas gửi kèm Instructor nhưng vẫn là ta', () => {
     expect(
-      courseRoleFromNrps([`${M}#Instructor`, `${M}/Instructor#TeachingAssistant`]),
+      courseRoleFromNrps([
+        `${M}#Instructor`,
+        `${M}/Instructor#TeachingAssistant`,
+      ]),
     ).toBe('ta');
   });
 

@@ -55,7 +55,9 @@ describeDb('document results on PostgreSQL', () => {
     prisma = new PrismaClient({ adapter: new PrismaPg(url!) });
     await prisma.$connect();
     seed =
-      seedUrl === url ? prisma : new PrismaClient({ adapter: new PrismaPg(seedUrl!) });
+      seedUrl === url
+        ? prisma
+        : new PrismaClient({ adapter: new PrismaPg(seedUrl!) });
     await seed.$connect();
     statusHandler = new DocumentProcessingResultHandler(prisma as never);
     contentHandler = new EnrichmentContentResultHandler(prisma as never);
@@ -220,7 +222,9 @@ describeDb('document results on PostgreSQL', () => {
         const dead = await newDocument();
         await fail(report(dead, 'PARSING'));
         expect((await row(dead)).status).toBe('ERROR');
-        await expect(status(dead, 'PARSING', { attempt: 2 })).resolves.toMatchObject({
+        await expect(
+          status(dead, 'PARSING', { attempt: 2 }),
+        ).resolves.toMatchObject({
           status: { applied: true },
         });
       });

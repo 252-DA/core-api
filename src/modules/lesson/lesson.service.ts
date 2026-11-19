@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { STAFF_ROLES } from '../../common/constants/course-roles';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { AuthzService } from '../../auth/authz.service';
@@ -40,7 +44,9 @@ export class LessonService {
     const lesson = await this.prisma.lessons.findFirst({
       where: { lesson_id: lessonId, deleted_at: null },
       include: {
-        learning_outcomes: { include: { chapter_los: { include: { chapters: true } } } },
+        learning_outcomes: {
+          include: { chapter_los: { include: { chapters: true } } },
+        },
       },
     });
     if (!lesson) {
@@ -54,13 +60,20 @@ export class LessonService {
       .map((link) => link.chapters)
       .filter((chapter) => !chapter.deleted_at)
       .sort((a, b) => a.sort_order - b.sort_order);
-    return { ...lesson, learning_outcomes: { ...lo, chapters: chapters[0] ?? null } };
+    return {
+      ...lesson,
+      learning_outcomes: { ...lo, chapters: chapters[0] ?? null },
+    };
   }
 
   async cards(claims: BffClaims, lessonId: string, status?: string) {
     const lesson = await this.get(claims, lessonId);
     if (status !== 'PUBLISHED') {
-      await this.authz.assertCourseAccess(claims, lesson.course_id, STAFF_ROLES);
+      await this.authz.assertCourseAccess(
+        claims,
+        lesson.course_id,
+        STAFF_ROLES,
+      );
     }
     return this.prisma.lesson_cards.findMany({
       where: {
@@ -76,7 +89,11 @@ export class LessonService {
   async quiz(claims: BffClaims, lessonId: string, status?: string) {
     const lesson = await this.get(claims, lessonId);
     if (status !== 'PUBLISHED') {
-      await this.authz.assertCourseAccess(claims, lesson.course_id, STAFF_ROLES);
+      await this.authz.assertCourseAccess(
+        claims,
+        lesson.course_id,
+        STAFF_ROLES,
+      );
     }
     return this.prisma.quiz_items.findMany({
       where: {
@@ -109,16 +126,28 @@ export class LessonService {
 
       await tx.lesson_cards.updateMany({
         where: { lesson_id: lessonId, status: 'APPROVED', deleted_at: null },
-        data: { status: 'PUBLISHED', published_at: new Date(), updated_at: new Date() },
+        data: {
+          status: 'PUBLISHED',
+          published_at: new Date(),
+          updated_at: new Date(),
+        },
       });
       await tx.quiz_items.updateMany({
         where: { lesson_id: lessonId, status: 'APPROVED', deleted_at: null },
-        data: { status: 'PUBLISHED', published_at: new Date(), updated_at: new Date() },
+        data: {
+          status: 'PUBLISHED',
+          published_at: new Date(),
+          updated_at: new Date(),
+        },
       });
 
       const updatedLesson = await tx.lessons.update({
         where: { lesson_id: lessonId },
-        data: { status: 'PUBLISHED', published_at: new Date(), updated_at: new Date() },
+        data: {
+          status: 'PUBLISHED',
+          published_at: new Date(),
+          updated_at: new Date(),
+        },
       });
 
       await tx.review_audit_logs.create({

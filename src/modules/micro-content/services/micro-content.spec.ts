@@ -75,11 +75,11 @@ describe('MicroContentService', () => {
 
       const result = await service.list(instructorClaims, courseId);
 
-      expect(authz.assertCourseAccess).toHaveBeenCalledWith(instructorClaims, courseId, [
-        'instructor',
-        'ta',
-        'admin',
-      ]);
+      expect(authz.assertCourseAccess).toHaveBeenCalledWith(
+        instructorClaims,
+        courseId,
+        ['instructor', 'ta', 'admin'],
+      );
       expect(result).toHaveLength(1);
       expect(result[0].questionCount).toBe(3);
       expect(result[0].attemptCount).toBe(5);
@@ -130,7 +130,11 @@ describe('MicroContentService', () => {
 
       const result = await service.get(learnerClaims, microContentId);
 
-      expect(authz.assertCourseAccess).toHaveBeenCalledWith(learnerClaims, courseId, ['learner']);
+      expect(authz.assertCourseAccess).toHaveBeenCalledWith(
+        learnerClaims,
+        courseId,
+        ['learner'],
+      );
       expect(result.questions[0]).toHaveProperty('id', 'q1');
       expect(result.questions[0]).toHaveProperty('question', '1 + 1 = ?');
       expect(result.questions[0]).not.toHaveProperty('correctAnswer');
@@ -145,7 +149,9 @@ describe('MicroContentService', () => {
         status: 'DRAFT',
       });
 
-      await expect(service.get(learnerClaims, microContentId)).rejects.toThrow(NotFoundException);
+      await expect(service.get(learnerClaims, microContentId)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -160,9 +166,9 @@ describe('MicroContentService', () => {
         _count: { questions: 2 },
       });
 
-      await expect(service.publish(instructorClaims, microContentId, 'PUBLISHED')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.publish(instructorClaims, microContentId, 'PUBLISHED'),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('refuses to publish when there are no questions', async () => {
@@ -175,9 +181,9 @@ describe('MicroContentService', () => {
         _count: { questions: 0 },
       });
 
-      await expect(service.publish(instructorClaims, microContentId, 'PUBLISHED')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.publish(instructorClaims, microContentId, 'PUBLISHED'),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('publishes successfully when video is READY and has questions', async () => {
@@ -194,7 +200,11 @@ describe('MicroContentService', () => {
         status: 'PUBLISHED',
       });
 
-      const res = await service.publish(instructorClaims, microContentId, 'PUBLISHED');
+      const res = await service.publish(
+        instructorClaims,
+        microContentId,
+        'PUBLISHED',
+      );
       expect(res.status).toBe('PUBLISHED');
     });
   });
@@ -360,9 +370,13 @@ describe('MicroContentService', () => {
 
       const command = tx.outbox_events.create.mock.calls[0][0].data;
       expect(command.aggregate_id).toBe(microContentId);
-      expect(command.payload).toMatchObject({ micro_content_id: microContentId });
+      expect(command.payload).toMatchObject({
+        micro_content_id: microContentId,
+      });
       expect(tx.micro_contents.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { micro_content_id: microContentId } }),
+        expect.objectContaining({
+          where: { micro_content_id: microContentId },
+        }),
       );
     });
 
@@ -466,7 +480,9 @@ describe('MicroContentService', () => {
       const reqId = '55555555-5555-4555-8555-555555555555';
       const tx = {
         content_generation_requests: {
-          create: jest.fn().mockResolvedValue({ request_id: reqId, status: 'QUEUED' }),
+          create: jest
+            .fn()
+            .mockResolvedValue({ request_id: reqId, status: 'QUEUED' }),
         },
         micro_contents: {
           create: jest.fn(),
@@ -495,7 +511,9 @@ describe('MicroContentService', () => {
           create: jest.fn(),
           update: jest.fn(),
         },
-        $transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) => cb(tx)),
+        $transaction: jest.fn(async (cb: (t: unknown) => Promise<unknown>) =>
+          cb(tx),
+        ),
       };
       const authz = {
         assertCourseAccess: jest.fn().mockResolvedValue(undefined),
@@ -518,7 +536,11 @@ describe('MicroContentService', () => {
         documentId: docId,
       });
 
-      expect(res).toEqual({ requestId: reqId, status: 'QUEUED', deduplicated: false });
+      expect(res).toEqual({
+        requestId: reqId,
+        status: 'QUEUED',
+        deduplicated: false,
+      });
       expect(tx.content_generation_requests.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           course_id: courseId,
@@ -532,7 +554,10 @@ describe('MicroContentService', () => {
           payload: expect.objectContaining({
             request_id: reqId,
             type: 'micro_outline',
-            scope: expect.objectContaining({ document_id: docId, chapter_code: '8' }),
+            scope: expect.objectContaining({
+              document_id: docId,
+              chapter_code: '8',
+            }),
           }),
         }),
       });
@@ -547,7 +572,11 @@ describe('MicroContentService', () => {
         chapter_code: '8',
       });
       prisma.content_generation_requests.findMany.mockResolvedValue([
-        { request_id: 'active-req-1', status: 'PROCESSING', scope: { document_id: docId } },
+        {
+          request_id: 'active-req-1',
+          status: 'PROCESSING',
+          scope: { document_id: docId },
+        },
       ]);
 
       const res = await service.requestOutline(instructorClaims, {
@@ -555,7 +584,11 @@ describe('MicroContentService', () => {
         documentId: docId,
       });
 
-      expect(res).toEqual({ requestId: 'active-req-1', status: 'PROCESSING', deduplicated: true });
+      expect(res).toEqual({
+        requestId: 'active-req-1',
+        status: 'PROCESSING',
+        deduplicated: true,
+      });
       expect(tx.content_generation_requests.create).not.toHaveBeenCalled();
     });
 
@@ -587,9 +620,13 @@ describe('MicroContentService', () => {
           statement_en: null,
         },
       });
-      prisma.micro_contents.findMany.mockResolvedValue([{ title: 'DataFrame API' }]);
+      prisma.micro_contents.findMany.mockResolvedValue([
+        { title: 'DataFrame API' },
+      ]);
 
-      const res = await service.requestScript(instructorClaims, { microContentId });
+      const res = await service.requestScript(instructorClaims, {
+        microContentId,
+      });
 
       expect(res).toEqual({
         success: true,
@@ -674,7 +711,12 @@ describe('MicroContentService', () => {
         source_page_from: 3,
         source_page_to: 8,
         lo_id: loId,
-        learning_outcome: { lo_id: loId, code: 'L.O.8.1', statement_vi: 'Hiểu RDD', statement_en: null },
+        learning_outcome: {
+          lo_id: loId,
+          code: 'L.O.8.1',
+          statement_vi: 'Hiểu RDD',
+          statement_en: null,
+        },
         ai_script: { scenes: [] },
       });
 
@@ -684,7 +726,11 @@ describe('MicroContentService', () => {
         questionTypes: ['MCQ_SINGLE', 'SHORT_ANSWER'],
       });
 
-      expect(res).toEqual({ success: true, requestId: reqId, status: 'QUEUED' });
+      expect(res).toEqual({
+        success: true,
+        requestId: reqId,
+        status: 'QUEUED',
+      });
       expect(tx.outbox_events.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           payload: expect.objectContaining({
@@ -711,7 +757,11 @@ describe('MicroContentService', () => {
           source_page_from: 6,
           source_page_to: 10,
           lo_id: loId,
-          learning_outcome: { lo_id: loId, code: 'L.O.8.1', statement_vi: 'Hiểu RDD' },
+          learning_outcome: {
+            lo_id: loId,
+            code: 'L.O.8.1',
+            statement_vi: 'Hiểu RDD',
+          },
           position: 2,
           script_status: 'READY',
           ai_script: { scenes: [{ check: { status: 'FLAGGED' } }] },

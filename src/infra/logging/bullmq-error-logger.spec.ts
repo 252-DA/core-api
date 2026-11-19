@@ -1,11 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { Writable } from 'node:stream';
-import {
-  ConsoleLogger,
-  Injectable,
-  Logger,
-  Scope,
-} from '@nestjs/common';
+import { ConsoleLogger, Injectable, Logger, Scope } from '@nestjs/common';
 import { WorkerHost } from '@nestjs/bullmq';
 import { DiscoveryModule, DiscoveryService } from '@nestjs/core';
 import { Test } from '@nestjs/testing';

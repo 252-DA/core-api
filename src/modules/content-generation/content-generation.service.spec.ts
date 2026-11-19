@@ -36,7 +36,9 @@ describe('ContentGenerationService', () => {
     };
     const prisma = {
       chapters: {
-        findFirst: jest.fn().mockResolvedValue({ chapter_id: CHAPTER, code: '1' }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ chapter_id: CHAPTER, code: '1' }),
       },
       content_generation_requests: {
         findMany: jest.fn(),
@@ -121,7 +123,11 @@ describe('ContentGenerationService', () => {
       service.createRequest(claims, {
         courseId,
         type: 'quiz',
-        scope: { target_kind: 'lo', target_code: 'L.O.1.1', question_type: 'ESSAY' },
+        scope: {
+          target_kind: 'lo',
+          target_code: 'L.O.1.1',
+          question_type: 'ESSAY',
+        },
       }),
     ).rejects.toThrow('Kiểu câu hỏi không hợp lệ.');
     expect(tx.content_generation_requests.create).not.toHaveBeenCalled();
@@ -171,8 +177,14 @@ describe('ContentGenerationService', () => {
   describe('ma trận đề với tài liệu nguồn tự chọn', () => {
     it('nhận ô LO × Bloom khi tài liệu thuộc khóa học, đã xử lý và có slide', async () => {
       const { service, prisma, tx } = setup();
-      tx.content_generation_requests.create.mockResolvedValue({ request_id: 'r1' });
-      await service.createRequest(claims, { courseId, type: 'quiz', scope: blueprintScope() });
+      tx.content_generation_requests.create.mockResolvedValue({
+        request_id: 'r1',
+      });
+      await service.createRequest(claims, {
+        courseId,
+        type: 'quiz',
+        scope: blueprintScope(),
+      });
       expect(prisma.documents.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
@@ -182,7 +194,9 @@ describe('ContentGenerationService', () => {
           }),
         }),
       );
-      expect(tx.outbox_events.create.mock.calls[0][0].data.payload.scope).toMatchObject({
+      expect(
+        tx.outbox_events.create.mock.calls[0][0].data.payload.scope,
+      ).toMatchObject({
         source_document_ids: [SLIDE, REF],
         bloom_level: 'apply',
         count: 2,
@@ -199,7 +213,11 @@ describe('ContentGenerationService', () => {
     ])('từ chối %j', async (overrides, message) => {
       const { service, tx } = setup();
       await expect(
-        service.createRequest(claims, { courseId, type: 'quiz', scope: blueprintScope(overrides) }),
+        service.createRequest(claims, {
+          courseId,
+          type: 'quiz',
+          scope: blueprintScope(overrides),
+        }),
       ).rejects.toThrow(message);
       expect(tx.content_generation_requests.create).not.toHaveBeenCalled();
     });
@@ -207,10 +225,16 @@ describe('ContentGenerationService', () => {
     it('từ chối LO của khóa khác, tài liệu chưa xử lý, hoặc chỉ có tài liệu tham khảo', async () => {
       const { service, prisma } = setup();
       const create = () =>
-        service.createRequest(claims, { courseId, type: 'quiz', scope: blueprintScope() });
+        service.createRequest(claims, {
+          courseId,
+          type: 'quiz',
+          scope: blueprintScope(),
+        });
       prisma.learning_outcomes.findFirst.mockResolvedValueOnce(null);
       await expect(create()).rejects.toThrow('LO không thuộc');
-      prisma.documents.findMany.mockResolvedValueOnce([{ document_id: SLIDE, role: 'lecture' }]);
+      prisma.documents.findMany.mockResolvedValueOnce([
+        { document_id: SLIDE, role: 'lecture' },
+      ]);
       await expect(create()).rejects.toThrow('chưa xử lý');
       prisma.documents.findMany.mockResolvedValueOnce([
         { document_id: SLIDE, role: 'reference' },
@@ -257,8 +281,13 @@ describe('ContentGenerationService', () => {
   describe('dựng đồ thị quan hệ (type = relations)', () => {
     it('lấy mọi tài liệu đã xử lý của chương làm nguồn', async () => {
       const { service, prisma, tx } = setup();
-      tx.content_generation_requests.create.mockResolvedValue({ request_id: 'r1' });
-      prisma.documents.findMany.mockResolvedValueOnce([{ document_id: SLIDE }, { document_id: REF }]);
+      tx.content_generation_requests.create.mockResolvedValue({
+        request_id: 'r1',
+      });
+      prisma.documents.findMany.mockResolvedValueOnce([
+        { document_id: SLIDE },
+        { document_id: REF },
+      ]);
       await service.createRequest(claims, {
         courseId,
         type: 'relations',
@@ -273,11 +302,15 @@ describe('ContentGenerationService', () => {
           }),
         }),
       );
-      expect(tx.content_generation_requests.create.mock.calls[0][0].data).toMatchObject({
+      expect(
+        tx.content_generation_requests.create.mock.calls[0][0].data,
+      ).toMatchObject({
         type: 'relations',
         status: 'QUEUED',
       });
-      expect(tx.outbox_events.create.mock.calls[0][0].data.payload).toMatchObject({
+      expect(
+        tx.outbox_events.create.mock.calls[0][0].data.payload,
+      ).toMatchObject({
         type: 'relations',
         scope: { chapter_id: CHAPTER, source_document_ids: [SLIDE, REF] },
       });
@@ -285,13 +318,17 @@ describe('ContentGenerationService', () => {
 
     it('nhận danh sách tài liệu khi không chọn chương', async () => {
       const { service, tx } = setup();
-      tx.content_generation_requests.create.mockResolvedValue({ request_id: 'r1' });
+      tx.content_generation_requests.create.mockResolvedValue({
+        request_id: 'r1',
+      });
       await service.createRequest(claims, {
         courseId,
         type: 'relations',
         scope: { source_document_ids: [SLIDE, REF] },
       });
-      expect(tx.outbox_events.create.mock.calls[0][0].data.payload.scope).toEqual({
+      expect(
+        tx.outbox_events.create.mock.calls[0][0].data.payload.scope,
+      ).toEqual({
         source_document_ids: [SLIDE, REF],
       });
     });
@@ -299,7 +336,10 @@ describe('ContentGenerationService', () => {
     it.each([
       [{}, 'chương hoặc ít nhất một tài liệu'],
       [{ source_document_ids: [] }, 'chương hoặc ít nhất một tài liệu'],
-      [{ source_document_ids: ['không-phải-uuid'] }, 'chương hoặc ít nhất một tài liệu'],
+      [
+        { source_document_ids: ['không-phải-uuid'] },
+        'chương hoặc ít nhất một tài liệu',
+      ],
     ])('từ chối phạm vi %j', async (scope, message) => {
       const { service, tx } = setup();
       await expect(
@@ -311,7 +351,11 @@ describe('ContentGenerationService', () => {
     it('từ chối chương của khóa khác và chương chưa có tài liệu', async () => {
       const { service, prisma } = setup();
       const create = () =>
-        service.createRequest(claims, { courseId, type: 'relations', scope: { chapter_id: CHAPTER } });
+        service.createRequest(claims, {
+          courseId,
+          type: 'relations',
+          scope: { chapter_id: CHAPTER },
+        });
       prisma.chapters.findFirst.mockResolvedValueOnce(null);
       await expect(create()).rejects.toThrow('Chương không thuộc');
       prisma.documents.findMany.mockResolvedValueOnce([]);
@@ -334,7 +378,9 @@ describe('ContentGenerationService', () => {
       const { service, prisma } = setup();
       await service.listRequests(claims, courseId, 5, 'relations');
       expect(prisma.content_generation_requests.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { course_id: courseId, type: 'relations' } }),
+        expect.objectContaining({
+          where: { course_id: courseId, type: 'relations' },
+        }),
       );
     });
   });

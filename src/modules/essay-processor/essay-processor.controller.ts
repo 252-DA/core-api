@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { EssayProcessorService } from './essay-processor.service';
 import { BffJwtGuard } from '../../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../../auth/current-bff-claims.decorator';
@@ -45,7 +54,10 @@ export class EssayProcessorController {
     @Param('id') processorId: string,
     @Body() body: UpdateEssayProcessorDto,
   ) {
-    return this.essayProcessors.updateProcessor(claims, { ...body, processorId });
+    return this.essayProcessors.updateProcessor(claims, {
+      ...body,
+      processorId,
+    });
   }
 
   @Get(':id')

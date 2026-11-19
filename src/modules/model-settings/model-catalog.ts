@@ -8,7 +8,11 @@ import { resolve } from 'path';
  * dùng để quyết định tên profile nào được ghi vào llm_model_bindings.
  */
 export type ModelProfile = { name: string; provider: string; model: string };
-export type ModelTask = { task: string; default_profile: string; use_cases: string[] };
+export type ModelTask = {
+  task: string;
+  default_profile: string;
+  use_cases: string[];
+};
 export type ModelCatalog = { profiles: ModelProfile[]; tasks: ModelTask[] };
 
 const CATALOG_PATH = resolve(process.cwd(), 'proto/llm_model_catalog.json');
@@ -17,7 +21,9 @@ let cached: ModelCatalog | null = null;
 
 export function loadModelCatalog(): ModelCatalog {
   if (cached) return cached;
-  const raw = JSON.parse(readFileSync(CATALOG_PATH, 'utf8')) as Partial<ModelCatalog>;
+  const raw = JSON.parse(
+    readFileSync(CATALOG_PATH, 'utf8'),
+  ) as Partial<ModelCatalog>;
   if (!Array.isArray(raw.profiles) || !Array.isArray(raw.tasks)) {
     throw new Error(`${CATALOG_PATH} thiếu profiles hoặc tasks`);
   }

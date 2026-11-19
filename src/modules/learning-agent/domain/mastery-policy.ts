@@ -38,7 +38,13 @@ export function bktPolicy(
     id: 'bkt',
     version: `${params.version}/θ${criterion.threshold}/n${criterion.minObservations}`,
     initial: () => params.prior,
-    update: (p, obs) => bktUpdate(p, obs.correct, guessFor(obs.type, obs.optionCount, params), params),
+    update: (p, obs) =>
+      bktUpdate(
+        p,
+        obs.correct,
+        guessFor(obs.type, obs.optionCount, params),
+        params,
+      ),
     mastered: (p, n) => meetsCriterion(p, n, criterion),
     estimate: (p) => p,
   };
@@ -61,13 +67,18 @@ export function consecutiveCorrectPolicy(n = 3): MasteryPolicy<number> {
  * mặc định chỉ để chạy được; giai đoạn đánh giá chọn lại trên tập hiệu chỉnh
  * riêng, không chọn trên tập đánh giá cuối.
  */
-export function emaPolicy(alpha = 0.3, threshold = 0.8, minObservations = 3): MasteryPolicy<number> {
+export function emaPolicy(
+  alpha = 0.3,
+  threshold = 0.8,
+  minObservations = 3,
+): MasteryPolicy<number> {
   return {
     id: 'ema',
     version: `ema-v1/a${alpha}/θ${threshold}/n${minObservations}`,
     initial: () => 0,
     update: (value, obs) => alpha * (obs.correct ? 1 : 0) + (1 - alpha) * value,
-    mastered: (value, observations) => value >= threshold && observations >= minObservations,
+    mastered: (value, observations) =>
+      value >= threshold && observations >= minObservations,
     estimate: (value) => value,
   };
 }
@@ -80,12 +91,16 @@ export interface ReplayResult<S> {
 }
 
 /** Chạy lại toàn bộ lịch sử theo thứ tự; trạng thái lưu chỉ là bộ đệm của hàm này. */
-export function replay<S>(policy: MasteryPolicy<S>, history: PolicyObservation[]): ReplayResult<S> {
+export function replay<S>(
+  policy: MasteryPolicy<S>,
+  history: PolicyObservation[],
+): ReplayResult<S> {
   let state = policy.initial();
   let firstMasteredAt: number | null = null;
   history.forEach((obs, index) => {
     state = policy.update(state, obs);
-    if (firstMasteredAt === null && policy.mastered(state, index + 1)) firstMasteredAt = index + 1;
+    if (firstMasteredAt === null && policy.mastered(state, index + 1))
+      firstMasteredAt = index + 1;
   });
   return { state, observations: history.length, firstMasteredAt };
 }

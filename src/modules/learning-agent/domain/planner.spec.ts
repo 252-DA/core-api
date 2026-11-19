@@ -1,5 +1,10 @@
 import { plan, type PlannerInput, type PlannerLo } from './planner';
-import { applyReview, enterReview, isDue, localDayStart } from './review-schedule';
+import {
+  applyReview,
+  enterReview,
+  isDue,
+  localDayStart,
+} from './review-schedule';
 
 function lo(loId: string, over: Partial<PlannerLo> = {}): PlannerLo {
   return {
@@ -17,21 +22,49 @@ function lo(loId: string, over: Partial<PlannerLo> = {}): PlannerLo {
   };
 }
 
-function input(scope: PlannerLo[], over: Partial<PlannerInput> = {}): PlannerInput {
-  return { scope, currentLoId: null, dueLoIds: [], today: { answered: 0, reviewsAnswered: 0 }, ...over };
+function input(
+  scope: PlannerLo[],
+  over: Partial<PlannerInput> = {},
+): PlannerInput {
+  return {
+    scope,
+    currentLoId: null,
+    dueLoIds: [],
+    today: { answered: 0, reviewsAnswered: 0 },
+    ...over,
+  };
 }
 
 describe('planner', () => {
   it('R0: hết hạn mức ngày thì chỉ còn nghỉ, kể cả khi có LO đến hạn ôn', () => {
-    const d = plan(input([lo('a')], { dueLoIds: ['a'], today: { answered: 30, reviewsAnswered: 0 } }));
-    expect(d).toMatchObject({ action: 'A0', rule: 'R0', reason: 'daily_limit', alternatives: [] });
+    const d = plan(
+      input([lo('a')], {
+        dueLoIds: ['a'],
+        today: { answered: 30, reviewsAnswered: 0 },
+      }),
+    );
+    expect(d).toMatchObject({
+      action: 'A0',
+      rule: 'R0',
+      reason: 'daily_limit',
+      alternatives: [],
+    });
   });
 
   it('R1: ôn LO đến hạn trước; LO đến hạn ngoài phạm vi bị bỏ qua', () => {
     const scope = [lo('a'), lo('b', { mastered: true })];
-    expect(plan(input(scope, { dueLoIds: ['x', 'b'] }))).toMatchObject({ action: 'A4', loId: 'b', rule: 'R1' });
+    expect(plan(input(scope, { dueLoIds: ['x', 'b'] }))).toMatchObject({
+      action: 'A4',
+      loId: 'b',
+      rule: 'R1',
+    });
     // Hết hạn mức ôn trong ngày thì tiếp tục luyện.
-    const d = plan(input(scope, { dueLoIds: ['b'], today: { answered: 5, reviewsAnswered: 5 } }));
+    const d = plan(
+      input(scope, {
+        dueLoIds: ['b'],
+        today: { answered: 5, reviewsAnswered: 5 },
+      }),
+    );
     expect(d).toMatchObject({ action: 'A1', loId: 'a', rule: 'R4' });
   });
 
@@ -43,32 +76,57 @@ describe('planner', () => {
   });
 
   it('R2: mười quan sát trong đợt mà chưa đạt thì báo giảng viên và gợi ý LO khác', () => {
-    const d = plan(input([lo('a', { episodeObservations: 10 }), lo('b')], { currentLoId: 'a' }));
-    expect(d).toMatchObject({ action: 'A6', loId: 'a', rule: 'R2', reason: 'stuck' });
+    const d = plan(
+      input([lo('a', { episodeObservations: 10 }), lo('b')], {
+        currentLoId: 'a',
+      }),
+    );
+    expect(d).toMatchObject({
+      action: 'A6',
+      loId: 'a',
+      rule: 'R2',
+      reason: 'stuck',
+    });
     expect(d.alternatives).toEqual([{ action: 'A5', loId: 'b' }]);
   });
 
   it('R2: đã xem nguồn hai lần mà vẫn sai hai câu liên tiếp', () => {
-    const d = plan(input([lo('a', { sourceViews: 2, wrongSinceSource: 2 })], { currentLoId: 'a' }));
+    const d = plan(
+      input([lo('a', { sourceViews: 2, wrongSinceSource: 2 })], {
+        currentLoId: 'a',
+      }),
+    );
     expect(d).toMatchObject({ action: 'A6', rule: 'R2' });
   });
 
   it('R3: sai hai câu liên tiếp thì xem lại nguồn; thiếu nguồn thì luyện tiếp và ghi thiếu', () => {
-    expect(plan(input([lo('a', { wrongSinceSource: 2 })], { currentLoId: 'a' }))).toMatchObject({
+    expect(
+      plan(input([lo('a', { wrongSinceSource: 2 })], { currentLoId: 'a' })),
+    ).toMatchObject({
       action: 'A3',
       rule: 'R3',
       evidence: { wrongSinceSource: 2 },
     });
-    const d = plan(input([lo('a', { wrongSinceSource: 2, hasSource: false })], { currentLoId: 'a' }));
+    const d = plan(
+      input([lo('a', { wrongSinceSource: 2, hasSource: false })], {
+        currentLoId: 'a',
+      }),
+    );
     expect(d).toMatchObject({ action: 'A1', rule: 'R4' });
     expect(d.issues).toEqual([{ loId: 'a', issue: 'missing_source' }]);
   });
 
   it('R4: hết câu vì tự luận đang chờ chấm thì chờ; hết câu thật thì báo thiếu câu', () => {
     expect(
-      plan(input([lo('a', { hasNewItem: false, awaitingGrade: true })], { currentLoId: 'a' })),
+      plan(
+        input([lo('a', { hasNewItem: false, awaitingGrade: true })], {
+          currentLoId: 'a',
+        }),
+      ),
     ).toMatchObject({ action: 'WAIT', reason: 'awaiting_grade' });
-    const d = plan(input([lo('a', { hasNewItem: false })], { currentLoId: 'a' }));
+    const d = plan(
+      input([lo('a', { hasNewItem: false })], { currentLoId: 'a' }),
+    );
     expect(d).toMatchObject({ action: 'A6', reason: 'missing_items' });
     expect(d.issues).toEqual([{ loId: 'a', issue: 'missing_items' }]);
   });
@@ -78,14 +136,18 @@ describe('planner', () => {
     const d = plan(input(scope, { currentLoId: 'a' }));
     expect(d).toMatchObject({ action: 'A5', loId: 'b', rule: 'R6' });
     expect(d.alternatives).toEqual([{ action: 'A5', loId: 'c' }]);
-    expect(plan(input([lo('a', { mastered: true })], { currentLoId: 'a' }))).toMatchObject({
+    expect(
+      plan(input([lo('a', { mastered: true })], { currentLoId: 'a' })),
+    ).toMatchObject({
       action: 'A0',
       reason: 'all_mastered',
     });
   });
 
   it('bỏ qua LO đã tạm dừng khi chọn LO đang xử lý', () => {
-    const d = plan(input([lo('a', { paused: true }), lo('b')], { currentLoId: 'a' }));
+    const d = plan(
+      input([lo('a', { paused: true }), lo('b')], { currentLoId: 'a' }),
+    );
     expect(d).toMatchObject({ action: 'A1', loId: 'b' });
   });
 
@@ -102,9 +164,13 @@ describe('planner', () => {
 describe('lịch ôn Leitner', () => {
   it('tính ngày theo giờ Việt Nam', () => {
     // 23:30 ngày 4/11 giờ VN là 16:30Z; "ngày mai" bắt đầu 00:00 ngày 5/11 giờ VN = 17:00Z ngày 4/11.
-    expect(localDayStart(new Date('2026-11-04T16:30:00Z'), 1).toISOString()).toBe('2026-11-04T17:00:00.000Z');
+    expect(
+      localDayStart(new Date('2026-11-04T16:30:00Z'), 1).toISOString(),
+    ).toBe('2026-11-04T17:00:00.000Z');
     // 00:30 ngày 5/11 giờ VN đã là ngày 5: ngày mai là 6/11.
-    expect(localDayStart(new Date('2026-11-04T17:30:00Z'), 1).toISOString()).toBe('2026-11-05T17:00:00.000Z');
+    expect(
+      localDayStart(new Date('2026-11-04T17:30:00Z'), 1).toISOString(),
+    ).toBe('2026-11-05T17:00:00.000Z');
   });
 
   it('đạt thì vào hộp đầu; ôn đúng lên một hộp; ôn sai về hộp đầu và cần xác nhận lại', () => {
@@ -118,7 +184,11 @@ describe('lịch ôn Leitner', () => {
     expect(up.box).toBe(1);
     expect(up.dueAt.toISOString()).toBe('2026-11-08T17:00:00.000Z');
 
-    const down = applyReview({ ...up, box: 3 }, false, new Date('2026-11-09T03:00:00Z'));
+    const down = applyReview(
+      { ...up, box: 3 },
+      false,
+      new Date('2026-11-09T03:00:00Z'),
+    );
     expect(down).toMatchObject({ box: 0, needsRecheck: true });
     expect(isDue(down, new Date('2026-11-09T03:00:00Z'))).toBe(true);
   });

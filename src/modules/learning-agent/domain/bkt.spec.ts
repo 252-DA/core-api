@@ -47,17 +47,31 @@ describe('BKT', () => {
     const policy = bktPolicy();
     let p = policy.initial();
     const trace = history.map((o) => (p = policy.update(p, o)));
-    expect(trace.map((v) => Number(v.toFixed(3)))).toEqual([0.553, 0.248, 0.203, 0.556, 0.964]);
+    expect(trace.map((v) => Number(v.toFixed(3)))).toEqual([
+      0.553, 0.248, 0.203, 0.556, 0.964,
+    ]);
     expect(replay(policy, history).firstMasteredAt).toBe(5);
   });
 
   it('số câu đúng liên tiếp để vượt ngưỡng khớp bảng §6.4', () => {
-    const types: QuestionType[] = ['TRUE_FALSE', 'MCQ_SINGLE', 'MCQ_MULTI', 'FILL_BLANK', 'SHORT_ANSWER'];
+    const types: QuestionType[] = [
+      'TRUE_FALSE',
+      'MCQ_SINGLE',
+      'MCQ_MULTI',
+      'FILL_BLANK',
+      'SHORT_ANSWER',
+    ];
     expect(types.map((t) => correctUntil(t, 0.95))).toEqual([6, 3, 2, 2, 2]);
     expect(types.map((t) => correctUntil(t, 0.98))).toEqual([7, 4, 3, 2, 2]);
     // Với n_min = 3: hai câu điền khuyết đúng đã vượt 0.95 nhưng chưa được công nhận.
     expect(
-      types.map((t) => replay(bktPolicy(), Array.from({ length: 10 }, () => obs(t, true))).firstMasteredAt),
+      types.map(
+        (t) =>
+          replay(
+            bktPolicy(),
+            Array.from({ length: 10 }, () => obs(t, true)),
+          ).firstMasteredAt,
+      ),
     ).toEqual([6, 3, 3, 3, 3]);
   });
 
@@ -68,7 +82,11 @@ describe('BKT', () => {
   });
 
   it('cùng lịch sử cho cùng kết quả', () => {
-    const history = [obs('MCQ_SINGLE', true), obs('TRUE_FALSE', false), obs('FILL_BLANK', true)];
+    const history = [
+      obs('MCQ_SINGLE', true),
+      obs('TRUE_FALSE', false),
+      obs('FILL_BLANK', true),
+    ];
     expect(replay(bktPolicy(), history)).toEqual(replay(bktPolicy(), history));
   });
 });
@@ -76,7 +94,9 @@ describe('BKT', () => {
 describe('Chính sách đối chứng', () => {
   it('N-CCR: ba câu đúng liên tiếp, sai thì đếm lại', () => {
     const policy = consecutiveCorrectPolicy(3);
-    const history = [true, true, false, true, true, true].map((c) => obs('TRUE_FALSE', c));
+    const history = [true, true, false, true, true, true].map((c) =>
+      obs('TRUE_FALSE', c),
+    );
     expect(replay(policy, history).firstMasteredAt).toBe(6);
     expect(policy.estimate(replay(policy, history).state)).toBeNull();
   });

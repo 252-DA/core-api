@@ -4,7 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { extname } from 'node:path';
-import { COURSE_ROLES, STAFF_ROLES } from '../../../common/constants/course-roles';
+import {
+  COURSE_ROLES,
+  STAFF_ROLES,
+} from '../../../common/constants/course-roles';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
 import { AuthzService } from '../../../auth/authz.service';
 import { DocumentStorageService } from '../../../infra/storage/document-storage.service';
@@ -38,11 +41,16 @@ export class MicroContentVideoService {
 
     const ext = extname(input.filename || '').toLowerCase();
     if (!['.mp4', '.webm'].includes(ext)) {
-      throw new BadRequestException('Chỉ chấp nhận video định dạng .mp4 hoặc .webm.');
+      throw new BadRequestException(
+        'Chỉ chấp nhận video định dạng .mp4 hoặc .webm.',
+      );
     }
 
     const objectKey = `micro-content/${item.course_id}/${item.micro_content_id}/video${ext}`;
-    const uploadUrl = await this.storage.createPresignedUploadUrl(objectKey, 15 * 60);
+    const uploadUrl = await this.storage.createPresignedUploadUrl(
+      objectKey,
+      15 * 60,
+    );
 
     const asset = await this.prisma.video_assets.create({
       data: {
@@ -54,7 +62,8 @@ export class MicroContentVideoService {
         source_type: 'USER_UPLOAD',
         status: 'UPLOADING',
         transcript_status: 'PENDING',
-        mime_type: input.mimeType || (ext === '.webm' ? 'video/webm' : 'video/mp4'),
+        mime_type:
+          input.mimeType || (ext === '.webm' ? 'video/webm' : 'video/mp4'),
         usage_count: 1,
       },
     });
@@ -66,7 +75,8 @@ export class MicroContentVideoService {
         video_source: 'UPLOAD',
         video_status: 'UPLOADING',
         video_object_key: objectKey,
-        video_mime_type: input.mimeType || (ext === '.webm' ? 'video/webm' : 'video/mp4'),
+        video_mime_type:
+          input.mimeType || (ext === '.webm' ? 'video/webm' : 'video/mp4'),
         video_error: null,
         updated_at: new Date(),
       },
@@ -91,7 +101,9 @@ export class MicroContentVideoService {
     await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
     if (!item.video_object_key) {
-      throw new BadRequestException('Chưa khởi tạo upload session cho video này.');
+      throw new BadRequestException(
+        'Chưa khởi tạo upload session cho video này.',
+      );
     }
 
     const updated = await this.prisma.micro_contents.update({
@@ -99,7 +111,8 @@ export class MicroContentVideoService {
       data: {
         video_status: 'READY',
         video_size_bytes: input.sizeBytes ? BigInt(input.sizeBytes) : undefined,
-        video_duration_ms: input.durationMs && input.durationMs > 0 ? input.durationMs : 60000,
+        video_duration_ms:
+          input.durationMs && input.durationMs > 0 ? input.durationMs : 60000,
         video_error: null,
         updated_at: new Date(),
       },
@@ -111,7 +124,8 @@ export class MicroContentVideoService {
         data: {
           status: 'READY',
           size_bytes: input.sizeBytes ? BigInt(input.sizeBytes) : undefined,
-          duration_ms: input.durationMs && input.durationMs > 0 ? input.durationMs : 60000,
+          duration_ms:
+            input.durationMs && input.durationMs > 0 ? input.durationMs : 60000,
           error_message: null,
           updated_at: new Date(),
         },
@@ -154,7 +168,11 @@ export class MicroContentVideoService {
         COURSE_ROLES.LEARNER,
       ]);
     } else {
-      await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
+      await this.authz.assertCourseAccess(
+        claims,
+        item.course_id,
+        MC_STAFF_ROLES,
+      );
     }
     return item;
   }
@@ -170,7 +188,10 @@ export class MicroContentVideoService {
       throw new BadRequestException('Video chưa sẵn sàng để phát.');
     }
 
-    const url = await this.storage.createPresignedDownloadUrl(item.video_object_key, 5 * 60);
+    const url = await this.storage.createPresignedDownloadUrl(
+      item.video_object_key,
+      5 * 60,
+    );
 
     return {
       url,
@@ -200,4 +221,3 @@ export class MicroContentVideoService {
     };
   }
 }
-

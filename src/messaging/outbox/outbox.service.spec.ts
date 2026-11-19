@@ -220,7 +220,9 @@ describe('OutboxService', () => {
 
       expect(documentProcessingQueue.add).toHaveBeenCalledWith(
         'COURSE_CHUNK_LO_REMAP_REQUESTED',
-        expect.objectContaining({ event_type: 'COURSE_CHUNK_LO_REMAP_REQUESTED' }),
+        expect.objectContaining({
+          event_type: 'COURSE_CHUNK_LO_REMAP_REQUESTED',
+        }),
         expect.objectContaining({ jobId: expect.any(String) }),
       );
       expect(relayQueue.add).not.toHaveBeenCalled();

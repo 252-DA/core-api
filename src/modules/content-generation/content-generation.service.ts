@@ -10,7 +10,14 @@ import { isQuestionType } from '../question/question-types';
 
 const DEFAULT_RECENT_LIMIT = 20;
 const MAX_RECENT_LIMIT = 100;
-const BLOOM_LEVELS = ['remember', 'understand', 'apply', 'analyze', 'evaluate', 'create'];
+const BLOOM_LEVELS = [
+  'remember',
+  'understand',
+  'apply',
+  'analyze',
+  'evaluate',
+  'create',
+];
 const MAX_SOURCE_DOCUMENTS = 30;
 const MAX_QUESTIONS_PER_REQUEST = 20;
 const MAX_BATCH_SCOPES = 60;
@@ -32,7 +39,14 @@ export class ContentGenerationService {
 
     if (
       type !== undefined &&
-      !['card', 'quiz', 'relations', 'micro_outline', 'video_script', 'micro_quiz'].includes(type)
+      ![
+        'card',
+        'quiz',
+        'relations',
+        'micro_outline',
+        'video_script',
+        'micro_quiz',
+      ].includes(type)
     ) {
       throw new BadRequestException(
         'type must be one of: card, quiz, relations, micro_outline, video_script, micro_quiz',
@@ -241,15 +255,23 @@ export class ContentGenerationService {
    * chương) hoặc một danh sách tài liệu. Cả hai đều phải thuộc khóa học và đã
    * có chunk, vì quan hệ được trích từ chunk.
    */
-  private async relationsScope(courseId: string, scope: Record<string, unknown>) {
+  private async relationsScope(
+    courseId: string,
+    scope: Record<string, unknown>,
+  ) {
     let documentIds: string[];
     let chapterId: string | undefined;
     if (scope.chapter_id) {
       const chapter = await this.prisma.chapters.findFirst({
-        where: { chapter_id: String(scope.chapter_id), course_id: courseId, deleted_at: null },
+        where: {
+          chapter_id: String(scope.chapter_id),
+          course_id: courseId,
+          deleted_at: null,
+        },
         select: { chapter_id: true, code: true },
       });
-      if (!chapter) throw new BadRequestException('Chương không thuộc khóa học.');
+      if (!chapter)
+        throw new BadRequestException('Chương không thuộc khóa học.');
       chapterId = chapter.chapter_id;
       const documents = await this.prisma.documents.findMany({
         where: {
@@ -262,12 +284,16 @@ export class ContentGenerationService {
       });
       documentIds = documents.map((d) => d.document_id);
       if (!documentIds.length)
-        throw new BadRequestException('Chương chưa có tài liệu đã xử lý. Hãy đồng bộ tài liệu và gắn đúng chương trước.');
+        throw new BadRequestException(
+          'Chương chưa có tài liệu đã xử lý. Hãy đồng bộ tài liệu và gắn đúng chương trước.',
+        );
     } else {
       const raw = scope.source_document_ids;
       const ids = Array.isArray(raw) ? [...new Set(raw)] : [];
       if (!ids.length || !ids.every(isUuid))
-        throw new BadRequestException('Chọn một chương hoặc ít nhất một tài liệu.');
+        throw new BadRequestException(
+          'Chọn một chương hoặc ít nhất một tài liệu.',
+        );
       const documents = await this.prisma.documents.findMany({
         where: {
           document_id: { in: ids },
@@ -278,11 +304,15 @@ export class ContentGenerationService {
         select: { document_id: true },
       });
       if (documents.length !== ids.length)
-        throw new BadRequestException('Có tài liệu chưa xử lý xong hoặc không thuộc khóa học.');
+        throw new BadRequestException(
+          'Có tài liệu chưa xử lý xong hoặc không thuộc khóa học.',
+        );
       documentIds = ids as string[];
     }
     if (documentIds.length > MAX_SOURCE_DOCUMENTS)
-      throw new BadRequestException(`Tối đa ${MAX_SOURCE_DOCUMENTS} tài liệu mỗi lần dựng.`);
+      throw new BadRequestException(
+        `Tối đa ${MAX_SOURCE_DOCUMENTS} tài liệu mỗi lần dựng.`,
+      );
     return {
       ...(chapterId ? { chapter_id: chapterId } : {}),
       source_document_ids: documentIds,
@@ -300,18 +330,32 @@ export class ContentGenerationService {
     scope: Record<string, unknown>,
   ) {
     if (type !== 'quiz' || scope.target_kind !== 'lo')
-      throw new BadRequestException('Chọn tài liệu nguồn chỉ áp dụng khi sinh quiz theo LO.');
+      throw new BadRequestException(
+        'Chọn tài liệu nguồn chỉ áp dụng khi sinh quiz theo LO.',
+      );
     const raw = scope.source_document_ids;
     const ids = Array.isArray(raw) ? [...new Set(raw)] : [];
     if (!ids.length || ids.length > MAX_SOURCE_DOCUMENTS || !ids.every(isUuid))
-      throw new BadRequestException(`Chọn 1–${MAX_SOURCE_DOCUMENTS} tài liệu nguồn.`);
+      throw new BadRequestException(
+        `Chọn 1–${MAX_SOURCE_DOCUMENTS} tài liệu nguồn.`,
+      );
     const count = Number(scope.count);
-    if (!Number.isInteger(count) || count < 1 || count > MAX_QUESTIONS_PER_REQUEST)
-      throw new BadRequestException(`Mỗi ô của ma trận đề có 1–${MAX_QUESTIONS_PER_REQUEST} câu.`);
+    if (
+      !Number.isInteger(count) ||
+      count < 1 ||
+      count > MAX_QUESTIONS_PER_REQUEST
+    )
+      throw new BadRequestException(
+        `Mỗi ô của ma trận đề có 1–${MAX_QUESTIONS_PER_REQUEST} câu.`,
+      );
     if (!BLOOM_LEVELS.includes(String(scope.bloom_level)))
       throw new BadRequestException('Mức Bloom không hợp lệ.');
     const lo = await this.prisma.learning_outcomes.findFirst({
-      where: { lo_id: String(scope.target_code), course_id: courseId, deleted_at: null },
+      where: {
+        lo_id: String(scope.target_code),
+        course_id: courseId,
+        deleted_at: null,
+      },
       select: { lo_id: true },
     });
     if (!lo) throw new BadRequestException('LO không thuộc khóa học.');
@@ -325,7 +369,9 @@ export class ContentGenerationService {
       select: { document_id: true, role: true },
     });
     if (documents.length !== ids.length)
-      throw new BadRequestException('Có tài liệu chưa xử lý xong hoặc không thuộc khóa học.');
+      throw new BadRequestException(
+        'Có tài liệu chưa xử lý xong hoặc không thuộc khóa học.',
+      );
     if (!documents.some((d) => d.role === 'lecture'))
       throw new BadRequestException(
         'Cần ít nhất một slide bài giảng; tài liệu tham khảo chỉ làm ngữ cảnh bổ sung.',

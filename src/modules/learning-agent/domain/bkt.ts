@@ -41,14 +41,18 @@ export interface MasteryCriterion {
   minObservations: number;
 }
 
-export const MASTERY_DEFAULTS: MasteryCriterion = { threshold: 0.95, minObservations: 3 };
+export const MASTERY_DEFAULTS: MasteryCriterion = {
+  threshold: 0.95,
+  minObservations: 3,
+};
 
 export function guessFor(
   type: QuestionType,
   optionCount: number | null,
   params: BktParams = BKT_DEFAULTS,
 ): number {
-  if (type === 'MCQ_SINGLE') return 1 / (optionCount && optionCount >= 2 ? optionCount : 4);
+  if (type === 'MCQ_SINGLE')
+    return 1 / (optionCount && optionCount >= 2 ? optionCount : 4);
   return params.guess[type];
 }
 

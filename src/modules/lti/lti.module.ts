@@ -8,7 +8,13 @@ import { RosterModule } from '../roster/roster.module';
 import { CanvasModule } from '../../integrations/canvas/canvas.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, CanvasSyncModule, RosterModule, CanvasModule],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    CanvasSyncModule,
+    RosterModule,
+    CanvasModule,
+  ],
   controllers: [LtiController],
   providers: [LtiService],
   exports: [LtiService],

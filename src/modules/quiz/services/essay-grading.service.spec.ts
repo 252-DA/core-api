@@ -42,7 +42,9 @@ function setup(attempt: Record<string, unknown> = {}) {
     },
     review_audit_logs: { create: jest.fn() },
     outbox_events: { create: jest.fn() },
-    $queryRaw: jest.fn().mockResolvedValue([{ attempt_id: MCQ }, { attempt_id: ESSAY }]),
+    $queryRaw: jest
+      .fn()
+      .mockResolvedValue([{ attempt_id: MCQ }, { attempt_id: ESSAY }]),
     $transaction: jest.fn(),
   };
   prisma.$transaction.mockImplementation((fn: (tx: typeof prisma) => unknown) =>
@@ -61,18 +63,32 @@ describe('EssayGradingService', () => {
       score: 75,
       feedback: ' Thiếu ý 2. ',
     });
-    expect(authz.assertCourseAccess).toHaveBeenCalledWith(claims, COURSE, ['instructor', 'ta']);
+    expect(authz.assertCourseAccess).toHaveBeenCalledWith(claims, COURSE, [
+      'instructor',
+      'ta',
+    ]);
     // Khoá nhóm trước khi kiểm tra: worker cũng khoá các dòng này khi mở AGS.
     expect(prisma.$queryRaw).toHaveBeenCalled();
     expect(prisma.quiz_attempts.updateMany.mock.calls[0][0]).toEqual({
-      where: { attempt_id: ESSAY, grading_status: 'NEEDS_REVIEW', deleted_at: null },
-      data: { score: 75, is_correct: false, feedback: 'Thiếu ý 2.', grading_status: 'GRADED' },
+      where: {
+        attempt_id: ESSAY,
+        grading_status: 'NEEDS_REVIEW',
+        deleted_at: null,
+      },
+      data: {
+        score: 75,
+        is_correct: false,
+        feedback: 'Thiếu ý 2.',
+        grading_status: 'GRADED',
+      },
     });
-    expect(prisma.review_audit_logs.create.mock.calls[0][0].data).toMatchObject({
-      action: 'GRADE_ANSWER',
-      entity_id: ESSAY,
-      performed_by: TEACHER,
-    });
+    expect(prisma.review_audit_logs.create.mock.calls[0][0].data).toMatchObject(
+      {
+        action: 'GRADE_ANSWER',
+        entity_id: ESSAY,
+        performed_by: TEACHER,
+      },
+    );
     expect(prisma.quiz_attempts.updateMany.mock.calls[1][0]).toEqual({
       where: { attempt_id: { in: [MCQ, ESSAY] }, ags_status: 'AWAITING_GRADE' },
       data: { ags_status: 'PENDING' },
@@ -83,7 +99,10 @@ describe('EssayGradingService', () => {
   it('còn câu khác chưa chấm thì giữ cả lượt khỏi AGS', async () => {
     const { service, prisma } = setup();
     prisma.quiz_attempts.count.mockResolvedValue(1);
-    const result = await service.grade(claims, { attemptId: ESSAY, score: 100 });
+    const result = await service.grade(claims, {
+      attemptId: ESSAY,
+      score: 100,
+    });
     expect(prisma.quiz_attempts.updateMany).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ released: 0 });
   });
@@ -91,23 +110,32 @@ describe('EssayGradingService', () => {
   it('không chấm đè câu đã có điểm hoặc đang được AI chấm lại', async () => {
     const { service, prisma } = setup();
     prisma.quiz_attempts.updateMany.mockResolvedValue({ count: 0 });
-    await expect(service.grade(claims, { attemptId: ESSAY, score: 50 })).rejects.toThrow(
-      'đã được chấm',
-    );
+    await expect(
+      service.grade(claims, { attemptId: ESSAY, score: 50 }),
+    ).rejects.toThrow('đã được chấm');
     expect(prisma.review_audit_logs.create).not.toHaveBeenCalled();
   });
 
-  it.each([[-1], [101], [12.5], ['abc'], [null], [''], [undefined]])('từ chối điểm %p', async (score) => {
-    const { service, prisma } = setup();
-    await expect(service.grade(claims, { attemptId: ESSAY, score })).rejects.toThrow('0 đến 100');
-    expect(prisma.quiz_attempts.findFirst).not.toHaveBeenCalled();
-  });
+  it.each([[-1], [101], [12.5], ['abc'], [null], [''], [undefined]])(
+    'từ chối điểm %p',
+    async (score) => {
+      const { service, prisma } = setup();
+      await expect(
+        service.grade(claims, { attemptId: ESSAY, score }),
+      ).rejects.toThrow('0 đến 100');
+      expect(prisma.quiz_attempts.findFirst).not.toHaveBeenCalled();
+    },
+  );
 
   it('cho AI chấm lại: câu về PENDING và worker nhận việc kèm cả lượt nộp', async () => {
     const { service, prisma } = setup();
     await service.retry(claims, { attemptId: ESSAY });
     expect(prisma.quiz_attempts.updateMany.mock.calls[0][0]).toEqual({
-      where: { attempt_id: ESSAY, grading_status: 'NEEDS_REVIEW', deleted_at: null },
+      where: {
+        attempt_id: ESSAY,
+        grading_status: 'NEEDS_REVIEW',
+        deleted_at: null,
+      },
       data: { grading_status: 'PENDING' },
     });
     expect(prisma.outbox_events.create.mock.calls[0][0].data).toMatchObject({
@@ -118,14 +146,18 @@ describe('EssayGradingService', () => {
         attempt_ids: [MCQ, ESSAY],
         essay_attempt_ids: [ESSAY],
         // Lệnh mới tự chứa: worker chấm theo đề lúc nộp đi kèm, không đọc bảng.
-        answers: [{ attempt_id: ESSAY, grading_input: INPUT, chosen_answer: 'Bài làm' }],
+        answers: [
+          { attempt_id: ESSAY, grading_input: INPUT, chosen_answer: 'Bài làm' },
+        ],
       },
     });
   });
 
   it('bài không lưu đề lúc nộp thì chỉ chấm tay được', async () => {
     const { service, prisma } = setup({ grading_input: null });
-    await expect(service.retry(claims, { attemptId: ESSAY })).rejects.toThrow('chấm tay');
+    await expect(service.retry(claims, { attemptId: ESSAY })).rejects.toThrow(
+      'chấm tay',
+    );
     expect(prisma.outbox_events.create).not.toHaveBeenCalled();
   });
 });

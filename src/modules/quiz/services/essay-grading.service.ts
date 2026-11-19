@@ -56,7 +56,8 @@ export class EssayGradingService {
     const targets = (kind: string) => [
       ...new Set(
         rows.flatMap((r) =>
-          r.lti_resource_links?.target_kind === kind && r.lti_resource_links.target_id
+          r.lti_resource_links?.target_kind === kind &&
+          r.lti_resource_links.target_id
             ? [r.lti_resource_links.target_id]
             : [],
         ),
@@ -101,7 +102,9 @@ export class EssayGradingService {
     if (!Number.isInteger(score) || score < 0 || score > 100)
       throw new BadRequestException('Điểm phải là số nguyên từ 0 đến 100.');
     const feedback =
-      typeof body.feedback === 'string' ? body.feedback.trim().slice(0, MAX_FEEDBACK) : '';
+      typeof body.feedback === 'string'
+        ? body.feedback.trim().slice(0, MAX_FEEDBACK)
+        : '';
     const attempt = await this.findAttempt(claims, body.attemptId);
     return this.prisma.$transaction(async (tx) => {
       const group = await lockAwaitingGroup(tx, attempt);
@@ -119,7 +122,9 @@ export class EssayGradingService {
         },
       });
       if (count !== 1)
-        throw new ConflictException('Câu này đã được chấm hoặc đang được AI chấm lại.');
+        throw new ConflictException(
+          'Câu này đã được chấm hoặc đang được AI chấm lại.',
+        );
       await tx.review_audit_logs.create({
         data: {
           action: 'GRADE_ANSWER',
@@ -127,7 +132,10 @@ export class EssayGradingService {
           entity_id: attempt.attempt_id,
           performed_by: claims.sub,
           raw_changes: {
-            before: { grading_status: attempt.grading_status, feedback: attempt.feedback },
+            before: {
+              grading_status: attempt.grading_status,
+              feedback: attempt.feedback,
+            },
             after: {
               grading_status: GRADING_STATUS.graded,
               score,
@@ -159,7 +167,9 @@ export class EssayGradingService {
         data: { grading_status: GRADING_STATUS.pending },
       });
       if (count !== 1)
-        throw new ConflictException('Câu này đã được chấm hoặc đang được AI chấm lại.');
+        throw new ConflictException(
+          'Câu này đã được chấm hoặc đang được AI chấm lại.',
+        );
       await tx.outbox_events.create({
         data: answerGradingEvent({
           // Lesson quiz không có submission_id: id này chỉ gom việc cho worker.
@@ -167,7 +177,9 @@ export class EssayGradingService {
           courseId: attempt.course_id,
           // QuizGradingResultHandler tự gom lại nhóm khi áp dụng kết quả;
           // attempt_ids chỉ còn cho worker bản cũ.
-          attemptIds: group.includes(attempt.attempt_id) ? group : [attempt.attempt_id],
+          attemptIds: group.includes(attempt.attempt_id)
+            ? group
+            : [attempt.attempt_id],
           // Lệnh mới tự chứa: worker chấm theo đề lúc nộp đi kèm, không đọc lại bảng.
           answers: [
             {
@@ -190,7 +202,10 @@ export class EssayGradingService {
           },
         },
       });
-      return { attemptId: attempt.attempt_id, gradingStatus: GRADING_STATUS.pending };
+      return {
+        attemptId: attempt.attempt_id,
+        gradingStatus: GRADING_STATUS.pending,
+      };
     });
   }
 

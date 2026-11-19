@@ -16,7 +16,9 @@ function placementFields(doc: documents) {
   };
 }
 
-export function toDocumentView(doc: documents & { _count: { chunks: number } }) {
+export function toDocumentView(
+  doc: documents & { _count: { chunks: number } },
+) {
   return {
     document_id: doc.document_id,
     title: doc.title,

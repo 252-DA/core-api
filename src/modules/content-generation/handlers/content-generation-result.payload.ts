@@ -149,7 +149,8 @@ function checkAllowedAndRequiredKeys(
 ) {
   const allowed = new Set([...required, ...optional]);
   const extra = Object.keys(value).filter((key) => !allowed.has(key));
-  if (extra.length) problems.push(`${path}: unexpected fields ${extra.join(', ')}`);
+  if (extra.length)
+    problems.push(`${path}: unexpected fields ${extra.join(', ')}`);
   const missing = required.filter((key) => !(key in value));
   if (missing.length) problems.push(`${path}: missing ${missing.join(', ')}`);
 }
@@ -158,8 +159,14 @@ function parseMicroOutlineSections(
   raw: unknown,
   problems: string[],
 ): MicroOutlineSection[] {
-  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_OUTLINE_SECTIONS) {
-    problems.push(`sections must be an array of 1–${MAX_OUTLINE_SECTIONS} items`);
+  if (
+    !Array.isArray(raw) ||
+    raw.length === 0 ||
+    raw.length > MAX_OUTLINE_SECTIONS
+  ) {
+    problems.push(
+      `sections must be an array of 1–${MAX_OUTLINE_SECTIONS} items`,
+    );
     return [];
   }
   return raw.flatMap((entry, idx) => {
@@ -170,13 +177,32 @@ function parseMicroOutlineSections(
     }
     checkAllowedAndRequiredKeys(
       entry,
-      ['title', 'summary', 'page_from', 'page_to', 'suggested_lo_id', 'low_text'],
+      [
+        'title',
+        'summary',
+        'page_from',
+        'page_to',
+        'suggested_lo_id',
+        'low_text',
+      ],
       ['lo_rationale'],
       at,
       problems,
     );
-    const { title, summary, page_from, page_to, suggested_lo_id, low_text, lo_rationale } = entry;
-    if (typeof title !== 'string' || !title.trim() || !isWithinCodePoints(title, 255)) {
+    const {
+      title,
+      summary,
+      page_from,
+      page_to,
+      suggested_lo_id,
+      low_text,
+      lo_rationale,
+    } = entry;
+    if (
+      typeof title !== 'string' ||
+      !title.trim() ||
+      !isWithinCodePoints(title, 255)
+    ) {
       problems.push(`${at}.title must be non-empty text of <= 255 chars`);
     }
     if (typeof summary !== 'string') {
@@ -188,7 +214,8 @@ function parseMicroOutlineSections(
     if (
       !Number.isInteger(page_to) ||
       (page_to as number) < 1 ||
-      (Number.isInteger(page_from) && (page_to as number) < (page_from as number))
+      (Number.isInteger(page_from) &&
+        (page_to as number) < (page_from as number))
     ) {
       problems.push(`${at}.page_to must be an integer >= page_from`);
     }
@@ -218,8 +245,14 @@ function parseVideoScriptPayload(
     return null;
   }
   const scenesRaw = raw.scenes;
-  if (!Array.isArray(scenesRaw) || scenesRaw.length === 0 || scenesRaw.length > MAX_SCRIPT_SCENES) {
-    problems.push(`script.scenes must be an array of 1–${MAX_SCRIPT_SCENES} items`);
+  if (
+    !Array.isArray(scenesRaw) ||
+    scenesRaw.length === 0 ||
+    scenesRaw.length > MAX_SCRIPT_SCENES
+  ) {
+    problems.push(
+      `script.scenes must be an array of 1–${MAX_SCRIPT_SCENES} items`,
+    );
     return null;
   }
   scenesRaw.forEach((sc, idx) => {
@@ -228,7 +261,11 @@ function parseVideoScriptPayload(
       problems.push(`${at} must be an object`);
       return;
     }
-    if (typeof sc.title !== 'string' || !sc.title.trim() || !isWithinCodePoints(sc.title, 255)) {
+    if (
+      typeof sc.title !== 'string' ||
+      !sc.title.trim() ||
+      !isWithinCodePoints(sc.title, 255)
+    ) {
       problems.push(`${at}.title must be non-empty text of <= 255 chars`);
     }
     if (
@@ -251,7 +288,9 @@ function parseVideoScriptPayload(
     if (sc.check !== undefined) {
       if (!isPlainObject(sc.check)) {
         problems.push(`${at}.check must be an object`);
-      } else if (!(VERIFICATION_STATUSES as readonly unknown[]).includes(sc.check.status)) {
+      } else if (
+        !(VERIFICATION_STATUSES as readonly unknown[]).includes(sc.check.status)
+      ) {
         problems.push(
           `${at}.check.status must be one of ${VERIFICATION_STATUSES.join(', ')}`,
         );
@@ -326,7 +365,9 @@ export function parseContentGenerationResult(
       );
       if (!isUuid(course_id)) problems.push('course_id must be a uuid');
       if (!isContentType(content_type))
-        problems.push(`content_type must be one of ${CONTENT_TYPES.join(', ')}`);
+        problems.push(
+          `content_type must be one of ${CONTENT_TYPES.join(', ')}`,
+        );
       result = {
         status,
         request_id,
@@ -344,7 +385,9 @@ export function parseContentGenerationResult(
       if (course_id !== null && !isUuid(course_id))
         problems.push('course_id must be a uuid or null');
       if (content_type !== null && !isContentType(content_type))
-        problems.push(`content_type must be one of ${CONTENT_TYPES.join(', ')} or null`);
+        problems.push(
+          `content_type must be one of ${CONTENT_TYPES.join(', ')} or null`,
+        );
       const error = payload.error;
       if (
         typeof error !== 'string' ||
@@ -403,9 +446,13 @@ export function parseContentGenerationResult(
           'payload',
           problems,
         );
-        if (!isUuid(payload.document_id)) problems.push('document_id must be a uuid');
+        if (!isUuid(payload.document_id))
+          problems.push('document_id must be a uuid');
         const sections = parseMicroOutlineSections(payload.sections, problems);
-        if (Array.isArray(payload.sections) && count !== payload.sections.length) {
+        if (
+          Array.isArray(payload.sections) &&
+          count !== payload.sections.length
+        ) {
           problems.push('generated_count must equal sections.length');
         }
         result = {
@@ -507,7 +554,9 @@ export function parseContentGenerationResult(
         break;
       }
       if (content_type !== 'quiz' && content_type !== 'card') {
-        problems.push(`content_type must be one of ${CONTENT_TYPES.join(', ')}`);
+        problems.push(
+          `content_type must be one of ${CONTENT_TYPES.join(', ')}`,
+        );
         break;
       }
       const itemsKey = content_type === 'quiz' ? 'quiz_items' : 'lesson_cards';

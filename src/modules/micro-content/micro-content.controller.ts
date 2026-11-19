@@ -125,7 +125,10 @@ export class MicroContentController {
     @Param('id') microContentId: string,
     @Body() body: CreateMicroContentUploadDto,
   ) {
-    return this.microContentVideo.createUpload(claims, { microContentId, ...body });
+    return this.microContentVideo.createUpload(claims, {
+      microContentId,
+      ...body,
+    });
   }
 
   @Post(':id/upload/confirm')
@@ -134,7 +137,10 @@ export class MicroContentController {
     @Param('id') microContentId: string,
     @Body() body: ConfirmMicroContentUploadDto = {},
   ) {
-    return this.microContentVideo.confirmUpload(claims, { microContentId, ...body });
+    return this.microContentVideo.confirmUpload(claims, {
+      microContentId,
+      ...body,
+    });
   }
 
   @Get(':id/video-url')

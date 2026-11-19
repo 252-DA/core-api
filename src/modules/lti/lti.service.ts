@@ -82,12 +82,15 @@ export class LtiService {
     const lmsContextId = dto.lmsContextId.trim();
     const lmsCourseKey = `${dto.lmsType}:${lmsContextId}`;
     const displayName = dto.displayName?.trim() || dto.lmsSub;
-    const contextTitle = dto.contextTitle?.trim() || `LMS Course ${lmsContextId}`;
+    const contextTitle =
+      dto.contextTitle?.trim() || `LMS Course ${lmsContextId}`;
     const customClaims = (dto.customClaims || {}) as Prisma.InputJsonValue;
     // Chỉ Canvas mới có biến $Canvas.assignment.*; launch không đi từ Assignment
     // cho null và không đụng tới cài đặt đã lưu.
     const assignment =
-      dto.lmsType === 'canvas' ? assignmentSettingsFromClaims(dto.customClaims) : null;
+      dto.lmsType === 'canvas'
+        ? assignmentSettingsFromClaims(dto.customClaims)
+        : null;
     const launchedAt = new Date();
 
     const { seed, ...result } = await this.prisma.$transaction(async (tx) => {
@@ -178,7 +181,11 @@ export class LtiService {
         const target = nullableUuid(dto.targetId);
         const quizSet = target
           ? await tx.quiz_sets.findFirst({
-              where: { quiz_set_id: target, course_id: course.course_id, deleted_at: null },
+              where: {
+                quiz_set_id: target,
+                course_id: course.course_id,
+                deleted_at: null,
+              },
               select: {
                 quiz_set_id: true,
                 mode: true,
@@ -188,21 +195,28 @@ export class LtiService {
             })
           : null;
         if (!quizSet) {
-          throw new BadRequestException('Quiz không thuộc khóa học Canvas hiện tại.');
+          throw new BadRequestException(
+            'Quiz không thuộc khóa học Canvas hiện tại.',
+          );
         }
         // Web dùng để cho phiên thi sống đủ lâu (thời gian làm + 10 phút).
         if (quizSet.mode === 'exam' && quizSet.time_limit_minutes) {
           examTimeLimitMinutes = quizSet.time_limit_minutes;
         }
         // Chỉ bài kiểm tra mới có giới hạn lần làm; luyện tập bỏ qua cài đặt này.
-        if (quizSet.mode === 'exam') examMaxAttempts = quizSet.max_attempts ?? null;
+        if (quizSet.mode === 'exam')
+          examMaxAttempts = quizSet.max_attempts ?? null;
       }
       if (dto.resourceLinkId && dto.targetKind) {
         // Deep Linking không mang số lần làm nên Canvas tạo Assignment không giới
         // hạn. Lần đọc đầu của một bài kiểm tra có giới hạn mà Canvas báo không
         // giới hạn thì chưa chốt Canvas làm chủ: chờ đẩy giới hạn của DA sang.
         let seedPending = false;
-        if (assignment && examMaxAttempts !== null && assignment.allowedAttempts === null) {
+        if (
+          assignment &&
+          examMaxAttempts !== null &&
+          assignment.allowedAttempts === null
+        ) {
           const previous = await tx.lti_resource_links.findUnique({
             where: {
               course_ref_id_lms_resource_link_id: {
@@ -214,7 +228,10 @@ export class LtiService {
           });
           seedPending = !previous?.assignment_synced_at;
         }
-        const linkColumns = assignmentColumns(assignment, seedPending ? null : launchedAt);
+        const linkColumns = assignmentColumns(
+          assignment,
+          seedPending ? null : launchedAt,
+        );
         const resourceLink = await tx.lti_resource_links.upsert({
           where: {
             course_ref_id_lms_resource_link_id: {
@@ -276,7 +293,9 @@ export class LtiService {
         internalCourseId: course.course_id,
         courseRole: dto.courseRole,
         lmsCourseRefId: courseRef.course_ref_id,
-        ...(internalResourceLinkId && { resourceLinkId: internalResourceLinkId }),
+        ...(internalResourceLinkId && {
+          resourceLinkId: internalResourceLinkId,
+        }),
         ...(examTimeLimitMinutes && { examTimeLimitMinutes }),
         // Chỉ để LtiService dùng sau giao dịch; không trả về cho web.
         seed: attemptsSeed,
@@ -297,7 +316,11 @@ export class LtiService {
     }
     // Only enqueue after the course/reference transaction has committed. Do not
     // await Redis here: an unavailable queue must never delay the LTI launch.
-    void this.canvasSyncJobs.triggerLaunch(result.internalCourseId, dto.lmsType, dto.courseRole);
+    void this.canvasSyncJobs.triggerLaunch(
+      result.internalCourseId,
+      dto.lmsType,
+      dto.courseRole,
+    );
     void this.canvasSyncJobs.triggerRosterLaunch(
       result.internalCourseId,
       dto.lmsType,
@@ -337,7 +360,10 @@ export class LtiService {
     }
     try {
       await this.prisma.lti_resource_links.updateMany({
-        where: { resource_link_id: seed.resourceLinkId, assignment_synced_at: null },
+        where: {
+          resource_link_id: seed.resourceLinkId,
+          assignment_synced_at: null,
+        },
         data: {
           assignment_allowed_attempts: seed.attempts,
           assignment_synced_at: new Date(),

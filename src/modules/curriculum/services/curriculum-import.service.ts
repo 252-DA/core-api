@@ -17,14 +17,14 @@ import { PrismaService } from '../../../infra/prisma/prisma.service';
 import type { BffClaims } from '../../../auth/bff-claims';
 import { AuthzService } from '../../../auth/authz.service';
 import { DocumentStorageService } from '../../../infra/storage/document-storage.service';
-import { CanvasApiClient, type CanvasFile } from '../../../integrations/canvas/canvas-api.client';
+import {
+  CanvasApiClient,
+  type CanvasFile,
+} from '../../../integrations/canvas/canvas-api.client';
 import { CanvasCourseService } from '../../../integrations/canvas/canvas-course.service';
 import { COURSE_CHUNK_LO_REMAP_REQUESTED } from '../../../messaging/event-types';
 import { DOCUMENT_PROCESSING_QUEUE } from '../../../messaging/queues';
-import {
-  fileIdsInSyllabus,
-  pickSyllabusFile,
-} from '../domain/syllabus-file';
+import { fileIdsInSyllabus, pickSyllabusFile } from '../domain/syllabus-file';
 import {
   curriculumProblems,
   hasBlockingIssues,
@@ -197,10 +197,7 @@ export class CurriculumImportService {
   private async abandonIfStale(previous: ImportSummary): Promise<boolean> {
     if (!AWAITING_PREVIEW_STATUSES.includes(previous.status)) return false;
     const idleSince = new Date(previous.updated_at).getTime();
-    if (
-      Number.isNaN(idleSince) ||
-      Date.now() - idleSince < STALE_AWAITING_MS
-    ) {
+    if (Number.isNaN(idleSince) || Date.now() - idleSince < STALE_AWAITING_MS) {
       return false;
     }
     const { count } = await this.prisma.curriculum_imports.updateMany({

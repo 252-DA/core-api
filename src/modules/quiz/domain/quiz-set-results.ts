@@ -83,7 +83,8 @@ export function groupSubmissions(
     if (row.resource_link_id) entry.links.add(row.resource_link_id);
     // Tự luận chưa chấm xong (AI đang chấm, hoặc chờ giảng viên) chưa có
     // điểm thật: không đưa vào thống kê câu.
-    if (row.grading_status === GRADING_STATUS.needsReview) entry.needsReview = true;
+    if (row.grading_status === GRADING_STATUS.needsReview)
+      entry.needsReview = true;
     else if (row.grading_status !== GRADING_STATUS.pending) {
       entry.correctByQuiz.set(row.quiz_id, Boolean(row.is_correct));
       entry.scoreByQuiz.set(row.quiz_id, Number(row.score));
@@ -150,9 +151,7 @@ export function staffResults(input: {
   }
   const inClass = new Set(input.classLearnerIds);
   // Cả lớp trước, rồi người đã làm bài nhưng không còn trong lớp.
-  const userIds = [
-    ...new Set([...input.classLearnerIds, ...byStudent.keys()]),
-  ];
+  const userIds = [...new Set([...input.classLearnerIds, ...byStudent.keys()])];
   const students = userIds
     .map((userId) => {
       const subs = byStudent.get(userId);
@@ -212,10 +211,17 @@ export function staffResults(input: {
     };
   });
 
-  const loStats = new Map<string, { answered: number; correct: number; questions: number }>();
+  const loStats = new Map<
+    string,
+    { answered: number; correct: number; questions: number }
+  >();
   for (const item of input.items) {
     if (!item.lo_id) continue;
-    const stat = loStats.get(item.lo_id) ?? { answered: 0, correct: 0, questions: 0 };
+    const stat = loStats.get(item.lo_id) ?? {
+      answered: 0,
+      correct: 0,
+      questions: 0,
+    };
     const row = items.find((i) => i.quiz_id === item.quiz_id)!;
     stat.answered += row.answered;
     stat.correct += row.correct;
@@ -228,7 +234,9 @@ export function staffResults(input: {
       code: input.los.get(loId)?.code ?? 'LO',
       statement: input.los.get(loId)?.statement ?? '',
       questions: stat.questions,
-      correctRate: stat.answered ? Math.round((100 * stat.correct) / stat.answered) : null,
+      correctRate: stat.answered
+        ? Math.round((100 * stat.correct) / stat.answered)
+        : null,
     }))
     .sort((a, b) => a.code.localeCompare(b.code, 'vi', { numeric: true }));
 
@@ -246,13 +254,18 @@ export function staffResults(input: {
       attemptedInClass: attempted.filter((s) => s.inClass).length,
       submissions: input.submissions.length,
       averageBest: attempted.length
-        ? Math.round(attempted.reduce((sum, s) => sum + s.bestScore, 0) / attempted.length)
+        ? Math.round(
+            attempted.reduce((sum, s) => sum + s.bestScore, 0) /
+              attempted.length,
+          )
         : null,
-      waitingForPublish: attempted.filter((s) => s.sync === 'WAITING_PUBLISH').length,
+      waitingForPublish: attempted.filter((s) => s.sync === 'WAITING_PUBLISH')
+        .length,
       failed: attempted.filter((s) => s.sync === 'FAILED').length,
       // Theo lượt nộp, không theo sinh viên: lượt cũ chờ chấm tay vẫn giữ điểm
       // khỏi sổ điểm dù lượt mới nhất đã xong.
-      needsReview: input.submissions.filter((s) => s.sync === 'NEEDS_REVIEW').length,
+      needsReview: input.submissions.filter((s) => s.sync === 'NEEDS_REVIEW')
+        .length,
     },
   };
 }

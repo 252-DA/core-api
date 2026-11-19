@@ -74,17 +74,28 @@ describe('toInternalCanvasUrl', () => {
 
   it('rewrites the origin of links under LTI_PLATFORM_URL or CANVAS_PUBLIC_URL, keeping path and query', () => {
     expect(
-      toInternalCanvasUrl('https://canvas.example.dev/api/v1/courses/1/files?page=2&per_page=100', env),
-    ).toBe('http://canvas.docker:3000/api/v1/courses/1/files?page=2&per_page=100');
-    expect(toInternalCanvasUrl('https://canvas-public.example.dev/files/3/download?download_frd=1', env)).toBe(
-      'http://canvas.docker:3000/files/3/download?download_frd=1',
+      toInternalCanvasUrl(
+        'https://canvas.example.dev/api/v1/courses/1/files?page=2&per_page=100',
+        env,
+      ),
+    ).toBe(
+      'http://canvas.docker:3000/api/v1/courses/1/files?page=2&per_page=100',
     );
+    expect(
+      toInternalCanvasUrl(
+        'https://canvas-public.example.dev/files/3/download?download_frd=1',
+        env,
+      ),
+    ).toBe('http://canvas.docker:3000/files/3/download?download_frd=1');
   });
 
   it('matches the public host regardless of scheme, since Canvas redirects with http', () => {
-    expect(toInternalCanvasUrl('http://canvas.example.dev/files/3/download?sf_verifier=abc', env)).toBe(
-      'http://canvas.docker:3000/files/3/download?sf_verifier=abc',
-    );
+    expect(
+      toInternalCanvasUrl(
+        'http://canvas.example.dev/files/3/download?sf_verifier=abc',
+        env,
+      ),
+    ).toBe('http://canvas.docker:3000/files/3/download?sf_verifier=abc');
   });
 
   it('leaves internal links, foreign hosts and invalid URLs untouched', () => {
@@ -135,7 +146,9 @@ describe('CanvasApiClient with an internal CANVAS_API_URL', () => {
       .mockResolvedValueOnce(new Response('[{"id":12}]'));
     const files = await new CanvasApiClient().listCourseFiles('context-1');
     expect(files.map((f) => f.id)).toEqual([11, 12]);
-    expect(fetchMock.mock.calls[0][0]).toMatch(/^http:\/\/canvas\.docker:3000\/api\/v1\/courses\//);
+    expect(fetchMock.mock.calls[0][0]).toMatch(
+      /^http:\/\/canvas\.docker:3000\/api\/v1\/courses\//,
+    );
     expect(fetchMock.mock.calls[1][0]).toBe(
       'http://canvas.docker:3000/api/v1/courses/1/files?page=2&per_page=100',
     );
@@ -169,8 +182,12 @@ describe('CanvasApiClient errors and token check', () => {
   });
 
   it('throws CanvasApiError carrying the HTTP status', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('Expired access token', { status: 401 }));
-    await expect(new CanvasApiClient().listModules('context-1')).rejects.toMatchObject({
+    fetchMock.mockResolvedValueOnce(
+      new Response('Expired access token', { status: 401 }),
+    );
+    await expect(
+      new CanvasApiClient().listModules('context-1'),
+    ).rejects.toMatchObject({
       canvasStatus: 401,
       message: expect.stringContaining('HTTP 401'),
     });
@@ -180,12 +197,16 @@ describe('CanvasApiClient errors and token check', () => {
     fetchMock.mockResolvedValueOnce(new Response('{"id":12}'));
     const result = await new CanvasApiClient().checkToken();
     expect(result).toMatchObject({ ok: true, http_status: 200 });
-    expect(fetchMock.mock.calls[0][0]).toBe('https://canvas.example/api/v1/users/self');
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://canvas.example/api/v1/users/self',
+    );
     expect(Number.isNaN(Date.parse(result.checked_at))).toBe(false);
   });
 
   it('reports a rejected token without throwing', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('Expired access token', { status: 401 }));
+    fetchMock.mockResolvedValueOnce(
+      new Response('Expired access token', { status: 401 }),
+    );
     await expect(new CanvasApiClient().checkToken()).resolves.toMatchObject({
       ok: false,
       http_status: 401,
@@ -200,7 +221,9 @@ describe('CanvasApiClient errors and token check', () => {
       http_status: null,
       message: 'Không kết nối được Canvas',
     });
-    fetchMock.mockResolvedValueOnce(new Response('bad gateway', { status: 502 }));
+    fetchMock.mockResolvedValueOnce(
+      new Response('bad gateway', { status: 502 }),
+    );
     await expect(new CanvasApiClient().checkToken()).resolves.toMatchObject({
       ok: false,
       http_status: 502,
@@ -252,7 +275,11 @@ describe('CanvasApiClient setAssignmentAllowedAttempts', () => {
 
   it('addresses the course by LTI context id when there is no numeric id', async () => {
     fetchMock.mockResolvedValueOnce(echo(1));
-    await new CanvasApiClient().setAssignmentAllowedAttempts('lti_context_id:abc', '42', 1);
+    await new CanvasApiClient().setAssignmentAllowedAttempts(
+      'lti_context_id:abc',
+      '42',
+      1,
+    );
     expect(fetchMock.mock.calls[0][0]).toBe(
       'https://canvas.example/api/v1/courses/lti_context_id%3Aabc/assignments/42',
     );
@@ -270,7 +297,9 @@ describe('CanvasApiClient setAssignmentAllowedAttempts', () => {
   });
 
   it('reports the HTTP status without copying the response body into the error', async () => {
-    fetchMock.mockResolvedValueOnce(new Response('secret detail', { status: 403 }));
+    fetchMock.mockResolvedValueOnce(
+      new Response('secret detail', { status: 403 }),
+    );
     const error = await new CanvasApiClient()
       .setAssignmentAllowedAttempts('8', '42', 2)
       .catch((e: unknown) => e);

@@ -1,7 +1,10 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { LMS_ADMIN_ROLE, STAFF_ROLES } from '../../../common/constants/course-roles';
+import {
+  LMS_ADMIN_ROLE,
+  STAFF_ROLES,
+} from '../../../common/constants/course-roles';
 import {
   CANVAS_SYNC_CONFIG,
   type CanvasSyncConfig,
@@ -136,10 +139,7 @@ export class CanvasSyncJobsService implements OnModuleInit {
     if (
       !this.config.enabled ||
       lmsType !== 'canvas' ||
-      !(
-        STAFF_ROLES.includes(courseRole) ||
-        platformRole === LMS_ADMIN_ROLE
-      )
+      !(STAFF_ROLES.includes(courseRole) || platformRole === LMS_ADMIN_ROLE)
     )
       return;
     try {
@@ -187,7 +187,11 @@ export class CanvasSyncJobsService implements OnModuleInit {
       });
       for (const course of courses) {
         // Danh sách lớp nhanh nên vào hàng trước; đồng bộ tài liệu có thể chạy lâu.
-        await this.enqueueRoster(course.course_id, { kind: 'system' }, 'schedule');
+        await this.enqueueRoster(
+          course.course_id,
+          { kind: 'system' },
+          'schedule',
+        );
         await this.enqueue(course.course_id, { kind: 'system' }, 'schedule');
         count++;
       }

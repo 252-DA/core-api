@@ -7,7 +7,10 @@ import {
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { AGS_STATUS } from '../../../common/constants/ags-status';
-import { COURSE_ROLES, STAFF_ROLES } from '../../../common/constants/course-roles';
+import {
+  COURSE_ROLES,
+  STAFF_ROLES,
+} from '../../../common/constants/course-roles';
 import { isUuid } from '../../../common/utils/uuid';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
 import { AuthzService } from '../../../auth/authz.service';
@@ -371,9 +374,13 @@ export class QuizSetService {
     claims: BffClaims,
     body: { quizSetId: string; resourceLinkId: string },
   ) {
-    const found = await this.snapshot(claims, body.quizSetId, [COURSE_ROLES.LEARNER]);
+    const found = await this.snapshot(claims, body.quizSetId, [
+      COURSE_ROLES.LEARNER,
+    ]);
     if (found.mode !== 'exam')
-      throw new BadRequestException('Quiz luyện tập không cần bắt đầu lượt làm.');
+      throw new BadRequestException(
+        'Quiz luyện tập không cần bắt đầu lượt làm.',
+      );
     const link = await this.quizLink(found, body.resourceLinkId);
     // Hạn, giờ mở/đóng và số lần làm theo Assignment hiện tại của Canvas.
     const set = withCanvasSettings(found, link);
@@ -391,7 +398,9 @@ export class QuizSetService {
         !open.expires_at ||
         now.getTime() <= open.expires_at.getTime() + SUBMIT_GRACE_MS
       ) {
-        const used = await this.prisma.quiz_set_sessions.count({ where: scope });
+        const used = await this.prisma.quiz_set_sessions.count({
+          where: scope,
+        });
         return this.sessionView(set, open, used);
       }
       await this.prisma.quiz_set_sessions.updateMany({
@@ -402,7 +411,8 @@ export class QuizSetService {
     const state = windowState(set, now);
     if (state === 'not_open')
       throw new ForbiddenException('Bài kiểm tra chưa tới giờ mở.');
-    if (state === 'closed') throw new ForbiddenException('Bài kiểm tra đã đóng.');
+    if (state === 'closed')
+      throw new ForbiddenException('Bài kiểm tra đã đóng.');
     const used = await this.prisma.quiz_set_sessions.count({ where: scope });
     if (set.max_attempts !== null && used >= set.max_attempts)
       throw new ForbiddenException('Bạn đã dùng hết số lần làm bài.');
@@ -410,7 +420,10 @@ export class QuizSetService {
       const session = await this.prisma.quiz_set_sessions.create({
         data: {
           ...scope,
-          item_order: itemOrder(set.items, set.shuffle) as unknown as Prisma.InputJsonValue,
+          item_order: itemOrder(
+            set.items,
+            set.shuffle,
+          ) as unknown as Prisma.InputJsonValue,
           started_at: now,
           expires_at: sessionExpiry(set, now),
         },
@@ -531,7 +544,12 @@ export class QuizSetService {
       this.prisma.lms_user_mappings.findMany({
         where: {
           internal_user_id: {
-            in: [...new Set([...classLearnerIds, ...submissions.map((s) => s.userId)])],
+            in: [
+              ...new Set([
+                ...classLearnerIds,
+                ...submissions.map((s) => s.userId),
+              ]),
+            ],
           },
         },
         select: { internal_user_id: true, display_name: true },
@@ -550,7 +568,10 @@ export class QuizSetService {
         names: new Map(users.map((u) => [u.internal_user_id, u.display_name])),
         classLearnerIds,
         los: new Map(
-          los.map((lo) => [lo.lo_id, { code: lo.code, statement: lo.statement_vi }]),
+          los.map((lo) => [
+            lo.lo_id,
+            { code: lo.code, statement: lo.statement_vi },
+          ]),
         ),
       }),
     };
@@ -607,7 +628,9 @@ export class QuizSetService {
       this.ags.isWaitingForPublish(id),
     );
     const userId = rows[0].user_id;
-    const link = links.find((l) => l.resource_link_id === rows[0].resource_link_id);
+    const link = links.find(
+      (l) => l.resource_link_id === rows[0].resource_link_id,
+    );
     const set = withCanvasSettings(found, link);
     const [student, mine] = await Promise.all([
       this.prisma.lms_user_mappings.findUnique({
@@ -639,7 +662,8 @@ export class QuizSetService {
       submissionId: submission.submissionId,
       student: { userId, name: student?.display_name ?? 'Sinh viên' },
       attemptedAt: submission.attemptedAt,
-      attemptNumber: order.findIndex((o) => o.id === submission.submissionId) + 1,
+      attemptNumber:
+        order.findIndex((o) => o.id === submission.submissionId) + 1,
       attemptCount: order.length,
       score: submission.score,
       pointsPossible,
@@ -659,7 +683,9 @@ export class QuizSetService {
       sessionId?: string;
     },
   ) {
-    const found = await this.snapshot(claims, body.quizSetId, [COURSE_ROLES.LEARNER]);
+    const found = await this.snapshot(claims, body.quizSetId, [
+      COURSE_ROLES.LEARNER,
+    ]);
     const link = await this.quizLink(found, body.resourceLinkId);
     const set = withCanvasSettings(found, link);
     const exam = set.mode === 'exam';
@@ -668,7 +694,8 @@ export class QuizSetService {
     if (
       !Array.isArray(body.answers) ||
       (!exam && body.answers.length !== set.items.length) ||
-      new Set(body.answers.map((a) => a?.quizId)).size !== body.answers.length ||
+      new Set(body.answers.map((a) => a?.quizId)).size !==
+        body.answers.length ||
       body.answers.some(
         (a) =>
           !a ||
@@ -697,7 +724,9 @@ export class QuizSetService {
         },
       });
       if (!session)
-        throw new ForbiddenException('Lượt làm bài này đã nộp hoặc không hợp lệ.');
+        throw new ForbiddenException(
+          'Lượt làm bài này đã nộp hoặc không hợp lệ.',
+        );
       if (
         session.expires_at &&
         attemptedAt.getTime() > session.expires_at.getTime() + SUBMIT_GRACE_MS
@@ -706,7 +735,9 @@ export class QuizSetService {
           where: { session_id: session.session_id, ended_at: null },
           data: { ended_at: session.expires_at },
         });
-        throw new ForbiddenException('Đã hết giờ làm bài, bài không được nhận.');
+        throw new ForbiddenException(
+          'Đã hết giờ làm bài, bài không được nhận.',
+        );
       }
     }
     const perItem = set.items.map((q) => {
@@ -739,9 +770,13 @@ export class QuizSetService {
       score: result.score,
       chosen_answer: result.chosenAnswer ?? Prisma.JsonNull,
       is_correct: result.isCorrect,
-      grading_status: result.pending ? GRADING_STATUS.pending : GRADING_STATUS.graded,
+      grading_status: result.pending
+        ? GRADING_STATUS.pending
+        : GRADING_STATUS.graded,
       // Tự luận chấm theo snapshot của đề, không theo quiz_items lúc worker chạy.
-      ...(result.pending ? { grading_input: gradingInput(set.items[index]) } : {}),
+      ...(result.pending
+        ? { grading_input: gradingInput(set.items[index]) }
+        : {}),
       feedback: result.feedback,
       attempted_at: attemptedAt,
       ags_status: agsStatus,

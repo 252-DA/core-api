@@ -1,8 +1,14 @@
-export function isPlainObject(value: unknown): value is Record<string, unknown> {
+export function isPlainObject(
+  value: unknown,
+): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function isIntIn(value: unknown, min: number, max: number): value is number {
+export function isIntIn(
+  value: unknown,
+  min: number,
+  max: number,
+): value is number {
   return (
     typeof value === 'number' &&
     Number.isInteger(value) &&

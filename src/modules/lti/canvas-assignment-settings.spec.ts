@@ -31,10 +31,16 @@ describe('assignmentSettingsFromClaims', () => {
       }),
     ).toBeNull();
     expect(
-      assignmentSettingsFromClaims({ ...assignment, canvas_assignment_id: '0' }),
+      assignmentSettingsFromClaims({
+        ...assignment,
+        canvas_assignment_id: '0',
+      }),
     ).toBeNull();
     expect(
-      assignmentSettingsFromClaims({ ...assignment, canvas_assignment_id: 'abc' }),
+      assignmentSettingsFromClaims({
+        ...assignment,
+        canvas_assignment_id: 'abc',
+      }),
     ).toBeNull();
   });
 
@@ -61,40 +67,51 @@ describe('assignmentSettingsFromClaims', () => {
     'số lần làm %p được hiểu là không giới hạn',
     (attempts) => {
       expect(
-        assignmentSettingsFromClaims({ ...assignment, assignment_attempts: attempts })
-          ?.allowedAttempts,
+        assignmentSettingsFromClaims({
+          ...assignment,
+          assignment_attempts: attempts,
+        })?.allowedAttempts,
       ).toBeNull();
     },
   );
 
   it('giới hạn số lần làm tối đa 1000', () => {
     expect(
-      assignmentSettingsFromClaims({ ...assignment, assignment_attempts: '5000' })
-        ?.allowedAttempts,
+      assignmentSettingsFromClaims({
+        ...assignment,
+        assignment_attempts: '5000',
+      })?.allowedAttempts,
     ).toBe(1000);
   });
 
-  it.each([['0'], ['-3'], ['abc'], ['100000'], ['$Canvas.assignment.pointsPossible']])(
-    'điểm tối đa %p không dùng được thì bỏ qua',
-    (points) => {
-      expect(
-        assignmentSettingsFromClaims({ ...assignment, assignment_points: points })
-          ?.pointsPossible,
-      ).toBeNull();
-    },
-  );
+  it.each([
+    ['0'],
+    ['-3'],
+    ['abc'],
+    ['100000'],
+    ['$Canvas.assignment.pointsPossible'],
+  ])('điểm tối đa %p không dùng được thì bỏ qua', (points) => {
+    expect(
+      assignmentSettingsFromClaims({ ...assignment, assignment_points: points })
+        ?.pointsPossible,
+    ).toBeNull();
+  });
 
   it('làm tròn điểm tối đa 2 chữ số và nhận số thập phân', () => {
     expect(
-      assignmentSettingsFromClaims({ ...assignment, assignment_points: '12.345' })
-        ?.pointsPossible,
+      assignmentSettingsFromClaims({
+        ...assignment,
+        assignment_points: '12.345',
+      })?.pointsPossible,
     ).toBe(12.35);
   });
 
   it('ngày sai định dạng thì coi như không có', () => {
     expect(
-      assignmentSettingsFromClaims({ ...assignment, assignment_due: 'khong-phai-ngay' })
-        ?.dueAt,
+      assignmentSettingsFromClaims({
+        ...assignment,
+        assignment_due: 'khong-phai-ngay',
+      })?.dueAt,
     ).toBeNull();
   });
 

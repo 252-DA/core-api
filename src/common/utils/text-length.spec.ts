@@ -14,7 +14,9 @@ describe('text length by code point', () => {
     expect(codePointLength('𝑓(𝑥)')).toBe(4);
     expect(codePointLength(`a${EMOJI}b`)).toBe(3);
     expect(codePointLength('')).toBe(0);
-    expect(codePointLength('Tiếng Việt có dấu')).toBe('Tiếng Việt có dấu'.length);
+    expect(codePointLength('Tiếng Việt có dấu')).toBe(
+      'Tiếng Việt có dấu'.length,
+    );
   });
 
   it('counts a lone surrogate as one', () => {
@@ -39,7 +41,9 @@ describe('text length by code point', () => {
   it('clips without splitting a surrogate pair', () => {
     expect(clipCodePoints('abc', 5)).toBe('abc');
     expect(clipCodePoints('abcdef', 3)).toBe('abc');
-    expect(clipCodePoints(`${EMOJI}${EMOJI}${EMOJI}`, 2)).toBe(`${EMOJI}${EMOJI}`);
+    expect(clipCodePoints(`${EMOJI}${EMOJI}${EMOJI}`, 2)).toBe(
+      `${EMOJI}${EMOJI}`,
+    );
     // Cắt giữa chuỗi có cặp surrogate: kết quả vẫn là chuỗi Unicode hợp lệ.
     const clipped = clipCodePoints(`a${MATH_F}b${MATH_F}c`, 3);
     expect(clipped).toBe(`a${MATH_F}b`);

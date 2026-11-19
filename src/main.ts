@@ -19,8 +19,7 @@ import {
 function logCriticalAndExit(event: string, reason: unknown): void {
   const err = reason instanceof Error ? reason : new Error(String(reason));
   const root =
-    PinoLogger.root ??
-    pino({ ...buildPinoOptions(), transport: undefined });
+    PinoLogger.root ?? pino({ ...buildPinoOptions(), transport: undefined });
   root.fatal({ logger: 'Bootstrap', err }, event);
   root.flush(() => process.exit(1));
   setTimeout(() => process.exit(1), 500).unref();

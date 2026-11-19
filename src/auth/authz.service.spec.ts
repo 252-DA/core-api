@@ -15,10 +15,14 @@ const claims: BffClaims = {
 function setup(opts: { membership?: boolean; lmsRole?: string | null } = {}) {
   const prisma = {
     course_memberships: {
-      findFirst: jest.fn().mockResolvedValue(opts.membership ? { role: 'instructor' } : null),
+      findFirst: jest
+        .fn()
+        .mockResolvedValue(opts.membership ? { role: 'instructor' } : null),
     },
     lms_user_mappings: {
-      findFirst: jest.fn().mockResolvedValue(opts.lmsRole ? { role: opts.lmsRole } : null),
+      findFirst: jest
+        .fn()
+        .mockResolvedValue(opts.lmsRole ? { role: opts.lmsRole } : null),
     },
   };
   return { authz: new AuthzService(prisma as never), prisma };
@@ -27,7 +31,9 @@ function setup(opts: { membership?: boolean; lmsRole?: string | null } = {}) {
 describe('AuthzService.isCourseStaff', () => {
   it('treats platform admin scope as staff without touching the database', async () => {
     const { authz, prisma } = setup();
-    await expect(authz.isCourseStaff({ ...claims, scope: 'admin' }, COURSE)).resolves.toBe(true);
+    await expect(
+      authz.isCourseStaff({ ...claims, scope: 'admin' }, COURSE),
+    ).resolves.toBe(true);
     expect(prisma.course_memberships.findFirst).not.toHaveBeenCalled();
     expect(prisma.lms_user_mappings.findFirst).not.toHaveBeenCalled();
   });
@@ -36,7 +42,11 @@ describe('AuthzService.isCourseStaff', () => {
     const { authz, prisma } = setup({ membership: true });
     await expect(authz.isCourseStaff(claims, COURSE)).resolves.toBe(true);
     expect(prisma.course_memberships.findFirst).toHaveBeenCalledWith({
-      where: { user_id: claims.sub, course_id: COURSE, role: { in: ['instructor', 'ta'] } },
+      where: {
+        user_id: claims.sub,
+        course_id: COURSE,
+        role: { in: ['instructor', 'ta'] },
+      },
       select: { role: true },
     });
   });
@@ -59,11 +69,17 @@ describe('AuthzService.isCourseStaff', () => {
 
 describe('AuthzService.assertPlatformAdmin', () => {
   it('still accepts only admin scope or an LMS administrator', async () => {
-    await expect(setup().authz.assertPlatformAdmin({ ...claims, scope: 'admin' })).resolves.toBeUndefined();
-    await expect(setup({ lmsRole: 'administrator' }).authz.assertPlatformAdmin(claims)).resolves.toBeUndefined();
-    await expect(setup({ lmsRole: 'instructor' }).authz.assertPlatformAdmin(claims)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
-    await expect(setup().authz.assertPlatformAdmin(claims)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      setup().authz.assertPlatformAdmin({ ...claims, scope: 'admin' }),
+    ).resolves.toBeUndefined();
+    await expect(
+      setup({ lmsRole: 'administrator' }).authz.assertPlatformAdmin(claims),
+    ).resolves.toBeUndefined();
+    await expect(
+      setup({ lmsRole: 'instructor' }).authz.assertPlatformAdmin(claims),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      setup().authz.assertPlatformAdmin(claims),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

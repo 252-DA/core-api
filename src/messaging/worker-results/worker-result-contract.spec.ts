@@ -84,7 +84,8 @@ function checkResult(data: unknown) {
  * Fixture chỉ kiểm hình dạng envelope (payload là chỗ giữ chỗ): không có payload
  * hợp lệ của kind để chạy bộ kiểm payload.
  */
-const envelopeOnly = (file: string) => file.startsWith('worker-result-envelope');
+const envelopeOnly = (file: string) =>
+  file.startsWith('worker-result-envelope');
 
 describeContract('worker result contract fixtures', () => {
   const valid = resultFixtures('valid');

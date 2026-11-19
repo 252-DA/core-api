@@ -33,7 +33,11 @@ describe('MicroContentAttemptService', () => {
         findUnique: jest.fn(),
       },
       micro_content_answers: {
-        create: jest.fn().mockImplementation((args) => Promise.resolve({ answer_id: 'ans-1', ...args?.data })),
+        create: jest
+          .fn()
+          .mockImplementation((args) =>
+            Promise.resolve({ answer_id: 'ans-1', ...args?.data }),
+          ),
       },
       outbox_events: {
         create: jest.fn().mockResolvedValue({ id: 'evt-1' }),
@@ -337,7 +341,12 @@ describe('MicroContentAttemptService', () => {
 
       const res = await service.submit(learnerClaims, {
         microContentId,
-        answers: [{ questionId: 'q_essay', chosenAnswer: 'Hàm thuần khiết không sinh side-effect.' }],
+        answers: [
+          {
+            questionId: 'q_essay',
+            chosenAnswer: 'Hàm thuần khiết không sinh side-effect.',
+          },
+        ],
       });
 
       expect(res.gradingStatus).toBe('PENDING');
@@ -381,4 +390,3 @@ describe('MicroContentAttemptService', () => {
     });
   });
 });
-

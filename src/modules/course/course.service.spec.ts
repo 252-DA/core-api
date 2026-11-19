@@ -37,9 +37,9 @@ function makeService() {
 describe('CourseService', () => {
   it('rejects missing or blank courseId before touching authz or prisma', async () => {
     const { service, prisma } = makeService();
-    await expect(service.getChapters({ ...baseClaims, scope: 'admin' }, '')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(
+      service.getChapters({ ...baseClaims, scope: 'admin' }, ''),
+    ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
       service.getLearningOutcomes({ ...baseClaims, scope: 'admin' }, '   '),
     ).rejects.toBeInstanceOf(BadRequestException);

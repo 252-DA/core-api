@@ -25,7 +25,10 @@ function page(
 ) {
   return new Response(JSON.stringify({ members }), {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(link ? { Link: link } : {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(link ? { Link: link } : {}),
+    },
   });
 }
 
@@ -73,7 +76,14 @@ describe('NrpsClientService', () => {
         ),
       )
       .mockResolvedValueOnce(
-        page([member('b', { given_name: 'B', family_name: 'C', email: 'b@x.test', picture: 'https://x/p.png' })]),
+        page([
+          member('b', {
+            given_name: 'B',
+            family_name: 'C',
+            email: 'b@x.test',
+            picture: 'https://x/p.png',
+          }),
+        ]),
       );
     const members = await service.listMembers(URL_);
     expect(members.map((m) => m.user_id)).toEqual(['a', 'b']);
@@ -90,7 +100,9 @@ describe('NrpsClientService', () => {
   });
 
   it('401 thì bỏ token đã cache rồi thử lại đúng một lần', async () => {
-    tokens.getAccessToken.mockResolvedValueOnce('old').mockResolvedValueOnce('new');
+    tokens.getAccessToken
+      .mockResolvedValueOnce('old')
+      .mockResolvedValueOnce('new');
     fetchMock
       .mockResolvedValueOnce(new Response('{}', { status: 401 }))
       .mockResolvedValueOnce(page([member('a')]));
@@ -103,7 +115,9 @@ describe('NrpsClientService', () => {
 
   it('401 lần hai thì báo lỗi tiếng Việt, không thử lại nữa', async () => {
     fetchMock.mockResolvedValue(new Response('{}', { status: 401 }));
-    await expect(service.listMembers(URL_)).rejects.toThrow(NRPS_UNAUTHORIZED_MESSAGE);
+    await expect(service.listMembers(URL_)).rejects.toThrow(
+      NRPS_UNAUTHORIZED_MESSAGE,
+    );
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(tokens.invalidate).toHaveBeenCalledTimes(1);
   });
@@ -118,12 +132,18 @@ describe('NrpsClientService', () => {
 
   it('không kết nối được Canvas', async () => {
     fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
-    await expect(service.listMembers(URL_)).rejects.toThrow('Không kết nối được Canvas');
+    await expect(service.listMembers(URL_)).rejects.toThrow(
+      'Không kết nối được Canvas',
+    );
   });
 
   it('không xin được token thì báo nguyên nhân', async () => {
-    tokens.getAccessToken.mockRejectedValue(new AgsTokenError('LTI_PRIVATE_KEY_PATH chưa được cấu hình', 0));
-    await expect(service.listMembers(URL_)).rejects.toThrow('Chưa cấu hình khóa LTI');
+    tokens.getAccessToken.mockRejectedValue(
+      new AgsTokenError('LTI_PRIVATE_KEY_PATH chưa được cấu hình', 0),
+    );
+    await expect(service.listMembers(URL_)).rejects.toThrow(
+      'Chưa cấu hình khóa LTI',
+    );
     tokens.getAccessToken.mockRejectedValue(new AgsTokenError('x', 400));
     await expect(service.listMembers(URL_)).rejects.toThrow('mã 400');
     expect(fetchMock).not.toHaveBeenCalled();
@@ -133,14 +153,20 @@ describe('NrpsClientService', () => {
     fetchMock.mockResolvedValueOnce(new Response('<html>', { status: 200 }));
     await expect(service.listMembers(URL_)).rejects.toThrow('không phải JSON');
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
-    await expect(service.listMembers(URL_)).rejects.toThrow('thiếu trường members');
+    await expect(service.listMembers(URL_)).rejects.toThrow(
+      'thiếu trường members',
+    );
   });
 
   it('không gửi token tới host khác Canvas đã cấu hình', async () => {
-    await expect(service.listMembers('https://evil.test/api/lti/courses/1/names_and_roles')).rejects.toThrow(
-      'không thuộc Canvas',
+    await expect(
+      service.listMembers(
+        'https://evil.test/api/lti/courses/1/names_and_roles',
+      ),
+    ).rejects.toThrow('không thuộc Canvas');
+    await expect(service.listMembers('not a url')).rejects.toThrow(
+      'không hợp lệ',
     );
-    await expect(service.listMembers('not a url')).rejects.toThrow('không hợp lệ');
     expect(tokens.getAccessToken).not.toHaveBeenCalled();
   });
 
@@ -153,7 +179,9 @@ describe('NrpsClientService', () => {
   });
 
   it('dừng khi Canvas trả Link next vô tận', async () => {
-    fetchMock.mockImplementation(async () => page([member('a')], `<${URL_}?page=2>; rel="next"`));
+    fetchMock.mockImplementation(async () =>
+      page([member('a')], `<${URL_}?page=2>; rel="next"`),
+    );
     await expect(service.listMembers(URL_)).rejects.toThrow('quá dài');
   });
 });

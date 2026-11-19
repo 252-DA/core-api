@@ -5,7 +5,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
-import { COURSE_ROLES, STAFF_ROLES } from '../../../common/constants/course-roles';
+import {
+  COURSE_ROLES,
+  STAFF_ROLES,
+} from '../../../common/constants/course-roles';
 import { isUuid } from '../../../common/utils/uuid';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
 import { AuthzService } from '../../../auth/authz.service';
@@ -14,7 +17,10 @@ import {
   CONTENT_GENERATION_REQUESTED,
   MICRO_CONTENT_RENDER_REQUESTED,
 } from '../../../messaging/event-types';
-import { isQuestionType, normalizeAnswerKey } from '../../question/question-types';
+import {
+  isQuestionType,
+  normalizeAnswerKey,
+} from '../../question/question-types';
 import type {
   CreateMicroContentInput,
   QuestionInput,
@@ -63,7 +69,11 @@ export class MicroContentService {
         throw new BadRequestException('sourceDocumentId không hợp lệ.');
       }
       const doc = await this.prisma.documents.findFirst({
-        where: { document_id: input.sourceDocumentId, course_id: courseId, deleted_at: null },
+        where: {
+          document_id: input.sourceDocumentId,
+          course_id: courseId,
+          deleted_at: null,
+        },
         select: { document_id: true },
       });
       if (!doc) {
@@ -76,7 +86,12 @@ export class MicroContentService {
         throw new BadRequestException('loId không hợp lệ.');
       }
       const lo = await this.prisma.learning_outcomes.findFirst({
-        where: { lo_id: input.loId, course_id: courseId, is_current: true, deleted_at: null },
+        where: {
+          lo_id: input.loId,
+          course_id: courseId,
+          is_current: true,
+          deleted_at: null,
+        },
         select: { lo_id: true },
       });
       if (!lo) {
@@ -85,18 +100,34 @@ export class MicroContentService {
     }
 
     const effectiveFrom =
-      input.sourcePageFrom !== undefined ? input.sourcePageFrom : (existing?.source_page_from ?? null);
+      input.sourcePageFrom !== undefined
+        ? input.sourcePageFrom
+        : (existing?.source_page_from ?? null);
     const effectiveTo =
-      input.sourcePageTo !== undefined ? input.sourcePageTo : (existing?.source_page_to ?? null);
+      input.sourcePageTo !== undefined
+        ? input.sourcePageTo
+        : (existing?.source_page_to ?? null);
 
-    if (effectiveFrom !== null && (!Number.isInteger(effectiveFrom) || effectiveFrom < 1)) {
+    if (
+      effectiveFrom !== null &&
+      (!Number.isInteger(effectiveFrom) || effectiveFrom < 1)
+    ) {
       throw new BadRequestException('Trang bắt đầu phải là số nguyên >= 1.');
     }
-    if (effectiveTo !== null && (!Number.isInteger(effectiveTo) || effectiveTo < 1)) {
+    if (
+      effectiveTo !== null &&
+      (!Number.isInteger(effectiveTo) || effectiveTo < 1)
+    ) {
       throw new BadRequestException('Trang kết thúc phải là số nguyên >= 1.');
     }
-    if (effectiveFrom !== null && effectiveTo !== null && effectiveTo < effectiveFrom) {
-      throw new BadRequestException('Trang kết thúc phải lớn hơn hoặc bằng trang bắt đầu.');
+    if (
+      effectiveFrom !== null &&
+      effectiveTo !== null &&
+      effectiveTo < effectiveFrom
+    ) {
+      throw new BadRequestException(
+        'Trang kết thúc phải lớn hơn hoặc bằng trang bắt đầu.',
+      );
     }
   }
 
@@ -360,8 +391,12 @@ export class MicroContentService {
         ...(input.sourceDocumentId !== undefined
           ? { source_document_id: input.sourceDocumentId }
           : {}),
-        ...(input.sourcePageFrom !== undefined ? { source_page_from: input.sourcePageFrom } : {}),
-        ...(input.sourcePageTo !== undefined ? { source_page_to: input.sourcePageTo } : {}),
+        ...(input.sourcePageFrom !== undefined
+          ? { source_page_from: input.sourcePageFrom }
+          : {}),
+        ...(input.sourcePageTo !== undefined
+          ? { source_page_to: input.sourcePageTo }
+          : {}),
         ...(input.loId !== undefined ? { lo_id: input.loId } : {}),
         ...(input.position !== undefined ? { position: input.position } : {}),
         status: 'DRAFT',
@@ -398,18 +433,28 @@ export class MicroContentService {
       where: { micro_content_id: input.microContentId },
       data: {
         ...(input.title !== undefined ? { title: input.title.trim() } : {}),
-        ...(input.description !== undefined ? { description: input.description.trim() || null } : {}),
-        ...(input.passingScore !== undefined ? { passing_score: input.passingScore } : {}),
+        ...(input.description !== undefined
+          ? { description: input.description.trim() || null }
+          : {}),
+        ...(input.passingScore !== undefined
+          ? { passing_score: input.passingScore }
+          : {}),
         ...(input.requiredWatchPercent !== undefined
           ? { required_watch_percent: input.requiredWatchPercent }
           : {}),
         ...(input.aiPrompt !== undefined ? { ai_prompt: input.aiPrompt } : {}),
-        ...(input.aiOptions !== undefined ? { ai_options: input.aiOptions as any } : {}),
+        ...(input.aiOptions !== undefined
+          ? { ai_options: input.aiOptions as any }
+          : {}),
         ...(input.sourceDocumentId !== undefined
           ? { source_document_id: input.sourceDocumentId }
           : {}),
-        ...(input.sourcePageFrom !== undefined ? { source_page_from: input.sourcePageFrom } : {}),
-        ...(input.sourcePageTo !== undefined ? { source_page_to: input.sourcePageTo } : {}),
+        ...(input.sourcePageFrom !== undefined
+          ? { source_page_from: input.sourcePageFrom }
+          : {}),
+        ...(input.sourcePageTo !== undefined
+          ? { source_page_to: input.sourcePageTo }
+          : {}),
         ...(input.loId !== undefined ? { lo_id: input.loId } : {}),
         ...(input.position !== undefined ? { position: input.position } : {}),
         updated_at: new Date(),
@@ -454,7 +499,11 @@ export class MicroContentService {
    * Xuất bản hoặc thu hồi xuất bản.
    * Chỉ được xuất bản khi video_status = READY và có ít nhất 1 câu hỏi.
    */
-  async publish(claims: BffClaims, microContentId: string, targetStatus?: 'DRAFT' | 'PUBLISHED') {
+  async publish(
+    claims: BffClaims,
+    microContentId: string,
+    targetStatus?: 'DRAFT' | 'PUBLISHED',
+  ) {
     const item = await this.prisma.micro_contents.findFirst({
       where: { micro_content_id: microContentId, deleted_at: null },
       include: {
@@ -470,11 +519,14 @@ export class MicroContentService {
     }
     await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
-    const newStatus = targetStatus ?? (item.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED');
+    const newStatus =
+      targetStatus ?? (item.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED');
 
     if (newStatus === 'PUBLISHED') {
       if (item.video_status !== 'READY') {
-        throw new BadRequestException('Chỉ có thể xuất bản khi video đã sẵn sàng (READY).');
+        throw new BadRequestException(
+          'Chỉ có thể xuất bản khi video đã sẵn sàng (READY).',
+        );
       }
       if (item._count.questions === 0) {
         throw new BadRequestException('Phải có ít nhất 1 câu hỏi để xuất bản.');
@@ -516,7 +568,9 @@ export class MicroContentService {
       const position = q.position ?? idx + 1;
       const questionText = q.question?.trim();
       if (!questionText) {
-        throw new BadRequestException(`Câu hỏi ở vị trí ${position} không được để trống nội dung.`);
+        throw new BadRequestException(
+          `Câu hỏi ở vị trí ${position} không được để trống nội dung.`,
+        );
       }
       if (!isQuestionType(q.type)) {
         throw new BadRequestException(`Kiểu câu hỏi '${q.type}' không hợp lệ.`);
@@ -605,7 +659,9 @@ export class MicroContentService {
       throw new NotFoundException('Không tìm thấy tài liệu nguồn.');
     }
     if (doc.role !== 'lecture') {
-      throw new BadRequestException('Chỉ đề xuất nội dung từ bộ slide bài giảng (role = lecture).');
+      throw new BadRequestException(
+        'Chỉ đề xuất nội dung từ bộ slide bài giảng (role = lecture).',
+      );
     }
 
     if (this.prisma.chunks?.count) {
@@ -613,25 +669,30 @@ export class MicroContentService {
         where: { document_id: doc.document_id, deleted_at: null },
       });
       if (chunkCount === 0) {
-        throw new BadRequestException('Bộ slide chưa được lập chỉ mục nội dung.');
+        throw new BadRequestException(
+          'Bộ slide chưa được lập chỉ mục nội dung.',
+        );
       }
     }
 
     // Tránh gửi trùng lệnh khi bộ slide này đang có yêu cầu tách nội dung chạy.
     if (this.prisma.content_generation_requests?.findMany) {
-      const activeRequests = await this.prisma.content_generation_requests.findMany({
-        where: {
-          course_id: input.courseId,
-          type: 'micro_outline',
-          status: { in: ['QUEUED', 'PROCESSING'] },
-        },
-        orderBy: { created_at: 'desc' },
-        take: 10,
-      });
+      const activeRequests =
+        await this.prisma.content_generation_requests.findMany({
+          where: {
+            course_id: input.courseId,
+            type: 'micro_outline',
+            status: { in: ['QUEUED', 'PROCESSING'] },
+          },
+          orderBy: { created_at: 'desc' },
+          take: 10,
+        });
       const existing = activeRequests.find((req) => {
         const s = req.scope as Record<string, unknown> | null;
         return Boolean(
-          s && (s.document_id === doc.document_id || s.documentId === doc.document_id),
+          s &&
+          (s.document_id === doc.document_id ||
+            s.documentId === doc.document_id),
         );
       });
       if (existing) {
@@ -766,7 +827,9 @@ export class MicroContentService {
       ...(item.learning_outcome?.lo_id || item.lo_id
         ? { lo_id: item.learning_outcome?.lo_id ?? item.lo_id }
         : {}),
-      ...(item.learning_outcome?.code ? { lo_code: item.learning_outcome.code } : {}),
+      ...(item.learning_outcome?.code
+        ? { lo_code: item.learning_outcome.code }
+        : {}),
       ...(item.learning_outcome?.statement_vi
         ? { lo_statement_vi: item.learning_outcome.statement_vi }
         : {}),
@@ -799,7 +862,8 @@ export class MicroContentService {
             input.options !== undefined
               ? ({
                   ...existingAiOptions,
-                  ...(typeof input.options === 'object' && input.options !== null
+                  ...(typeof input.options === 'object' &&
+                  input.options !== null
                     ? input.options
                     : {}),
                 } as Prisma.InputJsonValue)
@@ -869,7 +933,9 @@ export class MicroContentService {
     const count = Math.max(1, Math.min(6, rawCount));
 
     const requestedTypes = Array.isArray(input.questionTypes)
-      ? input.questionTypes.filter((t): t is string => typeof t === 'string' && isQuestionType(t))
+      ? input.questionTypes.filter(
+          (t): t is string => typeof t === 'string' && isQuestionType(t),
+        )
       : [];
     const questionTypes =
       requestedTypes.length > 0 ? requestedTypes : DEFAULT_MICRO_QUIZ_TYPES;
@@ -892,7 +958,9 @@ export class MicroContentService {
       ...(item.learning_outcome?.lo_id || item.lo_id
         ? { lo_id: item.learning_outcome?.lo_id ?? item.lo_id }
         : {}),
-      ...(item.learning_outcome?.code ? { lo_code: item.learning_outcome.code } : {}),
+      ...(item.learning_outcome?.code
+        ? { lo_code: item.learning_outcome.code }
+        : {}),
       ...(item.learning_outcome?.statement_vi
         ? { lo_statement_vi: item.learning_outcome.statement_vi }
         : {}),
@@ -951,7 +1019,11 @@ export class MicroContentService {
     }
     await this.authz.assertCourseAccess(claims, item.course_id, MC_STAFF_ROLES);
 
-    if (!input.script || !Array.isArray(input.script.scenes) || input.script.scenes.length === 0) {
+    if (
+      !input.script ||
+      !Array.isArray(input.script.scenes) ||
+      input.script.scenes.length === 0
+    ) {
       throw new BadRequestException('Kịch bản phải chứa ít nhất 1 cảnh.');
     }
 
@@ -1079,7 +1151,9 @@ export class MicroContentService {
             asset_id: assetId,
             render_id: renderId,
             ...(sourceDocKey ? { source_document_key: sourceDocKey } : {}),
-            ...(sourceDocMime ? { source_document_mime_type: sourceDocMime } : {}),
+            ...(sourceDocMime
+              ? { source_document_mime_type: sourceDocMime }
+              : {}),
             script: item.ai_script,
           },
         },
@@ -1093,7 +1167,11 @@ export class MicroContentService {
   }
 
   private readLowTextFlag(aiOptions: unknown): boolean {
-    if (!aiOptions || typeof aiOptions !== 'object' || Array.isArray(aiOptions)) {
+    if (
+      !aiOptions ||
+      typeof aiOptions !== 'object' ||
+      Array.isArray(aiOptions)
+    ) {
       return false;
     }
     return Boolean((aiOptions as Record<string, unknown>).low_text);

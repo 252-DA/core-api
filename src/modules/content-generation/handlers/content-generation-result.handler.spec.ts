@@ -477,7 +477,9 @@ describe('ContentGenerationResultHandler', () => {
 
     // Việc đánh dấu FAILED là của hook onFinalFailure, processor gọi sau đó.
     expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(prisma.content_generation_requests.updateMany).not.toHaveBeenCalled();
+    expect(
+      prisma.content_generation_requests.updateMany,
+    ).not.toHaveBeenCalled();
   });
 
   describe('onFinalFailure', () => {
@@ -492,7 +494,9 @@ describe('ContentGenerationResultHandler', () => {
 
       await handler.onFinalFailure(env, error as Error);
 
-      expect(prisma.content_generation_requests.updateMany).toHaveBeenCalledWith({
+      expect(
+        prisma.content_generation_requests.updateMany,
+      ).toHaveBeenCalledWith({
         ...activeOnly,
         data: expect.objectContaining({
           status: 'FAILED',
@@ -524,7 +528,9 @@ describe('ContentGenerationResultHandler', () => {
 
         await handler.onFinalFailure(env, error as Error);
 
-        expect(prisma.content_generation_requests.updateMany).toHaveBeenCalledWith({
+        expect(
+          prisma.content_generation_requests.updateMany,
+        ).toHaveBeenCalledWith({
           ...activeOnly,
           data: expect.objectContaining({
             status: 'FAILED',
@@ -547,7 +553,9 @@ describe('ContentGenerationResultHandler', () => {
 
       await handler.onFinalFailure(env, error as Error);
 
-      expect(prisma.content_generation_requests.updateMany).toHaveBeenCalledTimes(1);
+      expect(
+        prisma.content_generation_requests.updateMany,
+      ).toHaveBeenCalledTimes(1);
     });
 
     it('records an exhausted ordinary error as not applied, not as an invalid result', async () => {
@@ -572,9 +580,9 @@ describe('ContentGenerationResultHandler', () => {
 
       // Điều kiện status nằm trong chính câu UPDATE: SUCCEEDED/FAILED/CANCELLED
       // không khớp, nên không bị đè.
-      expect(prisma.content_generation_requests.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining(activeOnly),
-      );
+      expect(
+        prisma.content_generation_requests.updateMany,
+      ).toHaveBeenCalledWith(expect.objectContaining(activeOnly));
     });
 
     it('does nothing for a payload that does not name a request', async () => {
@@ -594,7 +602,9 @@ describe('ContentGenerationResultHandler', () => {
         );
       }
 
-      expect(prisma.content_generation_requests.updateMany).not.toHaveBeenCalled();
+      expect(
+        prisma.content_generation_requests.updateMany,
+      ).not.toHaveBeenCalled();
     });
 
     it('never throws when the database is down', async () => {
@@ -650,9 +660,11 @@ describe('ContentGenerationResultHandler', () => {
     const MC = '0193f2a1-7c4e-7d10-9a3b-5e6f7a8b9c11';
     const USER = '0193f2a1-7c4e-7d10-9a3b-5e6f7a8b9c12';
 
-    function microSetup(
-      request: { type: string; status: string; requested_by?: string | null },
-    ) {
+    function microSetup(request: {
+      type: string;
+      status: string;
+      requested_by?: string | null;
+    }) {
       const tx = {
         $queryRaw: jest.fn().mockResolvedValue([
           {
@@ -664,10 +676,14 @@ describe('ContentGenerationResultHandler', () => {
           },
         ]),
         documents: {
-          findFirst: jest.fn().mockResolvedValue({ document_id: DOC, created_by: USER }),
+          findFirst: jest
+            .fn()
+            .mockResolvedValue({ document_id: DOC, created_by: USER }),
         },
         learning_outcomes: {
-          findFirst: jest.fn().mockResolvedValue({ lo_id: LO, course_id: COURSE }),
+          findFirst: jest
+            .fn()
+            .mockResolvedValue({ lo_id: LO, course_id: COURSE }),
           findMany: jest.fn().mockResolvedValue([{ lo_id: LO }]),
         },
         micro_contents: {
@@ -684,18 +700,31 @@ describe('ContentGenerationResultHandler', () => {
           updateMany: jest.fn().mockResolvedValue({ count: 1 }),
           create: jest.fn().mockResolvedValue({}),
         },
-        content_generation_requests: { update: jest.fn().mockResolvedValue({}) },
+        content_generation_requests: {
+          update: jest.fn().mockResolvedValue({}),
+        },
       };
       const prisma = {
         $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
-        content_generation_requests: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-        micro_contents: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        content_generation_requests: {
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
+        micro_contents: {
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        },
       };
-      return { tx, prisma, handler: new ContentGenerationResultHandler(prisma as never) };
+      return {
+        tx,
+        prisma,
+        handler: new ContentGenerationResultHandler(prisma as never),
+      };
     }
 
     it('micro_outline SUCCEEDED replaces untouched drafts and validates suggested_lo_id', async () => {
-      const { tx, handler } = microSetup({ type: 'micro_outline', status: 'RUNNING' });
+      const { tx, handler } = microSetup({
+        type: 'micro_outline',
+        status: 'RUNNING',
+      });
       const unknownLo = '0193f2a1-7c4e-7d10-9a3b-5e6f7a8b9cff';
 
       const out = await handler.handle(
@@ -727,7 +756,11 @@ describe('ContentGenerationResultHandler', () => {
         }),
       );
 
-      expect(out).toMatchObject({ applied: true, status: 'SUCCEEDED', written: 2 });
+      expect(out).toMatchObject({
+        applied: true,
+        status: 'SUCCEEDED',
+        written: 2,
+      });
       expect(tx.micro_contents.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
@@ -763,7 +796,10 @@ describe('ContentGenerationResultHandler', () => {
     });
 
     it('video_script SUCCEEDED updates ai_script and script_status when active, skips if superseded', async () => {
-      const { tx, handler } = microSetup({ type: 'video_script', status: 'RUNNING' });
+      const { tx, handler } = microSetup({
+        type: 'video_script',
+        status: 'RUNNING',
+      });
       const scriptPayload = {
         request_id: REQUEST,
         course_id: COURSE,
@@ -788,7 +824,11 @@ describe('ContentGenerationResultHandler', () => {
       };
 
       const activeOut = await handler.handle(envelope(scriptPayload));
-      expect(activeOut).toMatchObject({ applied: true, status: 'SUCCEEDED', written: 1 });
+      expect(activeOut).toMatchObject({
+        applied: true,
+        status: 'SUCCEEDED',
+        written: 1,
+      });
       expect(tx.micro_contents.update).toHaveBeenCalledWith({
         where: { micro_content_id: MC },
         data: expect.objectContaining({
@@ -803,13 +843,23 @@ describe('ContentGenerationResultHandler', () => {
         script_request_id: '0193f2a1-7c4e-7d10-9a3b-5e6f7a8b9c99',
       });
       const staleOut = await handler.handle(envelope(scriptPayload));
-      expect(staleOut).toMatchObject({ applied: true, status: 'SUCCEEDED', written: 0, skipped: 1 });
+      expect(staleOut).toMatchObject({
+        applied: true,
+        status: 'SUCCEEDED',
+        written: 0,
+        skipped: 1,
+      });
       expect(tx.micro_contents.update).not.toHaveBeenCalled();
     });
 
     it('video_script FAILED marks micro_contents.script_status = FAILED', async () => {
-      const { tx, handler } = microSetup({ type: 'video_script', status: 'RUNNING' });
-      tx.micro_contents.updateMany = jest.fn().mockResolvedValue({ count: 1 }) as never;
+      const { tx, handler } = microSetup({
+        type: 'video_script',
+        status: 'RUNNING',
+      });
+      tx.micro_contents.updateMany = jest
+        .fn()
+        .mockResolvedValue({ count: 1 }) as never;
 
       const out = await handler.handle(
         envelope({
@@ -829,7 +879,10 @@ describe('ContentGenerationResultHandler', () => {
     });
 
     it('micro_quiz SUCCEEDED soft-deletes old questions and writes generated questions', async () => {
-      const { tx, handler } = microSetup({ type: 'micro_quiz', status: 'RUNNING' });
+      const { tx, handler } = microSetup({
+        type: 'micro_quiz',
+        status: 'RUNNING',
+      });
 
       const out = await handler.handle(
         envelope({
@@ -857,7 +910,11 @@ describe('ContentGenerationResultHandler', () => {
         }),
       );
 
-      expect(out).toMatchObject({ applied: true, status: 'SUCCEEDED', written: 2 });
+      expect(out).toMatchObject({
+        applied: true,
+        status: 'SUCCEEDED',
+        written: 2,
+      });
       expect(tx.micro_content_questions.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { micro_content_id: MC, deleted_at: null },

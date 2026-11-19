@@ -93,7 +93,10 @@ function originOf(value: string | undefined): string | null {
  * So khớp theo host (bỏ qua http/https) vì Canvas dựng link chuyển hướng bằng
  * scheme của request nội bộ (http) dù tên miền công khai là https.
  */
-export function toInternalCanvasUrl(url: string, env: NodeJS.ProcessEnv = loadCanvasApiEnv()): string {
+export function toInternalCanvasUrl(
+  url: string,
+  env: NodeJS.ProcessEnv = loadCanvasApiEnv(),
+): string {
   const internal = originOf(env.CANVAS_API_URL);
   if (!internal) return url;
   let target: URL;
@@ -103,7 +106,10 @@ export function toInternalCanvasUrl(url: string, env: NodeJS.ProcessEnv = loadCa
     return url;
   }
   if (target.origin === internal) return url;
-  const publicHosts = [hostOf(env.LTI_PLATFORM_URL), hostOf(env.CANVAS_PUBLIC_URL)];
+  const publicHosts = [
+    hostOf(env.LTI_PLATFORM_URL),
+    hostOf(env.CANVAS_PUBLIC_URL),
+  ];
   if (!publicHosts.includes(target.host)) return url;
   return `${internal}${target.pathname}${target.search}`;
 }
@@ -160,7 +166,10 @@ export class CanvasApiClient {
   }
 
   async getFile(fileId: string): Promise<CanvasFile> {
-    return this.getJson<CanvasFile>(`/api/v1/files/${encodeURIComponent(fileId)}`, `file ${fileId}`);
+    return this.getJson<CanvasFile>(
+      `/api/v1/files/${encodeURIComponent(fileId)}`,
+      `file ${fileId}`,
+    );
   }
 
   /** Batch metadata lookup; module membership still decides what gets imported. */
@@ -174,7 +183,9 @@ export class CanvasApiClient {
 
   async downloadFile(file: CanvasFile): Promise<Buffer> {
     if (!file.url) {
-      throw new BadGatewayException(`Canvas không trả link tải cho file ${file.display_name}.`);
+      throw new BadGatewayException(
+        `Canvas không trả link tải cho file ${file.display_name}.`,
+      );
     }
     if (file.size && file.size > MAX_FILE_BYTES) {
       throw new PayloadTooLargeException(
@@ -187,7 +198,12 @@ export class CanvasApiClient {
     // tên miền công khai kèm sf_verifier và chỉ phục vụ nội dung file ở đó (gọi
     // lại bằng địa chỉ nội bộ sẽ bị chuyển hướng vòng). fetch tự bỏ header
     // Authorization khi chuyển sang origin khác; verifier đã đủ để tải.
-    const response = await this.fetch(file.url, token, `tải file ${file.display_name}`, false);
+    const response = await this.fetch(
+      file.url,
+      token,
+      `tải file ${file.display_name}`,
+      false,
+    );
     const buffer = Buffer.from(await response.arrayBuffer());
     if (buffer.length > MAX_FILE_BYTES) {
       throw new PayloadTooLargeException(
@@ -199,7 +215,11 @@ export class CanvasApiClient {
 
   private async getJson<T>(path: string, what: string): Promise<T> {
     const { baseUrl, token } = this.config();
-    const response = await this.fetch(`${baseUrl}${path}`, token, `đọc ${what}`);
+    const response = await this.fetch(
+      `${baseUrl}${path}`,
+      token,
+      `đọc ${what}`,
+    );
     return (await response.json()) as T;
   }
 
@@ -215,7 +235,10 @@ export class CanvasApiClient {
     }
     // Never treat a truncated module/file listing as a complete snapshot:
     // reconciliation could otherwise hide documents from the missing pages.
-    if (url) throw new BadGatewayException(`Danh sách Canvas vượt giới hạn ${MAX_PAGES} trang khi đọc ${what}.`);
+    if (url)
+      throw new BadGatewayException(
+        `Danh sách Canvas vượt giới hạn ${MAX_PAGES} trang khi đọc ${what}.`,
+      );
     return results;
   }
 
@@ -230,27 +253,50 @@ export class CanvasApiClient {
     try {
       ({ baseUrl, token } = this.config());
     } catch (error: unknown) {
-      return { checked_at, ok: false, http_status: null, message: (error as Error).message };
+      return {
+        checked_at,
+        ok: false,
+        http_status: null,
+        message: (error as Error).message,
+      };
     }
     try {
       const response = await fetch(`${baseUrl}/api/v1/users/self`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+        },
         redirect: 'manual',
         signal: AbortSignal.timeout(TOKEN_CHECK_TIMEOUT_MS),
       });
       if (response.ok) {
-        return { checked_at, ok: true, http_status: response.status, message: 'Token hợp lệ' };
+        return {
+          checked_at,
+          ok: true,
+          http_status: response.status,
+          message: 'Token hợp lệ',
+        };
       }
       const error = new CanvasApiError(
         `Canvas trả HTTP ${response.status} khi kiểm tra token`,
         response.status,
       );
-      return { checked_at, ok: false, http_status: response.status, message: describeCanvasError(error) };
+      return {
+        checked_at,
+        ok: false,
+        http_status: response.status,
+        message: describeCanvasError(error),
+      };
     } catch (error: unknown) {
       const wrapped = new CanvasApiError(
         `Không kết nối được Canvas khi kiểm tra token: ${errorMessage(error)}`,
       );
-      return { checked_at, ok: false, http_status: null, message: describeCanvasError(wrapped) };
+      return {
+        checked_at,
+        ok: false,
+        http_status: null,
+        message: describeCanvasError(wrapped),
+      };
     }
   }
 
@@ -265,12 +311,15 @@ export class CanvasApiClient {
     assignmentId: string,
     attempts: number,
   ): Promise<void> {
-    if (!/^[1-9]\d{0,31}$/.test(assignmentId) || !Number.isInteger(attempts) || attempts < 1) {
+    if (
+      !/^[1-9]\d{0,31}$/.test(assignmentId) ||
+      !Number.isInteger(attempts) ||
+      attempts < 1
+    ) {
       throw new Error('Tham số số lần làm của Assignment không hợp lệ.');
     }
     const { baseUrl, token } = this.config();
-    const path =
-      `/api/v1/courses/${encodeURIComponent(course)}/assignments/${assignmentId}`;
+    const path = `/api/v1/courses/${encodeURIComponent(course)}/assignments/${assignmentId}`;
     // Không đọc nội dung phản hồi lỗi vào thông báo: log chỉ cần mã HTTP.
     const response = await this.fetch(
       `${baseUrl}${path}`,
@@ -287,7 +336,8 @@ export class CanvasApiClient {
     );
     let echoed: unknown;
     try {
-      echoed = ((await response.json()) as { allowed_attempts?: unknown }).allowed_attempts;
+      echoed = ((await response.json()) as { allowed_attempts?: unknown })
+        .allowed_attempts;
     } catch {
       echoed = undefined;
     }
@@ -313,14 +363,18 @@ export class CanvasApiClient {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/json',
-          ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...(init.body !== undefined
+            ? { 'Content-Type': 'application/json' }
+            : {}),
         },
         ...(init.body !== undefined ? { body: init.body } : {}),
         redirect: init.redirect ?? 'follow',
         signal: AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS),
       });
     } catch (error: unknown) {
-      throw new CanvasApiError(`Không kết nối được Canvas khi ${action}: ${errorMessage(error)}`);
+      throw new CanvasApiError(
+        `Không kết nối được Canvas khi ${action}: ${errorMessage(error)}`,
+      );
     }
     if (!response.ok) {
       const detail =

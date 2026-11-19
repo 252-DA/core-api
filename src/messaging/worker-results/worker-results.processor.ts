@@ -46,9 +46,13 @@ function salvageEnvelope(job: Job): WorkerResultEnvelope | undefined {
   if (!isWorkerResultKind(kind) || kind !== job.name) return undefined;
   if (!isPlainObject(payload)) return undefined;
   return {
-    result_id: typeof data.result_id === 'string' ? data.result_id : String(job.id ?? ''),
+    result_id:
+      typeof data.result_id === 'string'
+        ? data.result_id
+        : String(job.id ?? ''),
     kind,
-    source_event_id: typeof data.source_event_id === 'string' ? data.source_event_id : null,
+    source_event_id:
+      typeof data.source_event_id === 'string' ? data.source_event_id : null,
     occurred_at: typeof data.occurred_at === 'string' ? data.occurred_at : '',
     payload,
   };

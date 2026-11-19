@@ -82,7 +82,9 @@ describe('LessonService content access', () => {
     await service.cards(claims, lessonId, 'PUBLISHED');
 
     for (const model of [prisma.quiz_items, prisma.lesson_cards]) {
-      const [[args]] = model.findMany.mock.calls as [[{ omit?: Record<string, boolean> }]];
+      const [[args]] = model.findMany.mock.calls as [
+        [{ omit?: Record<string, boolean> }],
+      ];
       expect(args.omit).toEqual({
         verification_status: true,
         verification_evidence: true,
@@ -99,7 +101,9 @@ describe('LessonService content access', () => {
     await service.cards(claims, lessonId);
 
     for (const model of [prisma.quiz_items, prisma.lesson_cards]) {
-      for (const [args] of model.findMany.mock.calls as [{ omit?: unknown }][]) {
+      for (const [args] of model.findMany.mock.calls as [
+        { omit?: unknown },
+      ][]) {
         expect(args).not.toHaveProperty('omit');
       }
     }

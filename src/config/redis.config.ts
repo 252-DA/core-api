@@ -12,8 +12,12 @@ export function loadRedisConfig(): RedisConfig {
     return {
       host: parsed.hostname || 'localhost',
       port: parsed.port ? parseInt(parsed.port, 10) : 6379,
-      username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
-      password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
+      username: parsed.username
+        ? decodeURIComponent(parsed.username)
+        : undefined,
+      password: parsed.password
+        ? decodeURIComponent(parsed.password)
+        : undefined,
     };
   } catch {
     // Fallback if URL is invalid or in a different format

@@ -11,7 +11,11 @@ export class SubmitQuizDto {
 
   @IsArray()
   @Allow()
-  answers!: Array<{ quizId: string; chosenAnswer: unknown; responseTimeMs?: number }>;
+  answers!: Array<{
+    quizId: string;
+    chosenAnswer: unknown;
+    responseTimeMs?: number;
+  }>;
 }
 
 export class GradeEssayAnswerDto {

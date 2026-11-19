@@ -27,7 +27,9 @@ export type MicroContentGradingResult = {
 };
 
 /** Kiểm payload theo contracts/integration-events/v1/micro-content-grading-result.json. */
-export function parseMicroContentGradingResult(payload: unknown): MicroContentGradingResult {
+export function parseMicroContentGradingResult(
+  payload: unknown,
+): MicroContentGradingResult {
   const label = 'MICRO_CONTENT_GRADING_RESULT';
   if (!isPlainObject(payload)) {
     throw new InvalidWorkerResultError(`${label}: payload must be an object`);
@@ -35,9 +37,15 @@ export function parseMicroContentGradingResult(payload: unknown): MicroContentGr
   const keys = ['attempt_id', 'course_id', 'micro_content_id', 'answers'];
   const extra = Object.keys(payload).filter((key) => !keys.includes(key));
   if (extra.length) {
-    throw new InvalidWorkerResultError(`${label}: unexpected fields ${extra.join(', ')}`);
+    throw new InvalidWorkerResultError(
+      `${label}: unexpected fields ${extra.join(', ')}`,
+    );
   }
-  const { attempt_id: attemptId, course_id: courseId, micro_content_id: microContentId } = payload;
+  const {
+    attempt_id: attemptId,
+    course_id: courseId,
+    micro_content_id: microContentId,
+  } = payload;
   if (!isUuid(attemptId) || !isUuid(courseId) || !isUuid(microContentId)) {
     throw new InvalidWorkerResultError(
       `${label}: attempt_id, course_id and micro_content_id must be uuids`,
@@ -56,12 +64,17 @@ export function parseMicroContentGradingResult(payload: unknown): MicroContentGr
  * viên thì cả lượt chờ giảng viên, còn câu chờ AI thì cả lượt chờ.
  */
 export function attemptGradingStatus(statuses: string[]) {
-  if (statuses.includes(GRADING_STATUS.needsReview)) return GRADING_STATUS.needsReview;
+  if (statuses.includes(GRADING_STATUS.needsReview))
+    return GRADING_STATUS.needsReview;
   if (statuses.includes(GRADING_STATUS.pending)) return GRADING_STATUS.pending;
   return GRADING_STATUS.graded;
 }
 
-type LockedAttempt = { micro_content_id: string; course_id: string; passing_score: number };
+type LockedAttempt = {
+  micro_content_id: string;
+  course_id: string;
+  passing_score: number;
+};
 
 /** Khoá dòng lượt nộp (cùng khoá handle() và hook): hai kết quả không tính tổng chồng nhau. */
 async function lockAttempt(
@@ -143,7 +156,9 @@ export class MicroContentGradingResultHandler implements WorkerResultHandler {
         select: { answer_id: true, attempt_id: true },
       });
       const owned = new Set(
-        answers.filter((a) => a.attempt_id === result.attemptId).map((a) => a.answer_id),
+        answers
+          .filter((a) => a.attempt_id === result.attemptId)
+          .map((a) => a.answer_id),
       );
       const stray = ids.filter((id) => !owned.has(id));
       if (stray.length) {
@@ -167,9 +182,14 @@ export class MicroContentGradingResultHandler implements WorkerResultHandler {
         if (grade.status === GRADING_STATUS.graded) graded += 1;
         else needsReview += 1;
       }
-      if (!graded && !needsReview) return { graded, needsReview, attempt: null };
+      if (!graded && !needsReview)
+        return { graded, needsReview, attempt: null };
 
-      const totals = await recomputeAttempt(tx, result.attemptId, attempt.passing_score);
+      const totals = await recomputeAttempt(
+        tx,
+        result.attemptId,
+        attempt.passing_score,
+      );
       return { graded, needsReview, attempt: totals };
     });
     if (!outcome) {

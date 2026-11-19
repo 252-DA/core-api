@@ -49,9 +49,11 @@ function setup() {
     },
     chapters: {
       findFirst: jest.fn().mockResolvedValue({ chapter_id: CHAPTER }),
-      findMany: jest.fn().mockResolvedValue([
-        { chapter_id: CHAPTER, chapter_los: [{ lo_id: LO }] },
-      ]),
+      findMany: jest
+        .fn()
+        .mockResolvedValue([
+          { chapter_id: CHAPTER, chapter_los: [{ lo_id: LO }] },
+        ]),
     },
     quiz_items: { findMany: jest.fn().mockResolvedValue(items) },
     lti_resource_links: {
@@ -60,9 +62,11 @@ function setup() {
     },
     course_memberships: { count: jest.fn().mockResolvedValue(0) },
     lms_user_mappings: {
-      findMany: jest.fn().mockResolvedValue([
-        { internal_user_id: USER, display_name: 'Test Student' },
-      ]),
+      findMany: jest
+        .fn()
+        .mockResolvedValue([
+          { internal_user_id: USER, display_name: 'Test Student' },
+        ]),
       findUnique: jest.fn().mockResolvedValue({ display_name: 'Test Student' }),
     },
     learning_outcomes: { findMany: jest.fn().mockResolvedValue([]) },
@@ -245,10 +249,9 @@ describe('Canvas quiz sets', () => {
       'AWAITING_GRADE',
       'AWAITING_GRADE',
     ]);
-    expect(rows.map((r: { grading_status: string }) => r.grading_status)).toEqual([
-      'GRADED',
-      'PENDING',
-    ]);
+    expect(
+      rows.map((r: { grading_status: string }) => r.grading_status),
+    ).toEqual(['GRADED', 'PENDING']);
     // Đề chấm lấy từ snapshot của quiz set, ghi cùng bài làm: sửa câu trong
     // ngân hàng sau đó không đổi cách worker chấm bài này.
     expect(rows[0].grading_input).toBeUndefined();
@@ -303,12 +306,22 @@ describe('Canvas quiz sets', () => {
         row('s2', Q2, true, '2026-09-27T08:00:00Z', 'PENDING'),
       ]);
       const result = await service.results(claims, { quizSetId: SET });
-      expect(prisma.quiz_attempts.findMany.mock.calls[0][0].where.user_id).toBe(USER);
+      expect(prisma.quiz_attempts.findMany.mock.calls[0][0].where.user_id).toBe(
+        USER,
+      );
       expect(result).toMatchObject({
         view: 'learner',
         attempts: [
-          expect.objectContaining({ submissionId: 's1', score: 100, sync: 'POSTED' }),
-          expect.objectContaining({ submissionId: 's2', score: 50, sync: 'SENDING' }),
+          expect.objectContaining({
+            submissionId: 's1',
+            score: 100,
+            sync: 'POSTED',
+          }),
+          expect.objectContaining({
+            submissionId: 's2',
+            score: 50,
+            sync: 'SENDING',
+          }),
         ],
         bestScore: 100,
         sync: 'SENDING',
@@ -334,8 +347,12 @@ describe('Canvas quiz sets', () => {
         students: [expect.objectContaining({ sync: 'NEEDS_REVIEW' })],
         summary: { needsReview: 1 },
       });
-      const items = (result as { items: Array<{ quiz_id: string; answered: number }> }).items;
-      expect(items.find((i) => i.quiz_id === Q2)).toMatchObject({ answered: 0 });
+      const items = (
+        result as { items: Array<{ quiz_id: string; answered: number }> }
+      ).items;
+      expect(items.find((i) => i.quiz_id === Q2)).toMatchObject({
+        answered: 0,
+      });
     });
 
     it('báo chờ publish khi poller AGS đang bị Canvas từ chối vì bài tập chưa publish', async () => {
@@ -361,17 +378,35 @@ describe('Canvas quiz sets', () => {
         { ...claims, roles: ['instructor'] },
         { quizSetId: SET },
       );
-      expect(prisma.quiz_attempts.findMany.mock.calls[0][0].where.user_id).toBeUndefined();
+      expect(
+        prisma.quiz_attempts.findMany.mock.calls[0][0].where.user_id,
+      ).toBeUndefined();
       expect(result).toMatchObject({
         view: 'staff',
         summary: { students: 1, submissions: 2, averageBest: 100 },
         students: [
-          { name: 'Test Student', attempts: 2, bestScore: 100, latestScore: 50, sync: 'POSTED' },
+          {
+            name: 'Test Student',
+            attempts: 2,
+            bestScore: 100,
+            latestScore: 50,
+            sync: 'POSTED',
+          },
         ],
       });
-      const items = (result as { items: Array<{ quiz_id: string; correct: number; answered: number }> }).items;
-      expect(items.find((i) => i.quiz_id === Q1)).toMatchObject({ answered: 1, correct: 0 });
-      expect(items.find((i) => i.quiz_id === Q2)).toMatchObject({ answered: 1, correct: 1 });
+      const items = (
+        result as {
+          items: Array<{ quiz_id: string; correct: number; answered: number }>;
+        }
+      ).items;
+      expect(items.find((i) => i.quiz_id === Q1)).toMatchObject({
+        answered: 1,
+        correct: 0,
+      });
+      expect(items.find((i) => i.quiz_id === Q2)).toMatchObject({
+        answered: 1,
+        correct: 1,
+      });
     });
 
     describe('cả lớp', () => {
@@ -402,8 +437,16 @@ describe('Canvas quiz sets', () => {
           summary: Record<string, unknown>;
         };
         expect(roster.activeLearnerIds).toHaveBeenCalledWith(COURSE);
-        expect(result.students.map((s) => s.name)).toEqual(['An', 'Bình', 'Cường']);
-        expect(result.students[0]).toMatchObject({ attempts: 1, bestScore: 100, inClass: true });
+        expect(result.students.map((s) => s.name)).toEqual([
+          'An',
+          'Bình',
+          'Cường',
+        ]);
+        expect(result.students[0]).toMatchObject({
+          attempts: 1,
+          bestScore: 100,
+          inClass: true,
+        });
         expect(result.students[1]).toEqual({
           userId: BINH,
           name: 'Bình',
@@ -423,7 +466,9 @@ describe('Canvas quiz sets', () => {
           failed: 0,
         });
         // Tên của cả lớp được tra, không chỉ của người đã làm bài.
-        const lookup = prisma.lms_user_mappings.findMany.mock.calls[0][0].where.internal_user_id.in;
+        const lookup =
+          prisma.lms_user_mappings.findMany.mock.calls[0][0].where
+            .internal_user_id.in;
         expect(lookup).toEqual(expect.arrayContaining([USER, BINH, CUONG]));
       });
 
@@ -440,7 +485,11 @@ describe('Canvas quiz sets', () => {
           { ...claims, roles: ['instructor'] },
           { quizSetId: SET },
         )) as {
-          students: Array<{ userId: string; inClass: boolean; attempts: number }>;
+          students: Array<{
+            userId: string;
+            inClass: boolean;
+            attempts: number;
+          }>;
           summary: Record<string, unknown>;
         };
         expect(result.students.find((s) => s.userId === LEFT)).toMatchObject({
@@ -539,8 +588,14 @@ describe('Canvas quiz sets', () => {
         resourceLinkId: LINK,
       });
       const data = prisma.quiz_set_sessions.create.mock.calls[0][0].data;
-      expect(data.expires_at.getTime() - data.started_at.getTime()).toBe(30 * 60_000);
-      expect(result).toMatchObject({ sessionId: SESSION, attemptNumber: 1, maxAttempts: 1 });
+      expect(data.expires_at.getTime() - data.started_at.getTime()).toBe(
+        30 * 60_000,
+      );
+      expect(result).toMatchObject({
+        sessionId: SESSION,
+        attemptNumber: 1,
+        maxAttempts: 1,
+      });
       expect(JSON.stringify(result)).not.toContain('correct_answer');
       expect(JSON.stringify(result)).not.toContain('Because');
     });
@@ -549,7 +604,10 @@ describe('Canvas quiz sets', () => {
       const { service, prisma } = examSetup();
       prisma.quiz_set_sessions.findFirst.mockResolvedValue(openSession());
       prisma.quiz_set_sessions.count.mockResolvedValue(1);
-      const result = await service.start(claims, { quizSetId: SET, resourceLinkId: LINK });
+      const result = await service.start(claims, {
+        quizSetId: SET,
+        resourceLinkId: LINK,
+      });
       expect(prisma.quiz_set_sessions.create).not.toHaveBeenCalled();
       expect(result.items.map((i) => i.quiz_id)).toEqual([Q2, Q1]);
       expect(result.items[0].options).toEqual(['no', 'yes']);
@@ -565,13 +623,21 @@ describe('Canvas quiz sets', () => {
         service.start(claims, { quizSetId: SET, resourceLinkId: LINK }),
       ).rejects.toThrow('hết số lần');
       expect(prisma.quiz_set_sessions.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { session_id: SESSION, ended_at: null } }),
+        expect.objectContaining({
+          where: { session_id: SESSION, ended_at: null },
+        }),
       );
     });
 
     it.each([
       [{ available_from: future(2) }, 'chưa tới giờ'],
-      [{ available_until: new Date(Date.now() - 1000), due_at: new Date(Date.now() - 2000) }, 'đã đóng'],
+      [
+        {
+          available_until: new Date(Date.now() - 1000),
+          due_at: new Date(Date.now() - 2000),
+        },
+        'đã đóng',
+      ],
     ])('không cho bắt đầu ngoài khung giờ %#', async (overrides, message) => {
       const { service, prisma } = examSetup(overrides);
       await expect(
@@ -590,9 +656,16 @@ describe('Canvas quiz sets', () => {
         sessionId: SESSION,
         answers: [{ quizId: Q1, chosenAnswer: 'yes' }],
       });
-      expect(result).toMatchObject({ score: 50, totalCorrect: 1, perItem: [], revealed: false });
+      expect(result).toMatchObject({
+        score: 50,
+        totalCorrect: 1,
+        perItem: [],
+        revealed: false,
+      });
       const rows = prisma.quiz_attempts.createMany.mock.calls[0][0].data;
-      expect(rows.find((r: { quiz_id: string }) => r.quiz_id === Q2)).toMatchObject({
+      expect(
+        rows.find((r: { quiz_id: string }) => r.quiz_id === Q2),
+      ).toMatchObject({
         is_correct: false,
         score: 0,
       });
@@ -637,8 +710,12 @@ describe('Canvas quiz sets', () => {
       };
       const open = examSetup();
       open.prisma.quiz_attempts.findMany.mockResolvedValue([row]);
-      open.prisma.quiz_set_sessions.findMany.mockResolvedValue([openSession({ ended_at: new Date() })]);
-      expect(await open.service.results(claims, { quizSetId: SET })).toMatchObject({
+      open.prisma.quiz_set_sessions.findMany.mockResolvedValue([
+        openSession({ ended_at: new Date() }),
+      ]);
+      expect(
+        await open.service.results(claims, { quizSetId: SET }),
+      ).toMatchObject({
         revealed: false,
         review: null,
         attemptsUsed: 1,
@@ -647,8 +724,14 @@ describe('Canvas quiz sets', () => {
 
       const closed = examSetup({ due_at: new Date(Date.now() - 2 * 60_000) });
       closed.prisma.quiz_attempts.findMany.mockResolvedValue([row]);
-      const result = (await closed.service.results(claims, { quizSetId: SET })) as {
-        review: Array<{ quiz_id: string; chosen: unknown; correct_answer: unknown }>;
+      const result = (await closed.service.results(claims, {
+        quizSetId: SET,
+      })) as {
+        review: Array<{
+          quiz_id: string;
+          chosen: unknown;
+          correct_answer: unknown;
+        }>;
       };
       expect(result.review.find((r) => r.quiz_id === Q1)).toMatchObject({
         chosen: 'no',
@@ -692,7 +775,12 @@ describe('Canvas quiz sets', () => {
       ctx.prisma.lti_resource_links.findMany.mockResolvedValue([resourceLink]);
       ctx.prisma.quiz_set_sessions.create.mockImplementation(
         ({ data }: { data: Record<string, unknown> }) =>
-          Promise.resolve({ item_order: [], ended_at: null, ...data, session_id: SESSION }),
+          Promise.resolve({
+            item_order: [],
+            ended_at: null,
+            ...data,
+            session_id: SESSION,
+          }),
       );
       return ctx;
     }
@@ -707,11 +795,16 @@ describe('Canvas quiz sets', () => {
 
     it('không có resource link thì giữ cài đặt của quiz set', async () => {
       const { service } = canvasSetup();
-      expect((await service.get(claims, SET)).settings.pointsPossible).toBe(100);
+      expect((await service.get(claims, SET)).settings.pointsPossible).toBe(
+        100,
+      );
     });
 
     it('số lần làm theo Canvas: tăng lên thì được làm thêm', async () => {
-      const { service, prisma } = canvasSetup({}, { assignment_allowed_attempts: 3 });
+      const { service, prisma } = canvasSetup(
+        {},
+        { assignment_allowed_attempts: 3 },
+      );
       prisma.quiz_set_sessions.count.mockResolvedValue(1);
       await expect(start(service)).resolves.toMatchObject({
         attemptNumber: 2,
@@ -775,7 +868,9 @@ describe('Canvas quiz sets', () => {
         { assignment_lock_at: lock, assignment_due_at: lock },
       );
       await start(service);
-      expect(prisma.quiz_set_sessions.create.mock.calls[0][0].data.expires_at).toEqual(lock);
+      expect(
+        prisma.quiz_set_sessions.create.mock.calls[0][0].data.expires_at,
+      ).toEqual(lock);
     });
 
     it('chưa từng đọc cài đặt từ Canvas thì dùng cài đặt của quiz set', async () => {
@@ -805,13 +900,19 @@ describe('Canvas quiz sets', () => {
     });
 
     it('trang kết quả dùng cài đặt của Assignment đang mở', async () => {
-      const { service, prisma } = canvasSetup({}, { assignment_allowed_attempts: 4 });
+      const { service, prisma } = canvasSetup(
+        {},
+        { assignment_allowed_attempts: 4 },
+      );
       prisma.quiz_attempts.findMany.mockResolvedValue([]);
       const result = (await service.results(claims, {
         quizSetId: SET,
         resourceLinkId: LINK,
       })) as { settings: { maxAttempts: number; pointsPossible: number } };
-      expect(result.settings).toMatchObject({ maxAttempts: 4, pointsPossible: 10 });
+      expect(result.settings).toMatchObject({
+        maxAttempts: 4,
+        pointsPossible: 10,
+      });
     });
   });
 
@@ -860,8 +961,14 @@ describe('Canvas quiz sets', () => {
         display_name: 'Nguyễn Văn A',
       });
       ctx.prisma.quiz_attempts.groupBy.mockResolvedValue([
-        { submission_id: 'truoc', _min: { attempted_at: new Date('2026-11-11T08:00:00Z') } },
-        { submission_id: SUBMISSION, _min: { attempted_at: new Date('2026-11-12T08:00:00Z') } },
+        {
+          submission_id: 'truoc',
+          _min: { attempted_at: new Date('2026-11-11T08:00:00Z') },
+        },
+        {
+          submission_id: SUBMISSION,
+          _min: { attempted_at: new Date('2026-11-12T08:00:00Z') },
+        },
       ]);
       return ctx;
     }
@@ -873,8 +980,13 @@ describe('Canvas quiz sets', () => {
         submissionId: SUBMISSION,
       });
       // Chỉ giảng viên/trợ giảng của khóa qua được kiểm tra quyền.
-      expect(authz.assertCourseAccess).toHaveBeenCalledWith(staff, COURSE, ['instructor', 'ta']);
-      expect(prisma.quiz_attempts.findMany.mock.calls[0][0].where).toMatchObject({
+      expect(authz.assertCourseAccess).toHaveBeenCalledWith(staff, COURSE, [
+        'instructor',
+        'ta',
+      ]);
+      expect(
+        prisma.quiz_attempts.findMany.mock.calls[0][0].where,
+      ).toMatchObject({
         submission_id: SUBMISSION,
         resource_link_id: { in: [LINK] },
       });
@@ -903,7 +1015,10 @@ describe('Canvas quiz sets', () => {
       const { service, authz } = detailSetup();
       authz.assertCourseAccess.mockRejectedValue(new Error('forbidden'));
       await expect(
-        service.submissionDetail(claims, { quizSetId: SET, submissionId: SUBMISSION }),
+        service.submissionDetail(claims, {
+          quizSetId: SET,
+          submissionId: SUBMISSION,
+        }),
       ).rejects.toThrow('forbidden');
     });
 
@@ -911,7 +1026,10 @@ describe('Canvas quiz sets', () => {
       const { service, prisma } = detailSetup();
       prisma.quiz_attempts.findMany.mockResolvedValue([]);
       await expect(
-        service.submissionDetail(staff, { quizSetId: SET, submissionId: SUBMISSION }),
+        service.submissionDetail(staff, {
+          quizSetId: SET,
+          submissionId: SUBMISSION,
+        }),
       ).rejects.toThrow('Không tìm thấy bài làm');
     });
 
@@ -919,7 +1037,10 @@ describe('Canvas quiz sets', () => {
       const { service, prisma } = detailSetup();
       prisma.lti_resource_links.findMany.mockResolvedValue([]);
       await expect(
-        service.submissionDetail(staff, { quizSetId: SET, submissionId: SUBMISSION }),
+        service.submissionDetail(staff, {
+          quizSetId: SET,
+          submissionId: SUBMISSION,
+        }),
       ).rejects.toThrow('Không tìm thấy bài làm');
       expect(prisma.quiz_attempts.findMany).not.toHaveBeenCalled();
     });
@@ -927,14 +1048,20 @@ describe('Canvas quiz sets', () => {
     it('từ chối mã bài làm không phải UUID trước khi chạm DB', async () => {
       const { service, prisma } = detailSetup();
       await expect(
-        service.submissionDetail(staff, { quizSetId: SET, submissionId: "x' OR 1=1" }),
+        service.submissionDetail(staff, {
+          quizSetId: SET,
+          submissionId: "x' OR 1=1",
+        }),
       ).rejects.toThrow('không hợp lệ');
       expect(prisma.quiz_sets.findFirst).not.toHaveBeenCalled();
     });
   });
 
   describe('đề nhiều chương từ trang Soạn đề', () => {
-    const create = (service: QuizSetService, extra: Record<string, unknown> = {}) =>
+    const create = (
+      service: QuizSetService,
+      extra: Record<string, unknown> = {},
+    ) =>
       service.create(claims, {
         courseId: COURSE,
         chapterIds: [CHAPTER, CHAPTER2],
@@ -962,7 +1089,9 @@ describe('Canvas quiz sets', () => {
         chapter_ids: [CHAPTER, CHAPTER2],
         blueprint: { cells: [{ lo_id: LO, bloom_level: 3, count: 2 }] },
       });
-      expect(prisma.quiz_items.findMany.mock.calls[0][0].where.learning_outcomes).toEqual({
+      expect(
+        prisma.quiz_items.findMany.mock.calls[0][0].where.learning_outcomes,
+      ).toEqual({
         deleted_at: null,
         chapter_los: { some: { chapter_id: { in: [CHAPTER, CHAPTER2] } } },
       });
@@ -980,7 +1109,10 @@ describe('Canvas quiz sets', () => {
       ]);
       await expect(
         create(service, {
-          blueprint: { cells: [{ lo_id: Q1, bloom_level: 2, count: 1 }], source_document_ids: [] },
+          blueprint: {
+            cells: [{ lo_id: Q1, bloom_level: 2, count: 1 }],
+            source_document_ids: [],
+          },
         }),
       ).rejects.toThrow('LO không thuộc');
       expect(prisma.quiz_sets.create).not.toHaveBeenCalled();

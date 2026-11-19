@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import type { video_assets } from '@prisma/client';
 import type { BffClaims } from '../../auth/bff-claims';
 import { VideoAssetService } from './video-asset.service';
@@ -55,26 +59,47 @@ function setup(memberships: Membership[] = []) {
     video_assets: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
-      create: jest.fn(async ({ data }: { data: object }) => ({ asset_id: 'fork-1', ...data })),
-      update: jest.fn(async ({ data }: { data: object }) => ({ ...asset(), ...data })),
+      create: jest.fn(async ({ data }: { data: object }) => ({
+        asset_id: 'fork-1',
+        ...data,
+      })),
+      update: jest.fn(async ({ data }: { data: object }) => ({
+        ...asset(),
+        ...data,
+      })),
       updateMany: jest.fn(),
     },
     micro_contents: { findFirst: jest.fn(), update: jest.fn() },
     $transaction: jest.fn(),
   };
-  prisma.$transaction.mockImplementation((fn: (tx: typeof prisma) => unknown) => fn(prisma));
+  prisma.$transaction.mockImplementation((fn: (tx: typeof prisma) => unknown) =>
+    fn(prisma),
+  );
   // Giống AuthzService: admin nền tảng qua luôn, còn lại phải có membership đúng vai trò.
   const authz = {
-    assertCourseAccess: jest.fn(async (c: BffClaims, courseId: string, roles?: string[]) => {
-      if (c.scope === 'admin') return;
-      const ok = memberships.some(
-        (m) => m.sub === c.sub && m.courseId === courseId && (!roles?.length || roles.includes(m.role)),
-      );
-      if (!ok) throw new ForbiddenException('No membership for this course');
-    }),
+    assertCourseAccess: jest.fn(
+      async (c: BffClaims, courseId: string, roles?: string[]) => {
+        if (c.scope === 'admin') return;
+        const ok = memberships.some(
+          (m) =>
+            m.sub === c.sub &&
+            m.courseId === courseId &&
+            (!roles?.length || roles.includes(m.role)),
+        );
+        if (!ok) throw new ForbiddenException('No membership for this course');
+      },
+    ),
   };
-  const storage = { createPresignedDownloadUrl: jest.fn().mockResolvedValue('https://storage/get') };
-  const service = new VideoAssetService(prisma as never, authz as never, storage as never);
+  const storage = {
+    createPresignedDownloadUrl: jest
+      .fn()
+      .mockResolvedValue('https://storage/get'),
+  };
+  const service = new VideoAssetService(
+    prisma as never,
+    authz as never,
+    storage as never,
+  );
   return { service, prisma, authz, storage };
 }
 
@@ -83,45 +108,82 @@ describe('VideoAssetService', () => {
     it('video riêng tư của người khác coi như không tồn tại', async () => {
       const { service, prisma } = setup();
       prisma.video_assets.findFirst.mockResolvedValue(asset());
-      await expect(service.getAsset(claims(other), { assetId: 'asset-1' })).rejects.toThrow(NotFoundException);
-      await expect(service.getAsset(claims(owner), { assetId: 'asset-1' })).resolves.toMatchObject({
+      await expect(
+        service.getAsset(claims(other), { assetId: 'asset-1' }),
+      ).rejects.toThrow(NotFoundException);
+      await expect(
+        service.getAsset(claims(owner), { assetId: 'asset-1' }),
+      ).resolves.toMatchObject({
         asset_id: 'asset-1',
       });
     });
 
     it('video COURSE chỉ thành viên của khoá đó xem được', async () => {
-      const { service, prisma } = setup([{ sub: other, courseId: courseA, role: 'learner' }]);
-      prisma.video_assets.findFirst.mockResolvedValue(asset({ visibility: 'COURSE' }));
-      await expect(service.getAsset(claims(other), { assetId: 'asset-1' })).resolves.toBeTruthy();
+      const { service, prisma } = setup([
+        { sub: other, courseId: courseA, role: 'learner' },
+      ]);
+      prisma.video_assets.findFirst.mockResolvedValue(
+        asset({ visibility: 'COURSE' }),
+      );
+      await expect(
+        service.getAsset(claims(other), { assetId: 'asset-1' }),
+      ).resolves.toBeTruthy();
       const outsider = '00000000-0000-0000-0000-00000000000c';
-      await expect(service.getAsset(claims(outsider), { assetId: 'asset-1' })).rejects.toThrow(NotFoundException);
+      await expect(
+        service.getAsset(claims(outsider), { assetId: 'asset-1' }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('forkAsset', () => {
     it('không fork được video riêng tư của người khác', async () => {
-      const { service, prisma } = setup([{ sub: other, courseId: courseB, role: 'instructor' }]);
+      const { service, prisma } = setup([
+        { sub: other, courseId: courseB, role: 'instructor' },
+      ]);
       prisma.video_assets.findFirst.mockResolvedValue(asset());
       await expect(
-        service.forkAsset(claims(other), { assetId: 'asset-1', targetCourseId: courseB }),
+        service.forkAsset(claims(other), {
+          assetId: 'asset-1',
+          targetCourseId: courseB,
+        }),
       ).rejects.toThrow(NotFoundException);
       expect(prisma.video_assets.create).not.toHaveBeenCalled();
     });
 
     it('fork video xem được vào khoá mình dạy: bản sao thuộc khoá đích', async () => {
-      const { service, prisma } = setup([{ sub: other, courseId: courseB, role: 'instructor' }]);
-      prisma.video_assets.findFirst.mockResolvedValue(asset({ visibility: 'PUBLIC' }));
-      const forked = await service.forkAsset(claims(other), { assetId: 'asset-1', targetCourseId: courseB });
-      expect(forked).toMatchObject({ owner_id: other, course_id: courseB, visibility: 'COURSE' });
+      const { service, prisma } = setup([
+        { sub: other, courseId: courseB, role: 'instructor' },
+      ]);
+      prisma.video_assets.findFirst.mockResolvedValue(
+        asset({ visibility: 'PUBLIC' }),
+      );
+      const forked = await service.forkAsset(claims(other), {
+        assetId: 'asset-1',
+        targetCourseId: courseB,
+      });
+      expect(forked).toMatchObject({
+        owner_id: other,
+        course_id: courseB,
+        visibility: 'COURSE',
+      });
     });
 
     it('khoá đích phải là khoá mình là nhân sự; không đích thì bản sao không gắn khoá nào', async () => {
-      const { service, prisma } = setup([{ sub: other, courseId: courseB, role: 'learner' }]);
-      prisma.video_assets.findFirst.mockResolvedValue(asset({ visibility: 'PUBLIC' }));
+      const { service, prisma } = setup([
+        { sub: other, courseId: courseB, role: 'learner' },
+      ]);
+      prisma.video_assets.findFirst.mockResolvedValue(
+        asset({ visibility: 'PUBLIC' }),
+      );
       await expect(
-        service.forkAsset(claims(other), { assetId: 'asset-1', targetCourseId: courseB }),
+        service.forkAsset(claims(other), {
+          assetId: 'asset-1',
+          targetCourseId: courseB,
+        }),
       ).rejects.toThrow(ForbiddenException);
-      await expect(service.forkAsset(claims(other), { assetId: 'asset-1' })).resolves.toMatchObject({
+      await expect(
+        service.forkAsset(claims(other), { assetId: 'asset-1' }),
+      ).resolves.toMatchObject({
         course_id: null,
         visibility: 'PRIVATE',
       });
@@ -130,12 +192,22 @@ describe('VideoAssetService', () => {
 
   describe('getStreamUrl', () => {
     it('học viên phát được video riêng tư qua bài micro-content của khoá mình', async () => {
-      const { service, prisma } = setup([{ sub: other, courseId: courseA, role: 'learner' }]);
+      const { service, prisma } = setup([
+        { sub: other, courseId: courseA, role: 'learner' },
+      ]);
       prisma.video_assets.findUnique.mockResolvedValue(asset());
-      prisma.micro_contents.findFirst.mockResolvedValue({ micro_content_id: microContentId, course_id: courseA });
-      await expect(service.getStreamUrl(claims(other), { assetId: 'asset-1' })).rejects.toThrow(ForbiddenException);
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseA,
+      });
       await expect(
-        service.getStreamUrl(claims(other), { assetId: 'asset-1', microContentId }),
+        service.getStreamUrl(claims(other), { assetId: 'asset-1' }),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.getStreamUrl(claims(other), {
+          assetId: 'asset-1',
+          microContentId,
+        }),
       ).resolves.toMatchObject({ url: 'https://storage/get' });
     });
   });
@@ -154,9 +226,9 @@ describe('VideoAssetService', () => {
     it('thiếu assetId thì báo lỗi, không tự hiểu là gỡ video', async () => {
       const { service, prisma } = setup(staff);
       withLesson(prisma);
-      await expect(service.attachToMicroContent(claims(other), { microContentId })).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.attachToMicroContent(claims(other), { microContentId }),
+      ).rejects.toThrow(BadRequestException);
       expect(prisma.micro_contents.update).not.toHaveBeenCalled();
     });
 
@@ -165,7 +237,10 @@ describe('VideoAssetService', () => {
       withLesson(prisma);
       prisma.video_assets.findFirst.mockResolvedValue(asset());
       await expect(
-        service.attachToMicroContent(claims(other), { microContentId, assetId: 'asset-1' }),
+        service.attachToMicroContent(claims(other), {
+          microContentId,
+          assetId: 'asset-1',
+        }),
       ).rejects.toThrow(NotFoundException);
       expect(prisma.micro_contents.update).not.toHaveBeenCalled();
     });
@@ -173,11 +248,19 @@ describe('VideoAssetService', () => {
     it('gắn video xem được vào bài, null thì gỡ', async () => {
       const { service, prisma } = setup(staff);
       withLesson(prisma);
-      prisma.video_assets.findFirst.mockResolvedValue(asset({ visibility: 'COURSE' }));
-      await service.attachToMicroContent(claims(other), { microContentId, assetId: 'asset-1' });
+      prisma.video_assets.findFirst.mockResolvedValue(
+        asset({ visibility: 'COURSE' }),
+      );
+      await service.attachToMicroContent(claims(other), {
+        microContentId,
+        assetId: 'asset-1',
+      });
       expect(prisma.micro_contents.update).toHaveBeenLastCalledWith({
         where: { micro_content_id: microContentId },
-        data: expect.objectContaining({ video_asset_id: 'asset-1', video_status: 'READY' }),
+        data: expect.objectContaining({
+          video_asset_id: 'asset-1',
+          video_status: 'READY',
+        }),
       });
 
       prisma.micro_contents.findFirst.mockResolvedValue({
@@ -185,14 +268,20 @@ describe('VideoAssetService', () => {
         video_asset_id: 'asset-1',
         course_id: courseA,
       });
-      await service.attachToMicroContent(claims(other), { microContentId, assetId: null });
+      await service.attachToMicroContent(claims(other), {
+        microContentId,
+        assetId: null,
+      });
       expect(prisma.video_assets.updateMany).toHaveBeenCalledWith({
         where: { asset_id: 'asset-1' },
         data: { usage_count: { decrement: 1 } },
       });
       expect(prisma.micro_contents.update).toHaveBeenLastCalledWith({
         where: { micro_content_id: microContentId },
-        data: expect.objectContaining({ video_asset_id: null, video_status: 'NONE' }),
+        data: expect.objectContaining({
+          video_asset_id: null,
+          video_status: 'NONE',
+        }),
       });
     });
   });
@@ -205,10 +294,16 @@ describe('VideoAssetService', () => {
         service.updateAsset(claims(other), { assetId: 'asset-1', title: 'x' }),
       ).rejects.toThrow(ForbiddenException);
       await expect(
-        service.updateAsset(claims(owner), { assetId: 'asset-1', visibility: 'EVERYONE' }),
+        service.updateAsset(claims(owner), {
+          assetId: 'asset-1',
+          visibility: 'EVERYONE',
+        }),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.updateAsset(claims(owner), { assetId: 'asset-1', visibility: 'PUBLIC' }),
+        service.updateAsset(claims(owner), {
+          assetId: 'asset-1',
+          visibility: 'PUBLIC',
+        }),
       ).resolves.toMatchObject({ visibility: 'PUBLIC' });
     });
   });

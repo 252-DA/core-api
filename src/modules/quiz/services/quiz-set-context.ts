@@ -62,9 +62,7 @@ export async function loadCanvasQuizContext(
   const learningOutcomes = (chapter?.chapter_los ?? [])
     .map((l) => l.learning_outcomes)
     .filter((l) => !l.deleted_at)
-    .sort((a, b) =>
-      a.code.localeCompare(b.code, undefined, { numeric: true }),
-    );
+    .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   const [quizItems, documents] = chapter
     ? await Promise.all([
         prisma.quiz_items.findMany({
@@ -135,7 +133,9 @@ export async function loadQuizBuilderContext(
   prisma: PrismaService,
   body: { courseId: string; loIds?: string[] },
 ) {
-  const loIds = Array.isArray(body.loIds) ? body.loIds.filter(isUuid).slice(0, 200) : [];
+  const loIds = Array.isArray(body.loIds)
+    ? body.loIds.filter(isUuid).slice(0, 200)
+    : [];
   const [chapters, documents, sets, quizItems] = await Promise.all([
     prisma.chapters.findMany({
       where: { course_id: body.courseId, deleted_at: null },
@@ -161,7 +161,11 @@ export async function loadQuizBuilderContext(
     }),
     loIds.length
       ? prisma.quiz_items.findMany({
-          where: { course_id: body.courseId, lo_id: { in: loIds }, deleted_at: null },
+          where: {
+            course_id: body.courseId,
+            lo_id: { in: loIds },
+            deleted_at: null,
+          },
           include: { learning_outcomes: { select: { code: true } } },
           orderBy: { created_at: 'desc' },
           take: 500,
@@ -177,7 +181,9 @@ export async function loadQuizBuilderContext(
       learningOutcomes: c.chapter_los
         .map((l) => l.learning_outcomes)
         .filter((lo) => !lo.deleted_at)
-        .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+        .sort((a, b) =>
+          a.code.localeCompare(b.code, undefined, { numeric: true }),
+        )
         .map((lo) => ({
           lo_id: lo.lo_id,
           code: lo.code,
@@ -203,4 +209,3 @@ export async function loadQuizBuilderContext(
     })),
   };
 }
-

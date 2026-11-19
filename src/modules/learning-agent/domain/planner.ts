@@ -74,7 +74,10 @@ export interface PlannerInput {
   today: { answered: number; reviewsAnswered: number };
 }
 
-export type ResourceIssue = 'missing_source' | 'missing_review_item' | 'missing_items';
+export type ResourceIssue =
+  | 'missing_source'
+  | 'missing_review_item'
+  | 'missing_items';
 
 export interface Decision {
   action: AgentAction;
@@ -92,17 +95,24 @@ export interface Decision {
 function isStuck(lo: PlannerLo, config: PlannerConfig) {
   return (
     lo.episodeObservations >= config.stuckEpisodeObservations ||
-    (lo.sourceViews >= config.stuckSourceViews && lo.wrongSinceSource >= config.wrongStreakForSource)
+    (lo.sourceViews >= config.stuckSourceViews &&
+      lo.wrongSinceSource >= config.wrongStreakForSource)
   );
 }
 
-export function plan(input: PlannerInput, config: PlannerConfig = PLANNER_DEFAULTS): Decision {
+export function plan(
+  input: PlannerInput,
+  config: PlannerConfig = PLANNER_DEFAULTS,
+): Decision {
   const issues: Decision['issues'] = [];
   const active = input.scope.filter((lo) => !lo.paused);
   const byId = new Map(input.scope.map((lo) => [lo.loId, lo]));
   // LO đang xử lý: LO vừa làm nếu còn trong phạm vi, không thì LO chưa đạt đầu tiên.
-  const last = input.currentLoId ? (active.find((lo) => lo.loId === input.currentLoId) ?? null) : null;
-  const working = last && !last.mastered ? last : (active.find((lo) => !lo.mastered) ?? null);
+  const last = input.currentLoId
+    ? (active.find((lo) => lo.loId === input.currentLoId) ?? null)
+    : null;
+  const working =
+    last && !last.mastered ? last : (active.find((lo) => !lo.mastered) ?? null);
 
   const decide = (
     action: AgentAction,
@@ -118,14 +128,19 @@ export function plan(input: PlannerInput, config: PlannerConfig = PLANNER_DEFAUL
     rule,
     reason,
     evidence,
-    alternatives: rule === 'R0' ? [] : alternatives(active, continueLo, { action, loId: lo?.loId ?? null }),
+    alternatives:
+      rule === 'R0'
+        ? []
+        : alternatives(active, continueLo, { action, loId: lo?.loId ?? null }),
     issues,
     policyVersion: config.version,
   });
 
   // R0 — hết hạn mức ngày: chỉ còn nghỉ.
   if (input.today.answered >= config.maxItemsPerDay) {
-    return decide('A0', null, 'R0', 'daily_limit', { limit: config.maxItemsPerDay });
+    return decide('A0', null, 'R0', 'daily_limit', {
+      limit: config.maxItemsPerDay,
+    });
   }
 
   // R1 — ôn LO đến hạn trong phạm vi.
@@ -165,7 +180,9 @@ export function plan(input: PlannerInput, config: PlannerConfig = PLANNER_DEFAUL
   // R3 — sai liên tiếp: xem lại nguồn nếu có.
   if (working.wrongSinceSource >= config.wrongStreakForSource) {
     if (working.hasSource) {
-      return decide('A3', working, 'R3', 'wrong_streak', { wrongSinceSource: working.wrongSinceSource });
+      return decide('A3', working, 'R3', 'wrong_streak', {
+        wrongSinceSource: working.wrongSinceSource,
+      });
     }
     issues.push({ loId: working.loId, issue: 'missing_source' });
   }
@@ -173,7 +190,8 @@ export function plan(input: PlannerInput, config: PlannerConfig = PLANNER_DEFAUL
   // R4 — cần thêm bằng chứng.
   if (working.hasNewItem) return decide('A1', working, 'R4', 'need_evidence');
   // Hết câu chỉ vì câu tự luận đang chờ chấm thì chờ, không coi là thiếu câu.
-  if (working.awaitingGrade) return decide('WAIT', working, 'R4', 'awaiting_grade');
+  if (working.awaitingGrade)
+    return decide('WAIT', working, 'R4', 'awaiting_grade');
   issues.push({ loId: working.loId, issue: 'missing_items' });
   return decide('A6', working, 'R4', 'missing_items', {}, null);
 }
@@ -186,7 +204,8 @@ function alternatives(
 ): Decision['alternatives'] {
   const out: Decision['alternatives'] = [];
   const push = (action: AgentAction, loId: string) => {
-    if (out.length < 2 && !(action === chosen.action && loId === chosen.loId)) out.push({ action, loId });
+    if (out.length < 2 && !(action === chosen.action && loId === chosen.loId))
+      out.push({ action, loId });
   };
   if (continueLo && continueLo.loId !== chosen.loId) {
     if (continueLo.hasNewItem) push('A1', continueLo.loId);
@@ -195,7 +214,11 @@ function alternatives(
     if (continueLo.hasSource) push('A3', continueLo.loId);
   }
   const other = active.find(
-    (lo) => lo.loId !== continueLo?.loId && lo.loId !== chosen.loId && !lo.mastered && lo.hasNewItem,
+    (lo) =>
+      lo.loId !== continueLo?.loId &&
+      lo.loId !== chosen.loId &&
+      !lo.mastered &&
+      lo.hasNewItem,
   );
   if (other) push('A5', other.loId);
   return out;
