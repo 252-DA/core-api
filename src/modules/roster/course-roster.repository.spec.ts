@@ -1,5 +1,8 @@
 import { Logger } from '@nestjs/common';
-import { CourseRosterRepository, canvasNumericId } from './course-roster.repository';
+import {
+  CourseRosterRepository,
+  canvasNumericId,
+} from './course-roster.repository';
 
 const COURSE = '00000000-0000-0000-0000-000000000001';
 const USER = '00000000-0000-0000-0000-000000000002';
@@ -25,7 +28,19 @@ describe('canvasNumericId', () => {
   });
 
   it('bỏ biến Canvas chưa mở rộng và giá trị không phải id', () => {
-    for (const bad of ['$Canvas.user.id', '', 'abc', '0', '-1', '1.5', '12a', null, undefined, {}, 0])
+    for (const bad of [
+      '$Canvas.user.id',
+      '',
+      'abc',
+      '0',
+      '-1',
+      '1.5',
+      '12a',
+      null,
+      undefined,
+      {},
+      0,
+    ])
       expect(canvasNumericId(bad)).toBeUndefined();
   });
 });
@@ -46,7 +61,9 @@ describe('CourseRosterRepository.recordLaunch', () => {
     await repo.recordLaunch(input);
     const calls = prisma.$executeRaw.mock.calls;
     expect(calls).toHaveLength(3);
-    expect(sql(calls[0])).toContain('UPDATE lms_user_mappings SET lms_platform_user_id');
+    expect(sql(calls[0])).toContain(
+      'UPDATE lms_user_mappings SET lms_platform_user_id',
+    );
     expect(calls[0].slice(1)).toEqual(['42', USER, '42']);
     expect(sql(calls[1])).toContain('UPDATE lms_course_ref');
     expect(sql(calls[1])).toContain('COALESCE');
@@ -68,16 +85,22 @@ describe('CourseRosterRepository.recordLaunch', () => {
       courseRole: 'instructor',
     });
     expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
-    expect(sql(prisma.$executeRaw.mock.calls[0])).toContain('UPDATE course_memberships');
+    expect(sql(prisma.$executeRaw.mock.calls[0])).toContain(
+      'UPDATE course_memberships',
+    );
   });
 
   it('không bao giờ ném lỗi: thiếu cột chỉ ghi log để launch vẫn vào được', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     try {
       const { repo, prisma } = setup();
-      prisma.$executeRaw.mockRejectedValue(new Error('column "source" does not exist'));
+      prisma.$executeRaw.mockRejectedValue(
+        new Error('column "source" does not exist'),
+      );
       await expect(repo.recordLaunch(input)).resolves.toBeUndefined();
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('does not exist'));
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('does not exist'),
+      );
     } finally {
       warn.mockRestore();
     }
@@ -115,30 +138,47 @@ describe('CourseRosterRepository roster writes', () => {
 
   it('rời lớp chỉ chuyển sang inactive, không có câu lệnh DELETE nào', async () => {
     const { repo, prisma } = setup();
-    await repo.deactivateMemberships(COURSE, [{ userId: USER, role: 'learner' }]);
+    await repo.deactivateMemberships(COURSE, [
+      { userId: USER, role: 'learner' },
+    ]);
     const text = sql(prisma.$executeRaw.mock.calls[0]);
     expect(text).toContain("SET status = 'inactive'");
     expect(text).toContain("m.status <> 'inactive'");
     expect(text).not.toMatch(/DELETE/i);
-    expect(prisma.$executeRaw.mock.calls[0].slice(1)).toEqual([[USER], ['learner'], COURSE]);
+    expect(prisma.$executeRaw.mock.calls[0].slice(1)).toEqual([
+      [USER],
+      ['learner'],
+      COURSE,
+    ]);
   });
 
   it('đánh dấu thời điểm đồng bộ danh sách lớp', async () => {
     const { repo, prisma } = setup();
     await repo.markRosterSynced(REF);
-    expect(sql(prisma.$executeRaw.mock.calls[0])).toContain('SET nrps_synced_at = now()');
+    expect(sql(prisma.$executeRaw.mock.calls[0])).toContain(
+      'SET nrps_synced_at = now()',
+    );
   });
 
   it('đọc tham chiếu khóa và membership kèm cột mới', async () => {
     const { repo, prisma } = setup();
     prisma.$queryRaw.mockResolvedValueOnce([
-      { course_ref_id: REF, lms_context_id: 'ctx', lms_platform_course_id: '8', nrps_context_memberships_url: null },
+      {
+        course_ref_id: REF,
+        lms_context_id: 'ctx',
+        lms_platform_course_id: '8',
+        nrps_context_memberships_url: null,
+      },
     ]);
-    await expect(repo.courseRef(COURSE)).resolves.toMatchObject({ course_ref_id: REF });
+    await expect(repo.courseRef(COURSE)).resolves.toMatchObject({
+      course_ref_id: REF,
+    });
     expect(sql(prisma.$queryRaw.mock.calls[0])).toContain('deleted_at IS NULL');
     await expect(repo.courseRef(COURSE)).resolves.toBeNull();
     await repo.memberships(COURSE);
-    expect(sql(prisma.$queryRaw.mock.calls[2])).toContain('SELECT user_id::text AS user_id, role, status, source');
+    expect(sql(prisma.$queryRaw.mock.calls[2])).toContain(
+      'SELECT user_id::text AS user_id, role, status, source',
+    );
   });
 });
 
@@ -157,7 +197,9 @@ describe('CourseRosterRepository.activeLearnerIds', () => {
     try {
       const { repo, prisma } = setup();
       prisma.$queryRaw.mockRejectedValue(
-        Object.assign(new Error('column "status" does not exist'), { code: '42703' }),
+        Object.assign(new Error('column "status" does not exist'), {
+          code: '42703',
+        }),
       );
       prisma.course_memberships.findMany.mockResolvedValue([{ user_id: USER }]);
       await expect(repo.activeLearnerIds(COURSE)).resolves.toEqual([USER]);
@@ -177,7 +219,9 @@ describe('CourseRosterRepository.activeLearnerIds', () => {
       prisma.$queryRaw.mockRejectedValueOnce({ meta: { code: '42703' } });
       await expect(repo.activeLearnerIds(COURSE)).resolves.toEqual([]);
       prisma.$queryRaw.mockRejectedValueOnce(
-        Object.assign(new Error('Raw query failed'), { cause: { code: '42703' } }),
+        Object.assign(new Error('Raw query failed'), {
+          cause: { code: '42703' },
+        }),
       );
       await expect(repo.activeLearnerIds(COURSE)).resolves.toEqual([]);
     } finally {
@@ -188,15 +232,21 @@ describe('CourseRosterRepository.activeLearnerIds', () => {
   it('lỗi khác thì ném lên, không nuốt', async () => {
     const { repo, prisma } = setup();
     prisma.$queryRaw.mockRejectedValue(new Error('connection reset'));
-    await expect(repo.activeLearnerIds(COURSE)).rejects.toThrow('connection reset');
-    await expect(repo.countActiveLearners(COURSE)).rejects.toThrow('connection reset');
+    await expect(repo.activeLearnerIds(COURSE)).rejects.toThrow(
+      'connection reset',
+    );
+    await expect(repo.countActiveLearners(COURSE)).rejects.toThrow(
+      'connection reset',
+    );
   });
 
   it('đếm sinh viên đang học, null khi chưa có cột', async () => {
     const { repo, prisma } = setup();
     prisma.$queryRaw.mockResolvedValueOnce([{ n: 37 }]);
     await expect(repo.countActiveLearners(COURSE)).resolves.toBe(37);
-    prisma.$queryRaw.mockRejectedValueOnce(Object.assign(new Error('x'), { code: '42703' }));
+    prisma.$queryRaw.mockRejectedValueOnce(
+      Object.assign(new Error('x'), { code: '42703' }),
+    );
     await expect(repo.countActiveLearners(COURSE)).resolves.toBeNull();
   });
 });

@@ -180,7 +180,9 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
         },
         // Quiz của bài tập nào, để dựng URL bài làm cho SpeedGrader.
         include: {
-          lti_resource_links: { select: { target_kind: true, target_id: true } },
+          lti_resource_links: {
+            select: { target_kind: true, target_id: true },
+          },
         },
       }),
     ]);
@@ -250,7 +252,9 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
       });
 
       if (result.ok) {
-        const waited = this.backoff.get(group.resourceLinkId)?.waitingForPublish;
+        const waited = this.backoff.get(
+          group.resourceLinkId,
+        )?.waitingForPublish;
         this.backoff.delete(group.resourceLinkId);
         await this.mark(group.attemptIds, AGS_STATUS.posted, new Date());
         published += 1;
@@ -265,7 +269,8 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
       if (result.waitingForPublish) {
         // Canvas giữ bài tập Deep Linking ở unpublished cho tới khi giảng viên
         // bấm publish. Điểm vẫn đúng, chỉ chưa có chỗ ghi — chờ, không bỏ cuộc.
-        const first = !this.backoff.get(group.resourceLinkId)?.waitingForPublish;
+        const first = !this.backoff.get(group.resourceLinkId)
+          ?.waitingForPublish;
         this.backoff.set(group.resourceLinkId, {
           failures: 0,
           nextAttemptAt: Date.now() + this.config.unpublishedRetryMs,
@@ -347,13 +352,30 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
       }
 
       // A batch boundary must not publish a score for half of a quiz.
-      const submissionIds = unique(attempts.flatMap((a) => a.submission_id ? [a.submission_id] : []));
+      const submissionIds = unique(
+        attempts.flatMap((a) => (a.submission_id ? [a.submission_id] : [])),
+      );
       if (submissionIds.length) {
         const complete = await tx.quiz_attempts.findMany({
-          where: { submission_id: { in: submissionIds }, ags_status: AGS_STATUS.pending, deleted_at: null },
-          select: { attempt_id: true, user_id: true, resource_link_id: true, score: true, attempted_at: true, submission_id: true },
+          where: {
+            submission_id: { in: submissionIds },
+            ags_status: AGS_STATUS.pending,
+            deleted_at: null,
+          },
+          select: {
+            attempt_id: true,
+            user_id: true,
+            resource_link_id: true,
+            score: true,
+            attempted_at: true,
+            submission_id: true,
+          },
         });
-        attempts = [...new Map([...attempts, ...complete].map((a) => [a.attempt_id, a])).values()];
+        attempts = [
+          ...new Map(
+            [...attempts, ...complete].map((a) => [a.attempt_id, a]),
+          ).values(),
+        ];
       }
 
       const { count } = await tx.quiz_attempts.updateMany({
@@ -412,7 +434,9 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
    * Nhận xét ngắn cho một lượt nộp (số câu đúng, LO yếu nhất). Không bao giờ
    * làm hỏng việc đẩy điểm: lỗi ở đây chỉ làm mất phần nhận xét.
    */
-  private async scoreComment(submissionId: string): Promise<string | undefined> {
+  private async scoreComment(
+    submissionId: string,
+  ): Promise<string | undefined> {
     try {
       const rows = await this.prisma.quiz_attempts.findMany({
         where: { submission_id: submissionId, deleted_at: null },
@@ -430,7 +454,8 @@ export class AgsPublisherService implements OnModuleInit, OnModuleDestroy {
           rows.map((row) => ({
             correct: Boolean(row.is_correct),
             loCode: row.quiz_items?.learning_outcomes?.code ?? null,
-            loStatement: row.quiz_items?.learning_outcomes?.statement_vi ?? null,
+            loStatement:
+              row.quiz_items?.learning_outcomes?.statement_vi ?? null,
           })),
         ) ?? undefined
       );

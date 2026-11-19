@@ -27,7 +27,10 @@ function row(overrides: Record<string, unknown> = {}) {
 describe('parseSettings', () => {
   it('luyện tập bỏ qua mọi cài đặt thi, mặc định 100 điểm', () => {
     expect(
-      parseSettings({ mode: 'practice', maxAttempts: 1, timeLimitMinutes: 5 }, NOW),
+      parseSettings(
+        { mode: 'practice', maxAttempts: 1, timeLimitMinutes: 5 },
+        NOW,
+      ),
     ).toMatchObject({
       mode: 'practice',
       points_possible: 100,
@@ -69,7 +72,11 @@ describe('parseSettings', () => {
     [{ mode: 'exam' }, 'hạn nộp'],
     [{ mode: 'exam', dueAt: '2026-09-26T00:00:00Z' }, 'tương lai'],
     [
-      { mode: 'exam', dueAt: '2026-10-02T00:00:00Z', availableUntil: '2026-10-01T00:00:00Z' },
+      {
+        mode: 'exam',
+        dueAt: '2026-10-02T00:00:00Z',
+        availableUntil: '2026-10-01T00:00:00Z',
+      },
       'sau thời điểm đóng',
     ],
     [
@@ -81,8 +88,14 @@ describe('parseSettings', () => {
       },
       'trước thời điểm đóng',
     ],
-    [{ mode: 'exam', dueAt: '2026-10-02T00:00:00Z', maxAttempts: 0 }, 'Số lần làm'],
-    [{ mode: 'exam', dueAt: '2026-10-02T00:00:00Z', timeLimitMinutes: 1.5 }, 'Thời gian'],
+    [
+      { mode: 'exam', dueAt: '2026-10-02T00:00:00Z', maxAttempts: 0 },
+      'Số lần làm',
+    ],
+    [
+      { mode: 'exam', dueAt: '2026-10-02T00:00:00Z', timeLimitMinutes: 1.5 },
+      'Thời gian',
+    ],
     [{ mode: 'exam', dueAt: 'không-phải-ngày' }, 'Hạn nộp'],
     [{ mode: 'quiz' }, 'Chế độ'],
     [{ pointsPossible: 0 }, 'Điểm tối đa'],
@@ -99,7 +112,9 @@ describe('khung giờ và mở đáp án', () => {
     expect(answersRevealed(set, at('2026-10-01T00:00:30Z'))).toBe(false);
     expect(answersRevealed(set, at('2026-10-01T00:01:00Z'))).toBe(true);
     expect(answersRevealed(row(), at('2026-09-30T17:00:00Z'))).toBe(true);
-    expect(answersRevealed(row({ mode: 'practice', due_at: null }), NOW)).toBe(true);
+    expect(answersRevealed(row({ mode: 'practice', due_at: null }), NOW)).toBe(
+      true,
+    );
   });
 
   it('chưa mở, đang mở, đã đóng', () => {
@@ -113,14 +128,22 @@ describe('khung giờ và mở đáp án', () => {
     // Không đặt giờ đóng: bài đóng đúng hạn nộp, vì đáp án mở ngay sau đó.
     expect(windowState(row(), at('2026-09-30T16:58:00Z'))).toBe('open');
     expect(windowState(row(), at('2026-09-30T16:59:00Z'))).toBe('closed');
-    expect(windowState(row({ mode: 'practice', due_at: null }), at('2026-10-05T00:00:00Z'))).toBe('open');
+    expect(
+      windowState(
+        row({ mode: 'practice', due_at: null }),
+        at('2026-10-05T00:00:00Z'),
+      ),
+    ).toBe('open');
   });
 
   it('hết giờ theo giới hạn thời gian nhưng không quá lúc đóng bài', () => {
     const start = at('2026-09-28T23:50:00Z');
     expect(sessionExpiry(row(), start)).toEqual(at('2026-09-29T00:20:00Z'));
     expect(
-      sessionExpiry(row({ available_until: at('2026-09-29T00:00:00Z') }), start),
+      sessionExpiry(
+        row({ available_until: at('2026-09-29T00:00:00Z') }),
+        start,
+      ),
     ).toEqual(at('2026-09-29T00:00:00Z'));
     // Không giới hạn giờ: phiên vẫn kết thúc lúc bài đóng (ở đây là hạn nộp).
     expect(sessionExpiry(row({ time_limit_minutes: null }), start)).toEqual(
@@ -165,7 +188,9 @@ describe('itemOrder', () => {
       { quiz_id: 'fill', type: 'FILL_BLANK', options: null },
     ] as unknown as QuizSnapshotItem[];
     for (const o of itemOrder(mixed, true, () => 0)) {
-      expect(o.options).toEqual(mixed.find((i) => i.quiz_id === o.quiz_id)!.options);
+      expect(o.options).toEqual(
+        mixed.find((i) => i.quiz_id === o.quiz_id)!.options,
+      );
     }
   });
 });

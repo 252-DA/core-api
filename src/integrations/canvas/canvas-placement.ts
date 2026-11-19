@@ -15,20 +15,32 @@ export type ModuleClass = {
   chapterRef: ChapterRef | null;
 };
 
-export type SessionRow = { session_no: number | null; chapter_code: string | null };
+export type SessionRow = {
+  session_no: number | null;
+  chapter_code: string | null;
+};
 
 const MAX_UNIT_NUMBER = 30;
 
 // Thứ tự quan trọng: "Bài tập 3" là bài tập chứ không phải "Bài 3".
-const EXERCISE = /bài tập|bai tap|\blab\b|labs|thí nghiệm|thi nghiem|thực hành|thuc hanh|assignment|exercise|practice|homework/;
-const REFERENCE = /tham khảo|tham khao|reference|giáo trình|giao trinh|textbook|reading|sách|\bsach\b|tài liệu đọc|tai lieu doc|bibliography/;
+const EXERCISE =
+  /bài tập|bai tap|\blab\b|labs|thí nghiệm|thi nghiem|thực hành|thuc hanh|assignment|exercise|practice|homework/;
+const REFERENCE =
+  /tham khảo|tham khao|reference|giáo trình|giao trinh|textbook|reading|sách|\bsach\b|tài liệu đọc|tai lieu doc|bibliography/;
 
 const UNIT_PATTERNS: Array<{ unit: ChapterUnit; pattern: RegExp }> = [
-  { unit: 'week', pattern: /(?:^|[^a-z])(?:tuần|tuan|week|wk|w)[\s._-]*0*(\d{1,2})(?!\d)/ },
-  { unit: 'session', pattern: /(?:^|[^a-z])(?:buổi|buoi|session)[\s._-]*0*(\d{1,2})(?!\d)/ },
+  {
+    unit: 'week',
+    pattern: /(?:^|[^a-z])(?:tuần|tuan|week|wk|w)[\s._-]*0*(\d{1,2})(?!\d)/,
+  },
+  {
+    unit: 'session',
+    pattern: /(?:^|[^a-z])(?:buổi|buoi|session)[\s._-]*0*(\d{1,2})(?!\d)/,
+  },
   {
     unit: 'chapter',
-    pattern: /(?:^|[^a-z])(?:chương|chuong|chapter|chap|ch|bài|bai|lecture|lec|unit)[\s._:-]*0*(\d{1,2})(?!\d)/,
+    pattern:
+      /(?:^|[^a-z])(?:chương|chuong|chapter|chap|ch|bài|bai|lecture|lec|unit)[\s._:-]*0*(\d{1,2})(?!\d)/,
   },
 ];
 
@@ -50,7 +62,8 @@ function unitRef(value: string): ChapterRef | null {
 
 export function classifyModule(name: string): ModuleClass {
   const text = normalize(name);
-  if (EXERCISE.test(text)) return { role: 'exercise', chapterRef: unitRef(name) };
+  if (EXERCISE.test(text))
+    return { role: 'exercise', chapterRef: unitRef(name) };
   if (REFERENCE.test(text)) return { role: 'reference', chapterRef: null };
   return { role: 'lecture', chapterRef: unitRef(name) };
 }
@@ -96,7 +109,10 @@ const SUPPORTED_MIME = new Set([
 ]);
 
 /** Định dạng mà pipeline chunking đọc được (PDF, DOCX, PPTX, Markdown). */
-export function isSupportedDocument(fileName: string, mimeType?: string | null) {
+export function isSupportedDocument(
+  fileName: string,
+  mimeType?: string | null,
+) {
   if (mimeType && SUPPORTED_MIME.has(mimeType.toLowerCase())) return true;
   const lower = fileName.toLowerCase();
   return SUPPORTED_EXTENSIONS.some((ext) => lower.endsWith(ext));

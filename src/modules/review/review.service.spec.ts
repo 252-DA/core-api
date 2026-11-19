@@ -149,7 +149,9 @@ describe('ReviewService', () => {
       const { service, prisma, tx } = setup();
       prisma.quiz_items.findFirst.mockResolvedValue(aiQuiz);
 
-      await service.updateQuizItem(claims, 'q1', { question: 'Dijkstra yêu cầu gì về trọng số?' });
+      await service.updateQuizItem(claims, 'q1', {
+        question: 'Dijkstra yêu cầu gì về trọng số?',
+      });
 
       const [{ data }] = tx.quiz_items.update.mock.calls[0] as [
         { data: Record<string, unknown> },
@@ -160,12 +162,15 @@ describe('ReviewService', () => {
       });
       expect(data.verification_evidence).toEqual({
         ...evidence,
-        superseded_by_edit_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) as string,
+        superseded_by_edit_at: expect.stringMatching(
+          /^\d{4}-\d{2}-\d{2}T/,
+        ) as string,
       });
       // Một mốc thời gian cho cả lần sửa.
-      expect((data.verification_evidence as { superseded_by_edit_at: string }).superseded_by_edit_at).toBe(
-        (data.updated_at as Date).toISOString(),
-      );
+      expect(
+        (data.verification_evidence as { superseded_by_edit_at: string })
+          .superseded_by_edit_at,
+      ).toBe((data.updated_at as Date).toISOString());
     });
 
     it('keeps the first superseded timestamp when edited again', async () => {
@@ -173,36 +178,48 @@ describe('ReviewService', () => {
       prisma.quiz_items.findFirst.mockResolvedValue({
         ...aiQuiz,
         verification_status: 'UNVERIFIED',
-        verification_evidence: { ...evidence, superseded_by_edit_at: '2026-11-01T00:00:00.000Z' },
+        verification_evidence: {
+          ...evidence,
+          superseded_by_edit_at: '2026-11-01T00:00:00.000Z',
+        },
       });
 
-      await service.updateQuizItem(claims, 'q1', { explanation: 'Slide 12 và 13.' });
+      await service.updateQuizItem(claims, 'q1', {
+        explanation: 'Slide 12 và 13.',
+      });
 
       const [{ data }] = tx.quiz_items.update.mock.calls[0] as [
         { data: { verification_evidence: Record<string, unknown> } },
       ];
-      expect(data.verification_evidence.superseded_by_edit_at).toBe('2026-11-01T00:00:00.000Z');
+      expect(data.verification_evidence.superseded_by_edit_at).toBe(
+        '2026-11-01T00:00:00.000Z',
+      );
     });
 
     it.each([
       ['no evidence (instructor-written item)', null],
       ['evidence of an unexpected shape', ['legacy']],
-    ])('marks UNVERIFIED but leaves the evidence column alone for %s', async (_label, stored) => {
-      const { service, prisma, tx } = setup();
-      prisma.quiz_items.findFirst.mockResolvedValue({
-        ...aiQuiz,
-        verification_status: 'UNVERIFIED',
-        verification_evidence: stored,
-      });
+    ])(
+      'marks UNVERIFIED but leaves the evidence column alone for %s',
+      async (_label, stored) => {
+        const { service, prisma, tx } = setup();
+        prisma.quiz_items.findFirst.mockResolvedValue({
+          ...aiQuiz,
+          verification_status: 'UNVERIFIED',
+          verification_evidence: stored,
+        });
 
-      await service.updateQuizItem(claims, 'q1', { explanation: 'Thêm giải thích.' });
+        await service.updateQuizItem(claims, 'q1', {
+          explanation: 'Thêm giải thích.',
+        });
 
-      const [{ data }] = tx.quiz_items.update.mock.calls[0] as [
-        { data: Record<string, unknown> },
-      ];
-      expect(data.verification_status).toBe('UNVERIFIED');
-      expect(data).not.toHaveProperty('verification_evidence');
-    });
+        const [{ data }] = tx.quiz_items.update.mock.calls[0] as [
+          { data: Record<string, unknown> },
+        ];
+        expect(data.verification_status).toBe('UNVERIFIED');
+        expect(data).not.toHaveProperty('verification_evidence');
+      },
+    );
 
     it('does the same for an edited lesson card', async () => {
       const { service, prisma, tx } = setup();
@@ -220,7 +237,10 @@ describe('ReviewService', () => {
       const [{ data }] = tx.lesson_cards.update.mock.calls[0] as [
         { data: Record<string, unknown> },
       ];
-      expect(data).toMatchObject({ status: 'REVIEWING', verification_status: 'UNVERIFIED' });
+      expect(data).toMatchObject({
+        status: 'REVIEWING',
+        verification_status: 'UNVERIFIED',
+      });
       expect(data.verification_evidence).toMatchObject({
         ...evidence,
         superseded_by_edit_at: expect.any(String) as string,
@@ -234,7 +254,9 @@ describe('ReviewService', () => {
       await service.approveQuizItem(claims, 'q1');
       await service.rejectQuizItem(claims, 'q1', 'sai');
 
-      for (const [{ data }] of tx.quiz_items.update.mock.calls as [{ data: Record<string, unknown> }][]) {
+      for (const [{ data }] of tx.quiz_items.update.mock.calls as [
+        { data: Record<string, unknown> },
+      ][]) {
         expect(data).not.toHaveProperty('verification_status');
         expect(data).not.toHaveProperty('verification_evidence');
       }

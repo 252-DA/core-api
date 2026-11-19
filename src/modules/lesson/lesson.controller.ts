@@ -19,10 +19,7 @@ export class LessonController {
   }
 
   @Get(':id')
-  async get(
-    @CurrentBffClaims() claims: BffClaims,
-    @Param('id') id: string,
-  ) {
+  async get(@CurrentBffClaims() claims: BffClaims, @Param('id') id: string) {
     return this.lessonService.get(claims, id);
   }
 

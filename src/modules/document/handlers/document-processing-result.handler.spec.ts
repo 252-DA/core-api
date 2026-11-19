@@ -248,7 +248,9 @@ describe('DocumentProcessingResultHandler.onFinalFailure', () => {
         deleted_at: null,
         processing_generation: 3,
         processing_seq: { lt: seq },
-        status: { in: ['QUEUED', 'PENDING', 'PARSING', 'CHUNKING', 'EMBEDDING'] },
+        status: {
+          in: ['QUEUED', 'PENDING', 'PARSING', 'CHUNKING', 'EMBEDDING'],
+        },
       },
       data: { status: 'ERROR', processing_seq: seq },
     });
@@ -265,7 +267,13 @@ describe('DocumentProcessingResultHandler.onFinalFailure', () => {
     const where = prisma.documents.updateMany.mock.calls[0][0].where as {
       status: { in: string[] };
     };
-    for (const finished of ['INDEXED', 'GENERATED_DRAFT', 'ERROR', 'ENRICHING', 'UPLOADING']) {
+    for (const finished of [
+      'INDEXED',
+      'GENERATED_DRAFT',
+      'ERROR',
+      'ENRICHING',
+      'UPLOADING',
+    ]) {
       expect(where.status.in).not.toContain(finished);
     }
   });
@@ -276,7 +284,11 @@ describe('DocumentProcessingResultHandler.onFinalFailure', () => {
     await handler.onFinalFailure(
       envelope({
         document_id: DOC,
-        status: status({ stage: 'enrichment', value: 'GENERATED_DRAFT', attempt: 1 }),
+        status: status({
+          stage: 'enrichment',
+          value: 'GENERATED_DRAFT',
+          attempt: 1,
+        }),
       }),
       new Error('x'),
     );
@@ -300,12 +312,27 @@ describe('DocumentProcessingResultHandler.onFinalFailure', () => {
     ['status không phải object', { document_id: DOC, status: 'ERROR' }],
     ['document_id không phải uuid', { document_id: 'doc-1', status: status() }],
     ['giai đoạn lạ', { document_id: DOC, status: status({ stage: 'upload' }) }],
-    ['bước không thuộc giai đoạn', { document_id: DOC, status: status({ value: 'ENRICHING' }) }],
-    ['bước không phải chuỗi', { document_id: DOC, status: status({ value: 4 }) }],
-    ['lượt âm', { document_id: DOC, status: status({ processing_generation: -1 }) }],
-    ['lượt không nguyên', { document_id: DOC, status: status({ processing_generation: 1.5 }) }],
+    [
+      'bước không thuộc giai đoạn',
+      { document_id: DOC, status: status({ value: 'ENRICHING' }) },
+    ],
+    [
+      'bước không phải chuỗi',
+      { document_id: DOC, status: status({ value: 4 }) },
+    ],
+    [
+      'lượt âm',
+      { document_id: DOC, status: status({ processing_generation: -1 }) },
+    ],
+    [
+      'lượt không nguyên',
+      { document_id: DOC, status: status({ processing_generation: 1.5 }) },
+    ],
     ['lần chạy 0', { document_id: DOC, status: status({ attempt: 0 }) }],
-    ['lần chạy là chuỗi', { document_id: DOC, status: status({ attempt: '1' }) }],
+    [
+      'lần chạy là chuỗi',
+      { document_id: DOC, status: status({ attempt: '1' }) },
+    ],
   ])('không chạm DB khi %s', async (_label, payload) => {
     const { handler, prisma } = setup();
 
@@ -321,19 +348,27 @@ describe('DocumentProcessingResultHandler.onFinalFailure', () => {
     const { handler, prisma } = setup(0);
 
     await expect(
-      handler.onFinalFailure(envelope({ document_id: DOC, status: status() }), new Error('x')),
+      handler.onFinalFailure(
+        envelope({ document_id: DOC, status: status() }),
+        new Error('x'),
+      ),
     ).resolves.toBeUndefined();
 
     expect(prisma.documents.updateMany).toHaveBeenCalledTimes(1);
   });
 
   it('never throws when the database is down', async () => {
-    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     const { handler, prisma } = setup();
     prisma.documents.updateMany.mockRejectedValue(new Error('db down'));
 
     await expect(
-      handler.onFinalFailure(envelope({ document_id: DOC, status: status() }), new Error('x')),
+      handler.onFinalFailure(
+        envelope({ document_id: DOC, status: status() }),
+        new Error('x'),
+      ),
     ).resolves.toBeUndefined();
 
     expect(error).toHaveBeenCalledWith(expect.stringContaining('db down'));
@@ -360,9 +395,16 @@ describe('document-processing-result: độ dài tính theo code point', () => {
       chapter: chapter(over),
     });
     expect(() =>
-      parse(withChapter({ reason: MATH.repeat(255), chapter_code: MATH.repeat(20) })),
+      parse(
+        withChapter({
+          reason: MATH.repeat(255),
+          chapter_code: MATH.repeat(20),
+        }),
+      ),
     ).not.toThrow();
-    expect(() => parse(withChapter({ reason: MATH.repeat(256) }))).toThrow(/chapter.reason/);
+    expect(() => parse(withChapter({ reason: MATH.repeat(256) }))).toThrow(
+      /chapter.reason/,
+    );
     expect(() => parse(withChapter({ chapter_code: MATH.repeat(21) }))).toThrow(
       /chapter.chapter_code/,
     );

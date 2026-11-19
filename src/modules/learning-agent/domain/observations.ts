@@ -1,5 +1,8 @@
 import { GRADING_STATUS } from '../../question/answer-grading';
-import { isQuestionType, type QuestionType } from '../../question/question-types';
+import {
+  isQuestionType,
+  type QuestionType,
+} from '../../question/question-types';
 
 /**
  * Chuẩn hoá lượt làm bài thành quan sát cho mô hình người học: quy tắc ở
@@ -57,19 +60,27 @@ export interface NormalizedEvidence {
 
 /** Khoá nhóm câu trùng. Chỉ bắt câu chép lại nguyên văn, chưa bắt câu diễn đạt lại. */
 export function duplicateKey(question: string): string {
-  return question.normalize('NFC').toLocaleLowerCase('vi').replace(/\s+/g, ' ').trim();
+  return question
+    .normalize('NFC')
+    .toLocaleLowerCase('vi')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function pendingReason(row: AttemptEvidence): PendingReason | null {
   if (row.hidden) return 'not_revealed';
   if (row.gradingStatus === GRADING_STATUS.graded) return null;
-  return row.gradingStatus === GRADING_STATUS.needsReview ? 'review' : 'grading';
+  return row.gradingStatus === GRADING_STATUS.needsReview
+    ? 'review'
+    : 'grading';
 }
 
 /** Thứ tự dựng lại lịch sử: thời điểm làm bài, rồi mã lượt làm để kết quả ổn định. */
 export function byAttemptOrder(a: AttemptEvidence, b: AttemptEvidence) {
   const at = (a.attemptedAt?.getTime() ?? 0) - (b.attemptedAt?.getTime() ?? 0);
-  return at || (a.attemptId < b.attemptId ? -1 : a.attemptId > b.attemptId ? 1 : 0);
+  return (
+    at || (a.attemptId < b.attemptId ? -1 : a.attemptId > b.attemptId ? 1 : 0)
+  );
 }
 
 /** Lịch sử của MỘT người học trong một khoá. */
@@ -89,7 +100,12 @@ export function normalizeAttempts(rows: AttemptEvidence[]): NormalizedEvidence {
     seen.add(key);
     const reason = pendingReason(row);
     if (reason) {
-      pending.push({ loId: row.loId, attemptId: row.attemptId, quizId: row.quizId, reason });
+      pending.push({
+        loId: row.loId,
+        attemptId: row.attemptId,
+        quizId: row.quizId,
+        reason,
+      });
       continue;
     }
     observations.push({

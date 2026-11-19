@@ -10,10 +10,7 @@ import { CurriculumImportResultHandler } from './handlers/curriculum-import-resu
 @Module({
   imports: [AuthModule, CanvasModule, CourseModule, StorageModule],
   controllers: [CurriculumImportController],
-  providers: [
-    CurriculumImportService,
-    CurriculumImportResultHandler,
-  ],
+  providers: [CurriculumImportService, CurriculumImportResultHandler],
   exports: [CurriculumImportService],
 })
 export class CurriculumModule {}

@@ -59,7 +59,10 @@ export function createInvalidByteDriverAdapterError() {
 
 describe('detectInvalidInputSqlState', () => {
   it('nhận diện Dạng A (PrismaClientKnownRequestError P2007 + 22P02)', () => {
-    const err = createInvalidUuidPrismaError('not-a-uuid', 'course_memberships');
+    const err = createInvalidUuidPrismaError(
+      'not-a-uuid',
+      'course_memberships',
+    );
     expect(detectInvalidInputSqlState(err)).toBe('22P02');
     expect(getPrismaErrorModel(err)).toBe('course_memberships');
   });

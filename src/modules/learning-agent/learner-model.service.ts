@@ -5,7 +5,10 @@ import { isUuid } from '../../common/utils/uuid';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 import { AuthzService } from '../../auth/authz.service';
 import type { BffClaims } from '../../auth/bff-claims';
-import { answersRevealed, withCanvasSettings } from '../quiz/domain/quiz-set-exam';
+import {
+  answersRevealed,
+  withCanvasSettings,
+} from '../quiz/domain/quiz-set-exam';
 import type { QuizSnapshotItem } from '../quiz/quiz.types';
 import { CourseRosterRepository } from '../roster/course-roster.repository';
 import { BKT_DEFAULTS, MASTERY_DEFAULTS } from './domain/bkt';
@@ -18,7 +21,11 @@ import {
   type NormalizedEvidence,
 } from './domain/observations';
 import { plan, type Decision, type PlannerLo } from './domain/planner';
-import { dueLoIds, reviewQueue, type ReviewQueueEntry } from './domain/review-queue';
+import {
+  dueLoIds,
+  reviewQueue,
+  type ReviewQueueEntry,
+} from './domain/review-queue';
 import { localDayStart, REVIEW_DEFAULTS } from './domain/review-schedule';
 
 /** Trạng thái câu được dùng trong đề, cũng là trạng thái câu được vào kho luyện. */
@@ -31,7 +38,9 @@ const POOL_STATUSES = ['APPROVED', 'PUBLISHED'];
 export const MIN_PRACTICE_ITEMS = 6;
 
 function snapshotItems(set: QuizSetRow): QuizSnapshotItem[] {
-  return Array.isArray(set.items) ? (set.items as unknown as QuizSnapshotItem[]) : [];
+  return Array.isArray(set.items)
+    ? (set.items as unknown as QuizSnapshotItem[])
+    : [];
 }
 
 function optionCount(options: unknown): number | null {
@@ -80,13 +89,24 @@ export class LearnerModelService {
    * xuất tiếp theo của planner. Giảng viên/trợ giảng truyền `userId` để xem
    * của một sinh viên.
    */
-  async summary(claims: BffClaims, body: { courseId: string; userId?: string }) {
+  async summary(
+    claims: BffClaims,
+    body: { courseId: string; userId?: string },
+  ) {
     const self = !body.userId || body.userId === claims.sub;
-    if (!self && !isUuid(body.userId)) throw new BadRequestException('userId không hợp lệ.');
-    await this.authz.assertSessionCourse(claims, body.courseId, self ? undefined : STAFF_ROLES);
+    if (!self && !isUuid(body.userId))
+      throw new BadRequestException('userId không hợp lệ.');
+    await this.authz.assertSessionCourse(
+      claims,
+      body.courseId,
+      self ? undefined : STAFF_ROLES,
+    );
     const userId = self ? claims.sub : body.userId!;
 
-    const [los, sets] = await Promise.all([this.courseLos(body.courseId), this.courseSets(body.courseId)]);
+    const [los, sets] = await Promise.all([
+      this.courseLos(body.courseId),
+      this.courseSets(body.courseId),
+    ]);
     const loIds = los.map((lo) => lo.lo_id);
     const [evidence, bank, sources] = await Promise.all([
       this.evidence(body.courseId, sets, [userId]),
@@ -102,7 +122,15 @@ export class LearnerModelService {
       courseId: body.courseId,
       userId,
       model: modelInfo(),
-      plan: this.buildPlan({ states, normalized, rows, reviews, bank, sources, now }),
+      plan: this.buildPlan({
+        states,
+        normalized,
+        rows,
+        reviews,
+        bank,
+        sources,
+        now,
+      }),
       los: los.map((lo, i) => ({
         ...loView(lo),
         ...stateView(states[i]),
@@ -133,12 +161,17 @@ export class LearnerModelService {
       where: { internal_user_id: { in: userIds } },
       select: { internal_user_id: true, display_name: true },
     });
-    const names = new Map(users.map((u) => [u.internal_user_id, u.display_name]));
+    const names = new Map(
+      users.map((u) => [u.internal_user_id, u.display_name]),
+    );
     const loIds = los.map((lo) => lo.lo_id);
 
     const students = userIds
       .map((userId) => {
-        const states = learnerLoStates(loIds, normalizeAttempts(evidence.get(userId) ?? []));
+        const states = learnerLoStates(
+          loIds,
+          normalizeAttempts(evidence.get(userId) ?? []),
+        );
         return {
           userId,
           name: names.get(userId) ?? null,
@@ -152,7 +185,11 @@ export class LearnerModelService {
       model: modelInfo(),
       minPracticeItems: MIN_PRACTICE_ITEMS,
       los: los.map((lo) => {
-        const stock = bank.get(lo.lo_id) ?? { practice: 0, byType: {}, inExam: 0 };
+        const stock = bank.get(lo.lo_id) ?? {
+          practice: 0,
+          byType: {},
+          inExam: 0,
+        };
         return {
           ...loView(lo),
           bank: {
@@ -161,8 +198,10 @@ export class LearnerModelService {
             inExam: stock.inExam,
             low: stock.practice < MIN_PRACTICE_ITEMS,
           },
-          mastered: students.filter((s) => s.los.find((x) => x.loId === lo.lo_id)?.status === 'mastered')
-            .length,
+          mastered: students.filter(
+            (s) =>
+              s.los.find((x) => x.loId === lo.lo_id)?.status === 'mastered',
+          ).length,
         };
       }),
       students,
@@ -173,7 +212,13 @@ export class LearnerModelService {
     return this.prisma.learning_outcomes
       .findMany({
         where: { course_id: courseId, deleted_at: null, is_current: true },
-        select: { lo_id: true, code: true, parent_code: true, statement_vi: true, bloom_level: true },
+        select: {
+          lo_id: true,
+          code: true,
+          parent_code: true,
+          statement_vi: true,
+          bloom_level: true,
+        },
       })
       .then((rows) => rows.sort(byCode));
   }
@@ -191,7 +236,11 @@ export class LearnerModelService {
    * học: nếu mô hình và planner dùng ngay kết quả đó thì mức nắm hoặc đề xuất
    * kế tiếp sẽ để lộ câu nào đúng, câu nào sai.
    */
-  private async evidence(courseId: string, sets: QuizSetRow[], userIds?: string[]) {
+  private async evidence(
+    courseId: string,
+    sets: QuizSetRow[],
+    userIds?: string[],
+  ) {
     const rows = await this.prisma.quiz_attempts.findMany({
       where: {
         course_id: courseId,
@@ -205,7 +254,9 @@ export class LearnerModelService {
         is_correct: true,
         grading_status: true,
         attempted_at: true,
-        quiz_items: { select: { lo_id: true, type: true, question: true, options: true } },
+        quiz_items: {
+          select: { lo_id: true, type: true, question: true, options: true },
+        },
         // Cột Canvas của link để lấy hạn/giờ đóng hiệu lực, cùng một truy vấn.
         lti_resource_links: {
           select: {
@@ -226,8 +277,12 @@ export class LearnerModelService {
     for (const row of rows) {
       const link = row.lti_resource_links;
       const set =
-        link?.target_kind === 'quiz_set' && link.target_id ? setById.get(link.target_id) : undefined;
-      const item = (set && snapshotItems(set).find((q) => q.quiz_id === row.quiz_id)) || row.quiz_items;
+        link?.target_kind === 'quiz_set' && link.target_id
+          ? setById.get(link.target_id)
+          : undefined;
+      const item =
+        (set && snapshotItems(set).find((q) => q.quiz_id === row.quiz_id)) ||
+        row.quiz_items;
       const list = byUser.get(row.user_id) ?? [];
       list.push({
         attemptId: row.attempt_id,
@@ -241,7 +296,9 @@ export class LearnerModelService {
         attemptedAt: row.attempted_at,
         source: set ? (set.mode === 'exam' ? 'exam' : 'practice') : 'lesson',
         // Hạn và giờ đóng theo Assignment Canvas, như lúc sinh viên làm bài.
-        hidden: set ? !answersRevealed(withCanvasSettings(set, link), now) : false,
+        hidden: set
+          ? !answersRevealed(withCanvasSettings(set, link), now)
+          : false,
       });
       byUser.set(row.user_id, list);
     }
@@ -308,7 +365,8 @@ export class LearnerModelService {
       if (microRows.length > 0) {
         for (const list of byUser.values()) {
           list.sort(
-            (a, b) => (a.attemptedAt?.getTime() ?? 0) - (b.attemptedAt?.getTime() ?? 0),
+            (a, b) =>
+              (a.attemptedAt?.getTime() ?? 0) - (b.attemptedAt?.getTime() ?? 0),
           );
         }
       }
@@ -339,7 +397,12 @@ export class LearnerModelService {
     });
     const bank = new Map<string, BankStock>();
     for (const item of items) {
-      const entry = bank.get(item.lo_id!) ?? { practice: 0, byType: {}, inExam: 0, keys: new Set() };
+      const entry = bank.get(item.lo_id!) ?? {
+        practice: 0,
+        byType: {},
+        inExam: 0,
+        keys: new Set(),
+      };
       bank.set(item.lo_id!, entry);
       if (examIds.has(item.quiz_id)) {
         entry.inExam++;
@@ -371,7 +434,11 @@ export class LearnerModelService {
       : [];
     const cardRows = this.prisma.lesson_cards?.findMany
       ? await this.prisma.lesson_cards.findMany({
-          where: { lo_id: { in: loIds }, deleted_at: null, status: { in: POOL_STATUSES } },
+          where: {
+            lo_id: { in: loIds },
+            deleted_at: null,
+            status: { in: POOL_STATUSES },
+          },
           select: { lo_id: true },
           distinct: ['lo_id'],
         })
@@ -401,7 +468,9 @@ export class LearnerModelService {
     const { states, normalized, rows, reviews, bank, sources, now } = args;
     const dayStart = localDayStart(now, 0, REVIEW_DEFAULTS);
     const masteredAt = new Map(
-      states.filter((s) => s.firstMasteredAt).map((s) => [s.loId, s.firstMasteredAt!.getTime()]),
+      states
+        .filter((s) => s.firstMasteredAt)
+        .map((s) => [s.loId, s.firstMasteredAt!.getTime()]),
     );
 
     const seenKeys = new Map<string, Set<string>>();
@@ -415,7 +484,9 @@ export class LearnerModelService {
     const scope: PlannerLo[] = states.map((state) => {
       const stock = bank.get(state.loId);
       const seen = seenKeys.get(state.loId);
-      const hasNewItem = stock ? [...stock.keys].some((key) => !seen?.has(key)) : false;
+      const hasNewItem = stock
+        ? [...stock.keys].some((key) => !seen?.has(key))
+        : false;
       return {
         loId: state.loId,
         mastered: state.status === 'mastered',
@@ -430,14 +501,18 @@ export class LearnerModelService {
       };
     });
 
-    const lastObservation = normalized.observations[normalized.observations.length - 1];
+    const lastObservation =
+      normalized.observations[normalized.observations.length - 1];
     const answered = rows.filter(
-      (row) => row.attemptedAt && row.attemptedAt.getTime() >= dayStart.getTime(),
+      (row) =>
+        row.attemptedAt && row.attemptedAt.getTime() >= dayStart.getTime(),
     ).length;
     const reviewsAnswered = normalized.observations.filter((obs) => {
       const mastered = masteredAt.get(obs.loId);
       return (
-        obs.at.getTime() >= dayStart.getTime() && mastered !== undefined && obs.at.getTime() > mastered
+        obs.at.getTime() >= dayStart.getTime() &&
+        mastered !== undefined &&
+        obs.at.getTime() > mastered
       );
     }).length;
 

@@ -57,7 +57,13 @@ export class LaunchSyncDto {
 
   @IsOptional()
   @IsIn(['lesson', 'card', 'quiz_set', 'chat', 'video', 'micro_content'])
-  targetKind?: 'lesson' | 'card' | 'quiz_set' | 'chat' | 'video' | 'micro_content';
+  targetKind?:
+    | 'lesson'
+    | 'card'
+    | 'quiz_set'
+    | 'chat'
+    | 'video'
+    | 'micro_content';
 
   @IsOptional()
   @IsString()

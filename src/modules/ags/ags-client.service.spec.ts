@@ -122,12 +122,14 @@ describe('AgsClientService', () => {
 
   it('coi 422 "still unpublished" của Canvas là chờ giảng viên publish, không phải lỗi vĩnh viễn', async () => {
     const { service } = setup();
-    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        '{"errors":{"type":"unprocessable_entity","message":"This assignment is still unpublished"}}',
-        { status: 422 },
-      ),
-    );
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(
+          '{"errors":{"type":"unprocessable_entity","message":"This assignment is still unpublished"}}',
+          { status: 422 },
+        ),
+      );
 
     const result = await service.postScore(
       'https://canvas.test/line_items/9',
@@ -143,12 +145,14 @@ describe('AgsClientService', () => {
 
   it('vẫn coi 422 khác là lỗi vĩnh viễn', async () => {
     const { service } = setup();
-    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        '{"errors":{"message":"The maximum number of allowed attempts has been reached for this submission"}}',
-        { status: 422 },
-      ),
-    );
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(
+          '{"errors":{"message":"The maximum number of allowed attempts has been reached for this submission"}}',
+          { status: 422 },
+        ),
+      );
 
     const result = await service.postScore(
       'https://canvas.test/line_items/9',
@@ -242,10 +246,13 @@ describe('AgsClientService', () => {
         )
         .mockResolvedValueOnce(new Response('', { status: 200 }));
 
-      const result = await service.postScore('https://canvas.test/line_items/9', {
-        ...payload,
-        submission,
-      });
+      const result = await service.postScore(
+        'https://canvas.test/line_items/9',
+        {
+          ...payload,
+          submission,
+        },
+      );
 
       expect(result).toEqual({ ok: true });
       expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -259,10 +266,13 @@ describe('AgsClientService', () => {
       const fetchMock = jest
         .spyOn(globalThis, 'fetch')
         .mockResolvedValue(new Response('{"errors":"boom"}', { status: 422 }));
-      const result = await service.postScore('https://canvas.test/line_items/9', {
-        ...payload,
-        submission,
-      });
+      const result = await service.postScore(
+        'https://canvas.test/line_items/9',
+        {
+          ...payload,
+          submission,
+        },
+      );
       expect(result).toMatchObject({ ok: false, retryable: false });
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });

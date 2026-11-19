@@ -22,12 +22,18 @@ describe('fileIdsInSyllabus', () => {
   });
 
   it('ignores links that are not Canvas files', () => {
-    expect(fileIdsInSyllabus('<a href="/courses/1/pages/intro">Intro</a>')).toEqual([]);
+    expect(
+      fileIdsInSyllabus('<a href="/courses/1/pages/intro">Intro</a>'),
+    ).toEqual([]);
   });
 });
 
 describe('pickSyllabusFile', () => {
-  const file = (id: number, name: string, mime = 'application/pdf'): CanvasFile => ({
+  const file = (
+    id: number,
+    name: string,
+    mime = 'application/pdf',
+  ): CanvasFile => ({
     id,
     display_name: name,
     'content-type': mime,
@@ -42,20 +48,40 @@ describe('pickSyllabusFile', () => {
   });
 
   it('matches Vietnamese names with or without diacritics', () => {
-    expect(pickSyllabusFile([file(1, 'slide.pdf'), file(2, 'Đề cương môn học.pdf')])?.id).toBe(2);
-    expect(pickSyllabusFile([file(1, 'slide.pdf'), file(3, 'de_cuong_CO3137.pdf')])?.id).toBe(3);
     expect(
-      pickSyllabusFile([file(1, 'slide.pdf'), file(4, 'Đề cương.pdf'.normalize('NFD'))])?.id,
+      pickSyllabusFile([file(1, 'slide.pdf'), file(2, 'Đề cương môn học.pdf')])
+        ?.id,
+    ).toBe(2);
+    expect(
+      pickSyllabusFile([file(1, 'slide.pdf'), file(3, 'de_cuong_CO3137.pdf')])
+        ?.id,
+    ).toBe(3);
+    expect(
+      pickSyllabusFile([
+        file(1, 'slide.pdf'),
+        file(4, 'Đề cương.pdf'.normalize('NFD')),
+      ])?.id,
     ).toBe(4);
   });
 
   it('falls back to the first PDF when no name looks like a syllabus', () => {
-    expect(pickSyllabusFile([file(5, 'notes.docx', 'application/msword'), file(6, 'a.pdf')])?.id).toBe(6);
+    expect(
+      pickSyllabusFile([
+        file(5, 'notes.docx', 'application/msword'),
+        file(6, 'a.pdf'),
+      ])?.id,
+    ).toBe(6);
   });
 
   it('never picks a file the extractor cannot read', () => {
     expect(
-      pickSyllabusFile([file(8, 'DCMH.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')]),
+      pickSyllabusFile([
+        file(
+          8,
+          'DCMH.docx',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ),
+      ]),
     ).toBeNull();
   });
 });
@@ -63,7 +89,11 @@ describe('pickSyllabusFile', () => {
 describe('isSupportedSyllabusFile', () => {
   it('accepts a PDF by extension when Canvas reports a generic MIME type', () => {
     expect(
-      isSupportedSyllabusFile({ id: 1, display_name: 'DCMH.PDF', 'content-type': 'application/octet-stream' }),
+      isSupportedSyllabusFile({
+        id: 1,
+        display_name: 'DCMH.PDF',
+        'content-type': 'application/octet-stream',
+      }),
     ).toBe(true);
   });
 });

@@ -19,7 +19,8 @@ import { EssayGradingService } from './services/essay-grading.service';
  */
 const url = process.env.GRADING_IT_DATABASE_URL;
 const describeDb = url ? describe : describe.skip;
-const REVIEW = 'AI chưa chấm được câu này. Giảng viên sẽ chấm, điểm cập nhật sau.';
+const REVIEW =
+  'AI chưa chấm được câu này. Giảng viên sẽ chấm, điểm cập nhật sau.';
 const INPUT = {
   type: 'SHORT_ANSWER',
   question: 'Vì sao?',
@@ -49,28 +50,58 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
 
   afterAll(async () => {
     for (const course of courses) {
-      await prisma.$executeRawUnsafe(`DELETE FROM quiz_attempts WHERE course_id = $1::uuid`, course);
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM quiz_attempts WHERE course_id = $1::uuid`,
+        course,
+      );
       // Câu trả lời giữ khoá RESTRICT tới câu hỏi: xoá lượt nộp (cascade câu trả lời) trước.
       await prisma.$executeRawUnsafe(
         `DELETE FROM micro_content_attempts WHERE micro_content_id IN (SELECT micro_content_id FROM micro_contents WHERE course_id = $1::uuid)`,
         course,
       );
-      await prisma.$executeRawUnsafe(`DELETE FROM quiz_items WHERE course_id = $1::uuid`, course);
-      await prisma.$executeRawUnsafe(`DELETE FROM lessons WHERE course_id = $1::uuid`, course);
-      await prisma.$executeRawUnsafe(`DELETE FROM learning_outcomes WHERE course_id = $1::uuid`, course);
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM quiz_items WHERE course_id = $1::uuid`,
+        course,
+      );
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM lessons WHERE course_id = $1::uuid`,
+        course,
+      );
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM learning_outcomes WHERE course_id = $1::uuid`,
+        course,
+      );
       await prisma.$executeRawUnsafe(
         `DELETE FROM lti_resource_links WHERE course_ref_id IN (SELECT course_ref_id FROM lms_course_ref WHERE course_id = $1::uuid)`,
         course,
       );
-      await prisma.$executeRawUnsafe(`DELETE FROM lms_course_ref WHERE course_id = $1::uuid`, course);
-      await prisma.$executeRawUnsafe(`DELETE FROM micro_contents WHERE course_id = $1::uuid`, course);
-      await prisma.$executeRawUnsafe(`DELETE FROM essay_processors WHERE course_id = $1::uuid`, course);
-      await prisma.$executeRawUnsafe(`DELETE FROM courses WHERE course_id = $1::uuid`, course);
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM lms_course_ref WHERE course_id = $1::uuid`,
+        course,
+      );
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM micro_contents WHERE course_id = $1::uuid`,
+        course,
+      );
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM essay_processors WHERE course_id = $1::uuid`,
+        course,
+      );
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM courses WHERE course_id = $1::uuid`,
+        course,
+      );
     }
     for (const user of users) {
       // Nhật ký chấm tay/chấm lại của EssayGradingService giữ khoá tới người dùng.
-      await prisma.$executeRawUnsafe(`DELETE FROM review_audit_logs WHERE performed_by = $1::uuid`, user);
-      await prisma.$executeRawUnsafe(`DELETE FROM lms_user_mappings WHERE internal_user_id = $1::uuid`, user);
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM review_audit_logs WHERE performed_by = $1::uuid`,
+        user,
+      );
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM lms_user_mappings WHERE internal_user_id = $1::uuid`,
+        user,
+      );
     }
     await prisma?.$disconnect();
   });
@@ -181,31 +212,63 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
     const e1 = await attempt(seed, { submission, pending: true });
     const e2 = await attempt(seed, { submission, pending: true });
     const handler = new QuizGradingResultHandler(prisma as never);
-    const payload = (answers: unknown[]) => ({ submission_id: submission, course_id: seed.course_id, answers });
+    const payload = (answers: unknown[]) => ({
+      submission_id: submission,
+      course_id: seed.course_id,
+      answers,
+    });
 
     await handler.handle(
-      envelope('QUIZ_GRADING_RESULT', payload([
-        graded(e1, 75),
-        { attempt_id: e2, status: 'NEEDS_REVIEW', reason: 'MODEL_ERROR', feedback: REVIEW, grader_model: null },
-      ]))
+      envelope(
+        'QUIZ_GRADING_RESULT',
+        payload([
+          graded(e1, 75),
+          {
+            attempt_id: e2,
+            status: 'NEEDS_REVIEW',
+            reason: 'MODEL_ERROR',
+            feedback: REVIEW,
+            grader_model: null,
+          },
+        ]),
+      ),
     );
     let rows = await quizRows([mcq, e1, e2]);
-    expect(rows.find((r) => r.attempt_id === e1)).toMatchObject({ grading_status: 'GRADED', is_correct: false, feedback: 'Điểm 75' });
+    expect(rows.find((r) => r.attempt_id === e1)).toMatchObject({
+      grading_status: 'GRADED',
+      is_correct: false,
+      feedback: 'Điểm 75',
+    });
     expect(Number(rows.find((r) => r.attempt_id === e1)!.score)).toBe(75);
-    expect(rows.find((r) => r.attempt_id === e2)).toMatchObject({ grading_status: 'NEEDS_REVIEW', feedback: REVIEW });
+    expect(rows.find((r) => r.attempt_id === e2)).toMatchObject({
+      grading_status: 'NEEDS_REVIEW',
+      feedback: REVIEW,
+    });
     expect(Number(rows.find((r) => r.attempt_id === e2)!.score)).toBe(0);
     expect(rows.every((r) => r.ags_status === 'AWAITING_GRADE')).toBe(true);
 
     // Giảng viên cho AI chấm lại câu 2 (EssayGradingService.retry): về PENDING.
-    await prisma.quiz_attempts.update({ where: { attempt_id: e2 }, data: { grading_status: 'PENDING' } });
+    await prisma.quiz_attempts.update({
+      where: { attempt_id: e2 },
+      data: { grading_status: 'PENDING' },
+    });
     const retry = envelope('QUIZ_GRADING_RESULT', payload([graded(e2, 100)]));
     const out = await handler.handle(retry);
     expect(out).toMatchObject({ graded: 1, released: 3 });
     rows = await quizRows([mcq, e1, e2]);
-    expect(rows.every((r) => r.ags_status === 'PENDING' && r.grading_status === 'GRADED')).toBe(true);
+    expect(
+      rows.every(
+        (r) => r.ags_status === 'PENDING' && r.grading_status === 'GRADED',
+      ),
+    ).toBe(true);
 
     const again = await handler.handle(retry);
-    expect(again).toMatchObject({ graded: 0, needsReview: 0, skipped: 1, released: 0 });
+    expect(again).toMatchObject({
+      graded: 0,
+      needsReview: 0,
+      skipped: 1,
+      released: 0,
+    });
     expect(await quizRows([mcq, e1, e2])).toEqual(rows);
   });
 
@@ -216,9 +279,16 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
     const e2 = await attempt(seed, { submission, pending: true });
     const handler = new QuizGradingResultHandler(prisma as never);
     const result = (id: string) =>
-      envelope('QUIZ_GRADING_RESULT', { submission_id: submission, course_id: seed.course_id, answers: [graded(id, 50)] });
+      envelope('QUIZ_GRADING_RESULT', {
+        submission_id: submission,
+        course_id: seed.course_id,
+        answers: [graded(id, 50)],
+      });
 
-    const outs = await Promise.all([handler.handle(result(e1)), handler.handle(result(e2))]);
+    const outs = await Promise.all([
+      handler.handle(result(e1)),
+      handler.handle(result(e2)),
+    ]);
 
     expect(outs.map((o) => o.released).sort()).toEqual([0, 2]);
     const rows = await quizRows([e1, e2]);
@@ -238,19 +308,30 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
       course_ref_id,
       `rl-${randomUUID()}`,
     );
-    const mcq = await attempt(seed, { submission: null, link, pending: false, score: 100 });
-    const essay = await attempt(seed, { submission: null, link, pending: true });
+    const mcq = await attempt(seed, {
+      submission: null,
+      link,
+      pending: false,
+      score: 100,
+    });
+    const essay = await attempt(seed, {
+      submission: null,
+      link,
+      pending: true,
+    });
 
     const out = await new QuizGradingResultHandler(prisma as never).handle(
       envelope('QUIZ_GRADING_RESULT', {
         submission_id: randomUUID(),
         course_id: seed.course_id,
         answers: [graded(essay, 100)],
-      })
+      }),
     );
 
     expect(out.released).toBe(2);
-    expect((await quizRows([mcq, essay])).every((r) => r.ags_status === 'PENDING')).toBe(true);
+    expect(
+      (await quizRows([mcq, essay])).every((r) => r.ags_status === 'PENDING'),
+    ).toBe(true);
   });
 
   it('câu không thuộc lượt nộp: từ chối và không ghi gì (rollback)', async () => {
@@ -264,10 +345,12 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
           submission_id: randomUUID(),
           course_id: seed.course_id,
           answers: [graded(e1, 100), graded(e2, 100)],
-        })
+        }),
       ),
     ).rejects.toBeInstanceOf(InvalidWorkerResultError);
-    expect((await quizRows([e1, e2])).every((r) => r.grading_status === 'PENDING')).toBe(true);
+    expect(
+      (await quizRows([e1, e2])).every((r) => r.grading_status === 'PENDING'),
+    ).toBe(true);
   });
 
   it('kết quả quiz thất bại vĩnh viễn: câu PENDING → NEEDS_REVIEW, giảng viên chấm tay rồi AGS mở', async () => {
@@ -285,12 +368,17 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
     });
     const failure = await handler.handle(bad).catch((e: Error) => e);
     expect(failure).toBeInstanceOf(InvalidWorkerResultError);
-    expect((await quizRows([e1, e2])).every((r) => r.grading_status === 'PENDING')).toBe(true);
+    expect(
+      (await quizRows([e1, e2])).every((r) => r.grading_status === 'PENDING'),
+    ).toBe(true);
 
     await handler.onFinalFailure(bad, failure as Error);
 
     const rows = await quizRows([mcq, e1, e2]);
-    expect(rows.find((r) => r.attempt_id === mcq)).toMatchObject({ grading_status: 'GRADED', feedback: 'giải thích' });
+    expect(rows.find((r) => r.attempt_id === mcq)).toMatchObject({
+      grading_status: 'GRADED',
+      feedback: 'giải thích',
+    });
     for (const id of [e1, e2]) {
       expect(rows.find((r) => r.attempt_id === id)).toMatchObject({
         grading_status: 'NEEDS_REVIEW',
@@ -303,10 +391,21 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
     // Lối ra có thật: giảng viên chấm tay từng câu (EssayGradingService.grade nhận
     // NEEDS_REVIEW), câu cuối có điểm thì lượt nộp mở khoá AGS.
     const staff = { sub: seed.user_id, roles: ['instructor'] } as never;
-    const service = new EssayGradingService(prisma as never, { assertCourseAccess: () => Promise.resolve() } as never);
-    expect(await service.grade(staff, { attemptId: e1, score: 80 })).toMatchObject({ released: 0 });
-    expect(await service.grade(staff, { attemptId: e2, score: 100 })).toMatchObject({ released: 3 });
-    expect((await quizRows([mcq, e1, e2])).every((r) => r.ags_status === 'PENDING' && r.grading_status === 'GRADED')).toBe(true);
+    const service = new EssayGradingService(
+      prisma as never,
+      { assertCourseAccess: () => Promise.resolve() } as never,
+    );
+    expect(
+      await service.grade(staff, { attemptId: e1, score: 80 }),
+    ).toMatchObject({ released: 0 });
+    expect(
+      await service.grade(staff, { attemptId: e2, score: 100 }),
+    ).toMatchObject({ released: 3 });
+    expect(
+      (await quizRows([mcq, e1, e2])).every(
+        (r) => r.ags_status === 'PENDING' && r.grading_status === 'GRADED',
+      ),
+    ).toBe(true);
   });
 
   it('kết quả quiz thất bại vĩnh viễn: giảng viên cũng cho AI chấm lại được (retry nhận NEEDS_REVIEW)', async () => {
@@ -322,21 +421,37 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
     await handler.onFinalFailure(failed, new Error('hết lượt thử'));
     expect((await quizRows([e1]))[0].grading_status).toBe('NEEDS_REVIEW');
 
-    const service = new EssayGradingService(prisma as never, { assertCourseAccess: () => Promise.resolve() } as never);
-    await expect(service.retry({ sub: seed.user_id, roles: ['instructor'] } as never, { attemptId: e1 })).resolves.toMatchObject({
+    const service = new EssayGradingService(
+      prisma as never,
+      { assertCourseAccess: () => Promise.resolve() } as never,
+    );
+    await expect(
+      service.retry({ sub: seed.user_id, roles: ['instructor'] } as never, {
+        attemptId: e1,
+      }),
+    ).resolves.toMatchObject({
       gradingStatus: 'PENDING',
     });
     expect((await quizRows([e1]))[0].grading_status).toBe('PENDING');
     // retry() ghi một sự kiện outbox cho worker; dọn để khỏi tồn đọng trong DB tạm.
-    await prisma.$executeRawUnsafe(`DELETE FROM outbox_events WHERE aggregate_id = $1::uuid`, submission);
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM outbox_events WHERE aggregate_id = $1::uuid`,
+      submission,
+    );
   });
 
   it('kết quả quiz thất bại vĩnh viễn: không đè câu đã chấm hay lượt nộp khác, chạy lại không đổi gì', async () => {
     const seed = await seedCourse();
     const submission = randomUUID();
     const done = await attempt(seed, { submission, pending: true });
-    await prisma.quiz_attempts.update({ where: { attempt_id: done }, data: { grading_status: 'GRADED', score: 70 } });
-    const other = await attempt(seed, { submission: randomUUID(), pending: true });
+    await prisma.quiz_attempts.update({
+      where: { attempt_id: done },
+      data: { grading_status: 'GRADED', score: 70 },
+    });
+    const other = await attempt(seed, {
+      submission: randomUUID(),
+      pending: true,
+    });
     const handler = new QuizGradingResultHandler(prisma as never);
     const failed = envelope('QUIZ_GRADING_RESULT', {
       submission_id: submission,
@@ -348,9 +463,13 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
     await handler.onFinalFailure(failed, new Error('x'));
 
     const rows = await quizRows([done, other]);
-    expect(rows.find((r) => r.attempt_id === done)).toMatchObject({ grading_status: 'GRADED' });
+    expect(rows.find((r) => r.attempt_id === done)).toMatchObject({
+      grading_status: 'GRADED',
+    });
     expect(Number(rows.find((r) => r.attempt_id === done)!.score)).toBe(70);
-    expect(rows.find((r) => r.attempt_id === other)).toMatchObject({ grading_status: 'PENDING' });
+    expect(rows.find((r) => r.attempt_id === other)).toMatchObject({
+      grading_status: 'PENDING',
+    });
   });
 
   it('micro content: điểm tổng theo Math.round (50.5 → 51), passed và trạng thái lượt nộp; nhận lại không đổi gì', async () => {
@@ -399,19 +518,41 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
       attempt_id,
       course_id: seed.course_id,
       micro_content_id,
-      answers: [{ answer_id, status: 'GRADED', score: 100, is_correct: true, feedback: 'Đủ ý', grader_model: null }],
+      answers: [
+        {
+          answer_id,
+          status: 'GRADED',
+          score: 100,
+          is_correct: true,
+          feedback: 'Đủ ý',
+          grader_model: null,
+        },
+      ],
     });
 
     await handler.handle(result);
     const read = () =>
       prisma.micro_content_attempts.findUnique({
         where: { attempt_id },
-        select: { score: true, passed: true, grading_status: true, answers: { select: { score: true, grading_status: true, feedback: true } } },
+        select: {
+          score: true,
+          passed: true,
+          grading_status: true,
+          answers: {
+            select: { score: true, grading_status: true, feedback: true },
+          },
+        },
       });
     const after = await read();
-    expect(after).toMatchObject({ score: 51, passed: true, grading_status: 'GRADED' });
+    expect(after).toMatchObject({
+      score: 51,
+      passed: true,
+      grading_status: 'GRADED',
+    });
     expect(after!.answers).toEqual(
-      expect.arrayContaining([{ score: 100, grading_status: 'GRADED', feedback: 'Đủ ý' }]),
+      expect.arrayContaining([
+        { score: 100, grading_status: 'GRADED', feedback: 'Đủ ý' },
+      ]),
     );
 
     await handler.handle(result);
@@ -463,24 +604,50 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
       attempt_id,
       course_id: seed.course_id,
       micro_content_id,
-      answers: [{ answer_id, status: 'GRADED', score: 999, is_correct: true, feedback: null, grader_model: null }],
+      answers: [
+        {
+          answer_id,
+          status: 'GRADED',
+          score: 999,
+          is_correct: true,
+          feedback: null,
+          grader_model: null,
+        },
+      ],
     });
-    await expect(handler.handle(failed)).rejects.toBeInstanceOf(InvalidWorkerResultError);
+    await expect(handler.handle(failed)).rejects.toBeInstanceOf(
+      InvalidWorkerResultError,
+    );
 
     await handler.onFinalFailure(failed, new InvalidWorkerResultError('score'));
 
     const read = () =>
       prisma.micro_content_attempts.findUnique({
         where: { attempt_id },
-        select: { score: true, passed: true, grading_status: true, answers: { select: { answer_id: true, grading_status: true, feedback: true } } },
+        select: {
+          score: true,
+          passed: true,
+          grading_status: true,
+          answers: {
+            select: { answer_id: true, grading_status: true, feedback: true },
+          },
+        },
       });
     const after = await read();
-    expect(after).toMatchObject({ score: 50, passed: false, grading_status: 'NEEDS_REVIEW' });
-    expect(after!.answers.find((a) => a.answer_id === answer_id)).toMatchObject({
+    expect(after).toMatchObject({
+      score: 50,
+      passed: false,
       grading_status: 'NEEDS_REVIEW',
-      feedback: expect.stringContaining('Giảng viên sẽ chấm') as string,
     });
-    expect(after!.answers.filter((a) => a.grading_status === 'GRADED')).toHaveLength(1);
+    expect(after!.answers.find((a) => a.answer_id === answer_id)).toMatchObject(
+      {
+        grading_status: 'NEEDS_REVIEW',
+        feedback: expect.stringContaining('Giảng viên sẽ chấm') as string,
+      },
+    );
+    expect(
+      after!.answers.filter((a) => a.grading_status === 'GRADED'),
+    ).toHaveLength(1);
 
     await handler.onFinalFailure(failed, new Error('x'));
     expect(await read()).toEqual(after);
@@ -510,17 +677,36 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
     const result = {
       score: 8.5,
       max_score: 10,
-      criteria: [{ criterion: 'Nội dung', points: 8.5, max_points: 10, comment: 'Khá' }],
+      criteria: [
+        { criterion: 'Nội dung', points: 8.5, max_points: 10, comment: 'Khá' },
+      ],
       feedback: 'Bài khá.',
       truncated: false,
       model: 'gemini-test',
     };
 
-    const graded = envelope('ESSAY_GRADING_RESULT', { essay_submission_id: okId, status: 'GRADED', result });
-    expect(await handler.handle(graded)).toEqual({ applied: true, status: 'GRADED' });
-    const row = await prisma.essay_submissions.findUnique({ where: { essay_submission_id: okId } });
-    expect(row).toMatchObject({ status: 'GRADED', result, error: null, attempts: 0 });
-    expect(await handler.handle(graded)).toEqual({ applied: false, status: 'GRADED' });
+    const graded = envelope('ESSAY_GRADING_RESULT', {
+      essay_submission_id: okId,
+      status: 'GRADED',
+      result,
+    });
+    expect(await handler.handle(graded)).toEqual({
+      applied: true,
+      status: 'GRADED',
+    });
+    const row = await prisma.essay_submissions.findUnique({
+      where: { essay_submission_id: okId },
+    });
+    expect(row).toMatchObject({
+      status: 'GRADED',
+      result,
+      error: null,
+      attempts: 0,
+    });
+    expect(await handler.handle(graded)).toEqual({
+      applied: false,
+      status: 'GRADED',
+    });
 
     await handler.handle(
       envelope('ESSAY_GRADING_RESULT', {
@@ -528,9 +714,13 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
         status: 'FAILED',
         error_code: 'UNSUPPORTED_ASSET_TYPE',
         error: 'File .zip',
-      })
+      }),
     );
-    expect(await prisma.essay_submissions.findUnique({ where: { essay_submission_id: failId } })).toMatchObject({
+    expect(
+      await prisma.essay_submissions.findUnique({
+        where: { essay_submission_id: failId },
+      }),
+    ).toMatchObject({
       status: 'FAILED',
       error_code: 'UNSUPPORTED_ASSET_TYPE',
       error: 'File .zip',
@@ -561,17 +751,29 @@ describeDb('kết quả chấm trên PostgreSQL', () => {
     const gradedAlready = await submission('GRADED');
     const handler = new EssayGradingResultHandler(prisma as never);
     const failedFor = (id: string) =>
-      envelope('ESSAY_GRADING_RESULT', { essay_submission_id: id, status: 'GRADED', result: { score: 99 } });
+      envelope('ESSAY_GRADING_RESULT', {
+        essay_submission_id: id,
+        status: 'GRADED',
+        result: { score: 99 },
+      });
 
     await handler.onFinalFailure(failedFor(queued), new Error('x'));
     await handler.onFinalFailure(failedFor(gradedAlready), new Error('x'));
 
-    expect(await prisma.essay_submissions.findUnique({ where: { essay_submission_id: queued } })).toMatchObject({
+    expect(
+      await prisma.essay_submissions.findUnique({
+        where: { essay_submission_id: queued },
+      }),
+    ).toMatchObject({
       status: 'FAILED',
       error_code: 'PROCESSING_FAILED',
       reported_at: null,
     });
-    expect(await prisma.essay_submissions.findUnique({ where: { essay_submission_id: gradedAlready } })).toMatchObject({
+    expect(
+      await prisma.essay_submissions.findUnique({
+        where: { essay_submission_id: gradedAlready },
+      }),
+    ).toMatchObject({
       status: 'GRADED',
       error_code: null,
     });

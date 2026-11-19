@@ -1,5 +1,8 @@
 import { UnauthorizedException, ValidationPipe } from '@nestjs/common';
-import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import {
+  FastifyAdapter,
+  NestFastifyApplication,
+} from '@nestjs/platform-fastify';
 import { Test } from '@nestjs/testing';
 import { BffClaims } from './auth/bff-claims';
 import { BffJwtGuard } from './auth/bff-jwt.guard';
@@ -70,7 +73,11 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     verify: jest.fn(async (token: string) => {
       if (token === 'valid-token') return claims;
       if (token === 'system-token') {
-        return makeClaims({ sub: 'lti-bootstrap', roles: ['system'], scope: 'admin' });
+        return makeClaims({
+          sub: 'lti-bootstrap',
+          roles: ['system'],
+          scope: 'admin',
+        });
       }
       throw new UnauthorizedException('Invalid token');
     }),
@@ -83,7 +90,11 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     'getChapters',
     'getLearningOutcomes',
   ]);
-  const curriculumImports = makeMockService(['syncFromCanvas', 'listImports', 'applyImport']);
+  const curriculumImports = makeMockService([
+    'syncFromCanvas',
+    'listImports',
+    'applyImport',
+  ]);
   const documentService = makeMockService([
     'listDocuments',
     'createUploadSession',
@@ -93,9 +104,18 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     'confirmUpload',
     'deleteDocument',
   ]);
-  const canvasDocuments = makeMockService(['syncFromCanvas', 'updatePlacement']);
+  const canvasDocuments = makeMockService([
+    'syncFromCanvas',
+    'updatePlacement',
+  ]);
   const canvasSyncStatus = makeMockService(['status']);
-  const lessonService = makeMockService(['list', 'get', 'cards', 'quiz', 'publish']);
+  const lessonService = makeMockService([
+    'list',
+    'get',
+    'cards',
+    'quiz',
+    'publish',
+  ]);
   const reviewService = makeMockService([
     'listDrafts',
     'approveCard',
@@ -159,7 +179,12 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     'getVideoUrl',
     'getSubtitlesUrl',
   ]);
-  const microContentAttempt = makeMockService(['getResult', 'reportProgress', 'submit', 'listAttempts']);
+  const microContentAttempt = makeMockService([
+    'getResult',
+    'reportProgress',
+    'submit',
+    'listAttempts',
+  ]);
   const videoAsset = makeMockService([
     'listAssets',
     'checkHash',
@@ -242,7 +267,9 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     app = moduleRef.createNestApplication<NestFastifyApplication>(
       new FastifyAdapter({ bodyLimit: 10 * 1024 * 1024 }),
     );
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
   });
@@ -256,7 +283,11 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
   });
 
   it('rejects missing or invalid BFF JWT with 401 and forwards claims on valid token', async () => {
-    const noAuth = await injectJson({ method: 'GET', url: '/api/courses', headers: {} });
+    const noAuth = await injectJson({
+      method: 'GET',
+      url: '/api/courses',
+      headers: {},
+    });
     expect(noAuth.statusCode).toBe(401);
 
     const badAuth = await injectJson({
@@ -296,7 +327,10 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
       },
     });
     expect(ok.statusCode).toBe(201);
-    const passedDto = ltiService.syncLaunch.mock.calls[0][0] as Record<string, unknown>;
+    const passedDto = ltiService.syncLaunch.mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
     expect(passedDto.lmsSub).toBe('canvas-sub-1');
     expect(passedDto.targetId).toBeNull();
     expect(passedDto.email).toBeUndefined();
@@ -346,8 +380,13 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
       documentId: 'doc-1',
     });
 
-    await injectJson({ method: 'GET', url: '/api/micro-content/attempts/att-1/result' });
-    expect(microContentAttempt.getResult).toHaveBeenCalledWith(claims, { attemptId: 'att-1' });
+    await injectJson({
+      method: 'GET',
+      url: '/api/micro-content/attempts/att-1/result',
+    });
+    expect(microContentAttempt.getResult).toHaveBeenCalledWith(claims, {
+      attemptId: 'att-1',
+    });
     expect(microContent.get).not.toHaveBeenCalled();
 
     await injectJson({
@@ -376,14 +415,19 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
       url: '/api/review/quiz-items/approve-batch',
       payload: { quizIds: ['q1', 'q2'] },
     });
-    expect(reviewService.approveQuizItems).toHaveBeenCalledWith(claims, ['q1', 'q2']);
+    expect(reviewService.approveQuizItems).toHaveBeenCalledWith(claims, [
+      'q1',
+      'q2',
+    ]);
 
     await injectJson({
       method: 'POST',
       url: '/api/video-assets/check-hash',
       payload: { fileHash: 'sha256-abc' },
     });
-    expect(videoAsset.checkHash).toHaveBeenCalledWith(claims, { fileHash: 'sha256-abc' });
+    expect(videoAsset.checkHash).toHaveBeenCalledWith(claims, {
+      fileHash: 'sha256-abc',
+    });
 
     await injectJson({
       method: 'GET',
@@ -401,7 +445,12 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
       url: '/api/documents?courseId=c1&limit=10&offset=5',
     });
     expect(docList.statusCode).toBe(200);
-    expect(documentService.listDocuments).toHaveBeenCalledWith(claims, 'c1', 10, 5);
+    expect(documentService.listDocuments).toHaveBeenCalledWith(
+      claims,
+      'c1',
+      10,
+      5,
+    );
 
     const badDocLimit = await injectJson({
       method: 'GET',
@@ -482,25 +531,50 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
   });
 
   it('dispatches all newly exposed curriculum, learning-agent, chat, essay, quiz, micro-content and video-asset HTTP endpoints', async () => {
-    await injectJson({ method: 'POST', url: '/api/curriculum/sync-canvas', payload: { courseId: 'c1' } });
+    await injectJson({
+      method: 'POST',
+      url: '/api/curriculum/sync-canvas',
+      payload: { courseId: 'c1' },
+    });
     expect(curriculumImports.syncFromCanvas).toHaveBeenCalledWith(claims, 'c1');
 
-    await injectJson({ method: 'GET', url: '/api/curriculum/imports?courseId=c1&limit=5' });
+    await injectJson({
+      method: 'GET',
+      url: '/api/curriculum/imports?courseId=c1&limit=5',
+    });
     expect(curriculumImports.listImports).toHaveBeenCalledWith(claims, 'c1', 5);
 
-    await injectJson({ method: 'POST', url: '/api/curriculum/imports/imp-1/apply' });
+    await injectJson({
+      method: 'POST',
+      url: '/api/curriculum/imports/imp-1/apply',
+    });
     expect(curriculumImports.applyImport).toHaveBeenCalledWith(claims, 'imp-1');
 
-    await injectJson({ method: 'GET', url: '/api/learning-agent/summary?courseId=c1&userId=u2' });
-    expect(learnerModel.summary).toHaveBeenCalledWith(claims, { courseId: 'c1', userId: 'u2' });
+    await injectJson({
+      method: 'GET',
+      url: '/api/learning-agent/summary?courseId=c1&userId=u2',
+    });
+    expect(learnerModel.summary).toHaveBeenCalledWith(claims, {
+      courseId: 'c1',
+      userId: 'u2',
+    });
 
-    await injectJson({ method: 'GET', url: '/api/learning-agent/course-mastery?courseId=c1' });
-    expect(learnerModel.courseMastery).toHaveBeenCalledWith(claims, { courseId: 'c1' });
+    await injectJson({
+      method: 'GET',
+      url: '/api/learning-agent/course-mastery?courseId=c1',
+    });
+    expect(learnerModel.courseMastery).toHaveBeenCalledWith(claims, {
+      courseId: 'c1',
+    });
 
     await injectJson({ method: 'GET', url: '/api/model-bindings' });
     expect(modelSettings.list).toHaveBeenCalledWith(claims);
 
-    await injectJson({ method: 'PUT', url: '/api/chat/mode', payload: { mode: 'tools' } });
+    await injectJson({
+      method: 'PUT',
+      url: '/api/chat/mode',
+      payload: { mode: 'tools' },
+    });
     expect(chat.setMode).toHaveBeenCalledWith(claims, { mode: 'tools' });
 
     await injectJson({
@@ -516,10 +590,20 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     });
     expect(chat.recordRun).toHaveBeenCalled();
 
-    await injectJson({ method: 'POST', url: '/api/chat/runs/run-1/rate', payload: { rating: 1 } });
-    expect(chat.rateRun).toHaveBeenCalledWith(claims, { runId: 'run-1', rating: 1 });
+    await injectJson({
+      method: 'POST',
+      url: '/api/chat/runs/run-1/rate',
+      payload: { rating: 1 },
+    });
+    expect(chat.rateRun).toHaveBeenCalledWith(claims, {
+      runId: 'run-1',
+      rating: 1,
+    });
 
-    await injectJson({ method: 'DELETE', url: '/api/chat/conversations/conv-1?courseId=c1' });
+    await injectJson({
+      method: 'DELETE',
+      url: '/api/chat/conversations/conv-1?courseId=c1',
+    });
     expect(chat.deleteConversation).toHaveBeenCalledWith(claims, {
       courseId: 'c1',
       conversationId: 'conv-1',
@@ -542,14 +626,23 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     await injectJson({
       method: 'PATCH',
       url: '/api/essay-processors/proc-1',
-      payload: { title: 'Essay Updated', rubric: [{ criterion: 'Depth', points: 10 }] },
+      payload: {
+        title: 'Essay Updated',
+        rubric: [{ criterion: 'Depth', points: 10 }],
+      },
     });
     expect(essayProcessors.updateProcessor).toHaveBeenCalledWith(
       claims,
-      expect.objectContaining({ processorId: 'proc-1', title: 'Essay Updated' }),
+      expect.objectContaining({
+        processorId: 'proc-1',
+        title: 'Essay Updated',
+      }),
     );
 
-    await injectJson({ method: 'GET', url: '/api/quiz/essays/review?courseId=c1' });
+    await injectJson({
+      method: 'GET',
+      url: '/api/quiz/essays/review?courseId=c1',
+    });
     expect(essayGrading.list).toHaveBeenCalledWith(claims, { courseId: 'c1' });
 
     await injectJson({
@@ -564,7 +657,9 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     });
 
     await injectJson({ method: 'POST', url: '/api/quiz/essays/att-1/retry' });
-    expect(essayGrading.retry).toHaveBeenCalledWith(claims, { attemptId: 'att-1' });
+    expect(essayGrading.retry).toHaveBeenCalledWith(claims, {
+      attemptId: 'att-1',
+    });
 
     await injectJson({
       method: 'POST',
@@ -585,7 +680,11 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     await injectJson({ method: 'GET', url: '/api/micro-content?courseId=c1' });
     expect(microContent.list).toHaveBeenCalledWith(claims, 'c1');
 
-    await injectJson({ method: 'POST', url: '/api/micro-content/mc-1/render', payload: {} });
+    await injectJson({
+      method: 'POST',
+      url: '/api/micro-content/mc-1/render',
+      payload: {},
+    });
     expect(microContent.requestRender).toHaveBeenCalledWith(claims, {
       microContentId: 'mc-1',
       allowFlagged: undefined,
@@ -601,11 +700,21 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
       allowFlagged: true,
     });
 
-    await injectJson({ method: 'POST', url: '/api/micro-content/mc-1/upload/confirm' });
-    expect(microContentVideo.confirmUpload).toHaveBeenCalledWith(claims, { microContentId: 'mc-1' });
+    await injectJson({
+      method: 'POST',
+      url: '/api/micro-content/mc-1/upload/confirm',
+    });
+    expect(microContentVideo.confirmUpload).toHaveBeenCalledWith(claims, {
+      microContentId: 'mc-1',
+    });
 
-    await injectJson({ method: 'GET', url: '/api/micro-content/mc-1/subtitles' });
-    expect(microContentVideo.getSubtitlesUrl).toHaveBeenCalledWith(claims, { microContentId: 'mc-1' });
+    await injectJson({
+      method: 'GET',
+      url: '/api/micro-content/mc-1/subtitles',
+    });
+    expect(microContentVideo.getSubtitlesUrl).toHaveBeenCalledWith(claims, {
+      microContentId: 'mc-1',
+    });
 
     await injectJson({
       method: 'POST',
@@ -621,7 +730,11 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     await injectJson({
       method: 'POST',
       url: '/api/video-assets/va-1/confirm-upload',
-      payload: { sizeBytes: 1024, durationMs: 5000, objectKey: 'ignored-by-whitelist' },
+      payload: {
+        sizeBytes: 1024,
+        durationMs: 5000,
+        objectKey: 'ignored-by-whitelist',
+      },
     });
     expect(videoAsset.confirmUpload).toHaveBeenCalledWith(claims, {
       assetId: 'va-1',
@@ -653,7 +766,11 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
       assetId: null,
     });
 
-    await injectJson({ method: 'POST', url: '/api/video-assets/va-1/fork', payload: { targetCourseId: 'c2' } });
+    await injectJson({
+      method: 'POST',
+      url: '/api/video-assets/va-1/fork',
+      payload: { targetCourseId: 'c2' },
+    });
     expect(videoAsset.forkAsset).toHaveBeenCalledWith(claims, {
       assetId: 'va-1',
       targetCourseId: 'c2',

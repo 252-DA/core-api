@@ -138,14 +138,29 @@ describe('AgsPublisherService', () => {
     ];
     const { service, postScore } = setup({ attempts });
     await service.publishPending();
-    expect(postScore).toHaveBeenCalledWith('https://canvas.test/line_items/9', expect.objectContaining({ scoreGiven: 10 }));
+    expect(postScore).toHaveBeenCalledWith(
+      'https://canvas.test/line_items/9',
+      expect.objectContaining({ scoreGiven: 10 }),
+    );
   });
   it('publishes the best complete quiz-set submission without averaging retakes', async () => {
     const attempts = [
-      { ...attempt('old1', 100, '2026-08-25T10:00:00.000Z'), submission_id: 'old' },
-      { ...attempt('old2', 100, '2026-08-25T10:00:00.000Z'), submission_id: 'old' },
-      { ...attempt('new1', 0, '2026-08-25T10:01:00.000Z'), submission_id: 'new' },
-      { ...attempt('new2', 100, '2026-08-25T10:01:00.000Z'), submission_id: 'new' },
+      {
+        ...attempt('old1', 100, '2026-08-25T10:00:00.000Z'),
+        submission_id: 'old',
+      },
+      {
+        ...attempt('old2', 100, '2026-08-25T10:00:00.000Z'),
+        submission_id: 'old',
+      },
+      {
+        ...attempt('new1', 0, '2026-08-25T10:01:00.000Z'),
+        submission_id: 'new',
+      },
+      {
+        ...attempt('new2', 100, '2026-08-25T10:01:00.000Z'),
+        submission_id: 'new',
+      },
     ];
     const { service, postScore, findMany } = setup({ attempts });
     await service.publishPending();
@@ -154,11 +169,20 @@ describe('AgsPublisherService', () => {
     expect(findMany).toHaveBeenCalledTimes(3);
     // Lượt sau kém hơn không kéo điểm xuống; timestamp vẫn là lượt mới nhất
     // vì Canvas từ chối timestamp cũ hơn kết quả đã có.
-    expect(postScore).toHaveBeenCalledWith('https://canvas.test/line_items/9', expect.objectContaining({ scoreGiven: 20, timestamp: '2026-08-25T10:01:00.000Z' }));
+    expect(postScore).toHaveBeenCalledWith(
+      'https://canvas.test/line_items/9',
+      expect.objectContaining({
+        scoreGiven: 20,
+        timestamp: '2026-08-25T10:01:00.000Z',
+      }),
+    );
   });
   it('keeps a best score posted earlier when a later retake is worse', async () => {
     const retake = [
-      { ...attempt('r1', 0, '2026-08-25T11:00:00.000Z'), submission_id: 'retake' },
+      {
+        ...attempt('r1', 0, '2026-08-25T11:00:00.000Z'),
+        submission_id: 'retake',
+      },
     ];
     const { service, postScore, groupBy } = setup({
       attempts: retake,
@@ -170,9 +194,19 @@ describe('AgsPublisherService', () => {
     await service.publishPending();
     expect(groupBy.mock.calls[0][0]).toMatchObject({
       by: ['submission_id'],
-      where: { user_id: USER, resource_link_id: LINK, submission_id: { not: null } },
+      where: {
+        user_id: USER,
+        resource_link_id: LINK,
+        submission_id: { not: null },
+      },
     });
-    expect(postScore).toHaveBeenCalledWith('https://canvas.test/line_items/9', expect.objectContaining({ scoreGiven: 20, timestamp: '2026-08-25T11:00:00.000Z' }));
+    expect(postScore).toHaveBeenCalledWith(
+      'https://canvas.test/line_items/9',
+      expect.objectContaining({
+        scoreGiven: 20,
+        timestamp: '2026-08-25T11:00:00.000Z',
+      }),
+    );
   });
   it('does not look up recorded submissions for lesson quizzes', async () => {
     const { service, groupBy } = setup({
@@ -182,12 +216,23 @@ describe('AgsPublisherService', () => {
     expect(groupBy).not.toHaveBeenCalled();
   });
   it('expands a batch boundary to include every answer in the quiz submission', async () => {
-    const first = { ...attempt('q1', 100, '2026-08-25T10:00:00.000Z'), submission_id: 'submission' };
-    const last = { ...attempt('q2', 0, '2026-08-25T10:00:00.000Z'), submission_id: 'submission' };
+    const first = {
+      ...attempt('q1', 100, '2026-08-25T10:00:00.000Z'),
+      submission_id: 'submission',
+    };
+    const last = {
+      ...attempt('q2', 0, '2026-08-25T10:00:00.000Z'),
+      submission_id: 'submission',
+    };
     const { service, postScore, findMany } = setup({ attempts: [first] });
-    findMany.mockResolvedValueOnce([first]).mockResolvedValueOnce([first, last]);
+    findMany
+      .mockResolvedValueOnce([first])
+      .mockResolvedValueOnce([first, last]);
     await service.publishPending();
-    expect(postScore).toHaveBeenCalledWith('https://canvas.test/line_items/9', expect.objectContaining({ scoreGiven: 10 }));
+    expect(postScore).toHaveBeenCalledWith(
+      'https://canvas.test/line_items/9',
+      expect.objectContaining({ scoreGiven: 10 }),
+    );
   });
   it('gom các câu của một lượt nộp thành một điểm và quy đổi theo score_maximum', async () => {
     // 3 câu: đúng, đúng, sai → 2/3 của thang 20 = 13.33
@@ -311,9 +356,9 @@ describe('AgsPublisherService', () => {
 
     // Trong lúc chờ, link bị loại khỏi truy vấn giành batch.
     await service.publishPending();
-    expect(findMany.mock.calls.at(-1)![0].where.resource_link_id.notIn).toEqual([
-      LINK,
-    ]);
+    expect(findMany.mock.calls.at(-1)![0].where.resource_link_id.notIn).toEqual(
+      [LINK],
+    );
   });
 
   it('đánh FAILED ngay với lỗi vĩnh viễn, không thử lại', async () => {
@@ -454,7 +499,8 @@ describe('AgsPublisherService SpeedGrader submission and comment', () => {
       expect.objectContaining({
         scoreGiven: 7.5,
         scoreMaximum: 10,
-        comment: 'Đúng 3/4 câu. LO yếu nhất: LO2.3 – Phân biệt tiến trình và luồng (1/2 câu đúng).',
+        comment:
+          'Đúng 3/4 câu. LO yếu nhất: LO2.3 – Phân biệt tiến trình và luồng (1/2 câu đúng).',
         submission: {
           url: `${TOOL}/learn/quizzes/${QUIZ_SET}/submissions/new`,
           submittedAt: '2026-08-25T10:01:30.000Z',
@@ -476,7 +522,10 @@ describe('AgsPublisherService SpeedGrader submission and comment', () => {
 
   it('points SpeedGrader at an earlier better attempt and does not repeat its comment', async () => {
     const retake = [
-      { ...attempt('r1', 0, '2026-08-25T11:00:00.000Z'), submission_id: 'retake' },
+      {
+        ...attempt('r1', 0, '2026-08-25T11:00:00.000Z'),
+        submission_id: 'retake',
+      },
     ];
     const { service, postScore, findMany } = setup({
       attempts: retake,
@@ -510,7 +559,10 @@ describe('AgsPublisherService SpeedGrader submission and comment', () => {
 
   it('prefers the earlier attempt when two attempts score the same', async () => {
     const tie = [
-      { ...attempt('t1', 100, '2026-08-25T12:00:00.000Z'), submission_id: 'later' },
+      {
+        ...attempt('t1', 100, '2026-08-25T12:00:00.000Z'),
+        submission_id: 'later',
+      },
     ];
     const { service, postScore } = setup({
       attempts: tie,
@@ -530,7 +582,9 @@ describe('AgsPublisherService SpeedGrader submission and comment', () => {
       ],
     });
     await service.publishPending();
-    expect(postScore.mock.calls[0][1].submission?.url).toMatch(/\/submissions\/earlier$/);
+    expect(postScore.mock.calls[0][1].submission?.url).toMatch(
+      /\/submissions\/earlier$/,
+    );
   });
 
   it('still pushes the score when the comment cannot be built', async () => {
@@ -547,7 +601,9 @@ describe('AgsPublisherService SpeedGrader submission and comment', () => {
   });
 
   it('sends no submission without a public tool URL', async () => {
-    const { service, postScore } = quizSetup({ config: { toolUrl: undefined } });
+    const { service, postScore } = quizSetup({
+      config: { toolUrl: undefined },
+    });
     await service.publishPending();
     expect(postScore.mock.calls[0][1]).not.toHaveProperty('submission');
   });

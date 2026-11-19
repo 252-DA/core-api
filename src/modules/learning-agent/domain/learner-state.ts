@@ -1,4 +1,9 @@
-import { BKT_DEFAULTS, MASTERY_DEFAULTS, type BktParams, type MasteryCriterion } from './bkt';
+import {
+  BKT_DEFAULTS,
+  MASTERY_DEFAULTS,
+  type BktParams,
+  type MasteryCriterion,
+} from './bkt';
 import { bktPolicy, replay } from './mastery-policy';
 import type { NormalizedEvidence, PendingReason } from './observations';
 
@@ -41,9 +46,14 @@ export function learnerLoStates(
     const result = replay(policy, history);
     const mastery = result.state;
     let consecutiveWrong = 0;
-    for (let i = history.length - 1; i >= 0 && !history[i].correct; i--) consecutiveWrong++;
+    for (let i = history.length - 1; i >= 0 && !history[i].correct; i--)
+      consecutiveWrong++;
     const mastered = policy.mastered(result.state, history.length);
-    const pending: Record<PendingReason, number> = { grading: 0, review: 0, not_revealed: 0 };
+    const pending: Record<PendingReason, number> = {
+      grading: 0,
+      review: 0,
+      not_revealed: 0,
+    };
     for (const p of evidence.pending) if (p.loId === loId) pending[p.reason]++;
     return {
       loId,
@@ -56,7 +66,9 @@ export function learnerLoStates(
         : history.length === 0 || mastery >= criterion.threshold
           ? 'insufficient_evidence'
           : 'practicing',
-      firstMasteredAt: result.firstMasteredAt ? history[result.firstMasteredAt - 1].at : null,
+      firstMasteredAt: result.firstMasteredAt
+        ? history[result.firstMasteredAt - 1].at
+        : null,
       lastObservedAt: history.length ? history[history.length - 1].at : null,
       pending,
       repeats: evidence.repeats.get(loId) ?? 0,

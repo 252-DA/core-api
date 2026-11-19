@@ -13,7 +13,11 @@ import { ChatService } from './chat.service';
 import { BffJwtGuard } from '../../auth/bff-jwt.guard';
 import { CurrentBffClaims } from '../../auth/current-bff-claims.decorator';
 import type { BffClaims } from '../../auth/bff-claims';
-import { RateChatRunDto, RecordChatRunDto, SetChatModeDto } from './dto/chat.dto';
+import {
+  RateChatRunDto,
+  RecordChatRunDto,
+  SetChatModeDto,
+} from './dto/chat.dto';
 
 @Controller('api/chat')
 @UseGuards(BffJwtGuard)

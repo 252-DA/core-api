@@ -41,8 +41,12 @@ describe('MicroContentVideoService', () => {
     };
 
     const storage = {
-      createPresignedUploadUrl: jest.fn().mockResolvedValue('https://storage/upload-url'),
-      createPresignedDownloadUrl: jest.fn().mockResolvedValue('https://storage/download-url'),
+      createPresignedUploadUrl: jest
+        .fn()
+        .mockResolvedValue('https://storage/upload-url'),
+      createPresignedDownloadUrl: jest
+        .fn()
+        .mockResolvedValue('https://storage/download-url'),
     };
 
     const service = new MicroContentVideoService(
@@ -84,7 +88,9 @@ describe('MicroContentVideoService', () => {
       });
 
       expect(res.uploadUrl).toBe('https://storage/upload-url');
-      expect(res.objectKey).toBe(`micro-content/${courseId}/${microContentId}/video.mp4`);
+      expect(res.objectKey).toBe(
+        `micro-content/${courseId}/${microContentId}/video.mp4`,
+      );
       expect(prisma.micro_contents.update).toHaveBeenCalledWith({
         where: { micro_content_id: microContentId },
         data: expect.objectContaining({
@@ -154,7 +160,11 @@ describe('MicroContentVideoService', () => {
 
       const res = await service.getVideoUrl(learnerClaims, { microContentId });
 
-      expect(authz.assertCourseAccess).toHaveBeenCalledWith(learnerClaims, courseId, ['learner']);
+      expect(authz.assertCourseAccess).toHaveBeenCalledWith(
+        learnerClaims,
+        courseId,
+        ['learner'],
+      );
       expect(storage.createPresignedDownloadUrl).toHaveBeenCalledWith(
         `micro-content/${courseId}/${microContentId}/video.mp4`,
         300,
@@ -171,9 +181,9 @@ describe('MicroContentVideoService', () => {
         video_status: 'READY',
       });
 
-      await expect(service.getVideoUrl(learnerClaims, { microContentId })).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getVideoUrl(learnerClaims, { microContentId }),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('rejects request when video is not READY', async () => {
@@ -185,16 +195,18 @@ describe('MicroContentVideoService', () => {
         video_status: 'PROCESSING',
       });
 
-      await expect(service.getVideoUrl(instructorClaims, { microContentId })).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.getVideoUrl(instructorClaims, { microContentId }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
   describe('getSubtitlesUrl', () => {
     it('returns presigned VTT URL, timeline, and transcript for learner when published', async () => {
       const { service, prisma, storage, authz } = setup();
-      const timeline = [{ scene_index: 0, title: 'Mở đầu', start_ms: 0, end_ms: 5000 }];
+      const timeline = [
+        { scene_index: 0, title: 'Mở đầu', start_ms: 0, end_ms: 5000 },
+      ];
       prisma.micro_contents.findFirst.mockResolvedValue({
         micro_content_id: microContentId,
         course_id: courseId,
@@ -207,9 +219,15 @@ describe('MicroContentVideoService', () => {
         },
       });
 
-      const res = await service.getSubtitlesUrl(learnerClaims, { microContentId });
+      const res = await service.getSubtitlesUrl(learnerClaims, {
+        microContentId,
+      });
 
-      expect(authz.assertCourseAccess).toHaveBeenCalledWith(learnerClaims, courseId, ['learner']);
+      expect(authz.assertCourseAccess).toHaveBeenCalledWith(
+        learnerClaims,
+        courseId,
+        ['learner'],
+      );
       expect(storage.createPresignedDownloadUrl).toHaveBeenCalledWith(
         `micro-content/${courseId}/${microContentId}/sub.vtt`,
         300,
@@ -236,7 +254,9 @@ describe('MicroContentVideoService', () => {
         },
       });
 
-      const res = await service.getSubtitlesUrl(learnerClaims, { microContentId });
+      const res = await service.getSubtitlesUrl(learnerClaims, {
+        microContentId,
+      });
 
       expect(storage.createPresignedDownloadUrl).not.toHaveBeenCalled();
       expect(res).toEqual({
@@ -257,10 +277,9 @@ describe('MicroContentVideoService', () => {
         video_asset: null,
       });
 
-      await expect(service.getSubtitlesUrl(learnerClaims, { microContentId })).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getSubtitlesUrl(learnerClaims, { microContentId }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });
-

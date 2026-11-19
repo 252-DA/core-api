@@ -85,8 +85,9 @@ describe('CanvasSyncStatusService', () => {
           }
         : null,
     );
-    runs.lastSuccessAt.mockImplementation(async (_course: string, kind?: string) =>
-      kind === 'roster' ? new Date('2026-11-12T07:30:00Z') : null,
+    runs.lastSuccessAt.mockImplementation(
+      async (_course: string, kind?: string) =>
+        kind === 'roster' ? new Date('2026-11-12T07:30:00Z') : null,
     );
     roster.countActiveLearners.mockResolvedValue(37);
     const result = await service.status(claims, 'course-1', now);
@@ -105,7 +106,9 @@ describe('CanvasSyncStatusService', () => {
   it('drops only the roster line when its columns are missing', async () => {
     const { service, roster } = setup();
     roster.countActiveLearners.mockRejectedValue(new Error('boom'));
-    await expect(service.status(claims, 'course-1', now)).resolves.toMatchObject({
+    await expect(
+      service.status(claims, 'course-1', now),
+    ).resolves.toMatchObject({
       last_run: null,
       roster: null,
     });
@@ -132,8 +135,9 @@ describe('CanvasSyncStatusService', () => {
     runs.latest.mockImplementation(async (_course: string, kind?: string) =>
       kind === 'roster' ? null : documentsRun,
     );
-    runs.lastSuccessAt.mockImplementation(async (_course: string, kind?: string) =>
-      kind === 'roster' ? null : new Date('2026-11-12T07:30:00Z'),
+    runs.lastSuccessAt.mockImplementation(
+      async (_course: string, kind?: string) =>
+        kind === 'roster' ? null : new Date('2026-11-12T07:30:00Z'),
     );
     const token = {
       checked_at: '2026-11-12T07:00:00.000Z',

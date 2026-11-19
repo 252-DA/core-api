@@ -215,7 +215,9 @@ describeDb('MicroContentVideoResultHandler on PostgreSQL', () => {
       where: { event_type: 'MICRO_CONTENT_RENDER_REQUESTED', aggregate_id: id },
     });
     expect(event.aggregate_id).toBe(id);
-    expect((event.payload as { micro_content_id: string }).micro_content_id).toBe(id);
+    expect(
+      (event.payload as { micro_content_id: string }).micro_content_id,
+    ).toBe(id);
     expect((await mcRow(id)).video_status).toBe('PROCESSING');
   });
 
@@ -271,9 +273,13 @@ describeDb('MicroContentVideoResultHandler on PostgreSQL', () => {
 
     expect(await mcRow(id)).toMatchObject({
       video_status: 'FAILED',
-      video_error: expect.stringContaining('Không lưu được kết quả render video') as string,
+      video_error: expect.stringContaining(
+        'Không lưu được kết quả render video',
+      ) as string,
     });
-    expect(await assetRow(cmd.payload.asset_id)).toMatchObject({ status: 'FAILED' });
+    expect(await assetRow(cmd.payload.asset_id)).toMatchObject({
+      status: 'FAILED',
+    });
     // Giảng viên bấm render lại: asset về PROCESSING với render_id mới.
     const again = await render(id);
     expect(again.payload.render_id).not.toBe(cmd.payload.render_id);

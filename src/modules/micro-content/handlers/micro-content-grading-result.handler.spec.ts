@@ -40,7 +40,11 @@ function answer(id: string, overrides: Partial<Answer> = {}): Answer {
 
 function fakePrisma(
   answers: Answer[],
-  attempt: { micro_content_id: string; course_id: string; passing_score: number } | null = {
+  attempt: {
+    micro_content_id: string;
+    course_id: string;
+    passing_score: number;
+  } | null = {
     micro_content_id: MICRO,
     course_id: COURSE,
     passing_score: 70,
@@ -50,21 +54,30 @@ function fakePrisma(
   const tx = {
     $queryRaw: jest.fn(() => Promise.resolve(attempt ? [attempt] : [])),
     micro_content_answers: {
-      findMany: jest.fn(({ where }: { where: { answer_id?: { in: string[] }; attempt_id?: string } }) =>
-        Promise.resolve(
-          answers
-            .filter((a) =>
-              where.answer_id ? where.answer_id.in.includes(a.answer_id) : a.attempt_id === where.attempt_id,
-            )
-            .map((a) => ({ ...a })),
-        ),
+      findMany: jest.fn(
+        ({
+          where,
+        }: {
+          where: { answer_id?: { in: string[] }; attempt_id?: string };
+        }) =>
+          Promise.resolve(
+            answers
+              .filter((a) =>
+                where.answer_id
+                  ? where.answer_id.in.includes(a.answer_id)
+                  : a.attempt_id === where.attempt_id,
+              )
+              .map((a) => ({ ...a })),
+          ),
       ),
       updateMany: jest.fn(
         ({
           where,
           data,
         }: {
-          where: Omit<Partial<Answer>, 'answer_id'> & { answer_id: string | { in: string[] } };
+          where: Omit<Partial<Answer>, 'answer_id'> & {
+            answer_id: string | { in: string[] };
+          };
           data: Partial<Answer>;
         }) => {
           const hit = answers.filter(
@@ -89,42 +102,80 @@ function fakePrisma(
   };
   return {
     attemptRow,
-    prisma: { ...tx, $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)) },
+    prisma: {
+      ...tx,
+      $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
+    },
   };
 }
 
 function graded(id: string, score: number) {
-  return { answer_id: id, status: 'GRADED', score, is_correct: score === 100, feedback: 'Nhận xét', grader_model: null };
+  return {
+    answer_id: id,
+    status: 'GRADED',
+    score,
+    is_correct: score === 100,
+    feedback: 'Nhận xét',
+    grader_model: null,
+  };
 }
 
 function review(id: string) {
-  return { answer_id: id, status: 'NEEDS_REVIEW', reason: 'MODEL_ERROR', feedback: 'Chờ giảng viên', grader_model: null };
+  return {
+    answer_id: id,
+    status: 'NEEDS_REVIEW',
+    reason: 'MODEL_ERROR',
+    feedback: 'Chờ giảng viên',
+    grader_model: null,
+  };
 }
 
 function envelope(answers: unknown[], payload: Record<string, unknown> = {}) {
   return {
-    result_id: 'MICRO_CONTENT_GRADING_RESULT.aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1',
+    result_id:
+      'MICRO_CONTENT_GRADING_RESULT.aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1',
     kind: 'MICRO_CONTENT_GRADING_RESULT' as const,
     source_event_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaab1',
     occurred_at: '2026-11-07T10:31:00.000Z',
-    payload: { attempt_id: ATTEMPT, course_id: COURSE, micro_content_id: MICRO, answers, ...payload },
+    payload: {
+      attempt_id: ATTEMPT,
+      course_id: COURSE,
+      micro_content_id: MICRO,
+      answers,
+      ...payload,
+    },
   };
 }
 
 function setup(answers: Answer[], attempt?: Parameters<typeof fakePrisma>[1]) {
   const fake = fakePrisma(answers, attempt);
-  return { ...fake, handler: new MicroContentGradingResultHandler(fake.prisma as never) };
+  return {
+    ...fake,
+    handler: new MicroContentGradingResultHandler(fake.prisma as never),
+  };
 }
 
 describe('MicroContentGradingResultHandler', () => {
   it('ghi điểm câu tự luận rồi tính lại điểm, đạt/không đạt và trạng thái lượt nộp', async () => {
-    const answers = [answer(MCQ, { score: 100, is_correct: true, grading_status: 'GRADED' }), answer(ESSAY_1)];
+    const answers = [
+      answer(MCQ, { score: 100, is_correct: true, grading_status: 'GRADED' }),
+      answer(ESSAY_1),
+    ];
     const { handler, prisma, attemptRow } = setup(answers);
 
     const out = await handler.handle(envelope([graded(ESSAY_1, 60)]));
 
-    expect(answers[1]).toMatchObject({ score: 60, is_correct: false, feedback: 'Nhận xét', grading_status: 'GRADED' });
-    expect(attemptRow).toEqual({ score: 80, passed: true, grading_status: 'GRADED' });
+    expect(answers[1]).toMatchObject({
+      score: 60,
+      is_correct: false,
+      feedback: 'Nhận xét',
+      grading_status: 'GRADED',
+    });
+    expect(attemptRow).toEqual({
+      score: 80,
+      passed: true,
+      grading_status: 'GRADED',
+    });
     expect(out).toMatchObject({ graded: 1, needsReview: 0, skipped: 0 });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     // Khoá dòng attempt trước khi đọc/ghi câu trả lời.
@@ -135,8 +186,15 @@ describe('MicroContentGradingResultHandler', () => {
 
   it('điểm tổng làm tròn theo Math.round của core-api: trung bình 50.5 → 51', async () => {
     // round() của Python cũ cho 50; lúc nộp core-api tính 51 → phải khớp.
-    const answers = [answer(MCQ, { score: 1, grading_status: 'GRADED' }), answer(ESSAY_1)];
-    const { handler, attemptRow } = setup(answers, { micro_content_id: MICRO, course_id: COURSE, passing_score: 51 });
+    const answers = [
+      answer(MCQ, { score: 1, grading_status: 'GRADED' }),
+      answer(ESSAY_1),
+    ];
+    const { handler, attemptRow } = setup(answers, {
+      micro_content_id: MICRO,
+      course_id: COURSE,
+      passing_score: 51,
+    });
 
     await handler.handle(envelope([graded(ESSAY_1, 100)]));
 
@@ -147,10 +205,20 @@ describe('MicroContentGradingResultHandler', () => {
     const answers = [answer(ESSAY_1), answer(ESSAY_2)];
     const { handler, attemptRow } = setup(answers);
 
-    const out = await handler.handle(envelope([graded(ESSAY_1, 100), review(ESSAY_2)]));
+    const out = await handler.handle(
+      envelope([graded(ESSAY_1, 100), review(ESSAY_2)]),
+    );
 
-    expect(answers[1]).toMatchObject({ score: 0, grading_status: 'NEEDS_REVIEW', feedback: 'Chờ giảng viên' });
-    expect(attemptRow).toEqual({ score: 50, passed: false, grading_status: 'NEEDS_REVIEW' });
+    expect(answers[1]).toMatchObject({
+      score: 0,
+      grading_status: 'NEEDS_REVIEW',
+      feedback: 'Chờ giảng viên',
+    });
+    expect(attemptRow).toEqual({
+      score: 50,
+      passed: false,
+      grading_status: 'NEEDS_REVIEW',
+    });
     expect(out).toMatchObject({ graded: 1, needsReview: 1 });
   });
 
@@ -172,7 +240,12 @@ describe('MicroContentGradingResultHandler', () => {
     const snapshot = JSON.stringify({ answers, attemptRow });
     const again = await handler.handle(result);
 
-    expect(again).toMatchObject({ graded: 0, needsReview: 0, skipped: 1, attempt: null });
+    expect(again).toMatchObject({
+      graded: 0,
+      needsReview: 0,
+      skipped: 1,
+      attempt: null,
+    });
     expect(JSON.stringify({ answers, attemptRow })).toBe(snapshot);
     expect(prisma.micro_content_attempts.update).toHaveBeenCalledTimes(1);
   });
@@ -198,32 +271,57 @@ describe('MicroContentGradingResultHandler', () => {
   });
 
   it.each([
-    ['attempt của micro content khác', [answer(ESSAY_1)], { micro_content_id: OTHER, course_id: COURSE, passing_score: 70 }],
-    ['attempt của khoá khác', [answer(ESSAY_1)], { micro_content_id: MICRO, course_id: OTHER, passing_score: 70 }],
-    ['câu của attempt khác', [answer(ESSAY_1, { attempt_id: OTHER })], undefined],
+    [
+      'attempt của micro content khác',
+      [answer(ESSAY_1)],
+      { micro_content_id: OTHER, course_id: COURSE, passing_score: 70 },
+    ],
+    [
+      'attempt của khoá khác',
+      [answer(ESSAY_1)],
+      { micro_content_id: MICRO, course_id: OTHER, passing_score: 70 },
+    ],
+    [
+      'câu của attempt khác',
+      [answer(ESSAY_1, { attempt_id: OTHER })],
+      undefined,
+    ],
     ['câu không tồn tại', [], undefined],
-  ])('từ chối kết quả có %s, không ghi gì', async (_label, answers, attempt) => {
-    const { handler, prisma } = setup(answers, attempt);
+  ])(
+    'từ chối kết quả có %s, không ghi gì',
+    async (_label, answers, attempt) => {
+      const { handler, prisma } = setup(answers, attempt);
 
-    await expect(handler.handle(envelope([graded(ESSAY_1, 100)]))).rejects.toBeInstanceOf(
-      InvalidWorkerResultError,
-    );
-    expect(prisma.micro_content_answers.updateMany).not.toHaveBeenCalled();
-  });
+      await expect(
+        handler.handle(envelope([graded(ESSAY_1, 100)])),
+      ).rejects.toBeInstanceOf(InvalidWorkerResultError);
+      expect(prisma.micro_content_answers.updateMany).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['điểm > 100', [graded(ESSAY_1, 120)]],
-    ['NEEDS_REVIEW kèm điểm', [{ ...review(ESSAY_1), score: 0, is_correct: false }]],
-    ['dùng attempt_id thay answer_id', [{ ...graded(ESSAY_1, 1), answer_id: undefined, attempt_id: ESSAY_1 }]],
+    [
+      'NEEDS_REVIEW kèm điểm',
+      [{ ...review(ESSAY_1), score: 0, is_correct: false }],
+    ],
+    [
+      'dùng attempt_id thay answer_id',
+      [{ ...graded(ESSAY_1, 1), answer_id: undefined, attempt_id: ESSAY_1 }],
+    ],
   ])('payload sai (%s) → InvalidWorkerResultError', async (_label, answers) => {
     const { handler, prisma } = setup([answer(ESSAY_1)]);
 
-    await expect(handler.handle(envelope(answers))).rejects.toBeInstanceOf(InvalidWorkerResultError);
+    await expect(handler.handle(envelope(answers))).rejects.toBeInstanceOf(
+      InvalidWorkerResultError,
+    );
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('trạng thái lượt nộp: NEEDS_REVIEW > PENDING > GRADED', () => {
-    expect(attemptGradingStatus(['GRADED', 'PENDING', 'NEEDS_REVIEW'])).toBe('NEEDS_REVIEW');
+    expect(attemptGradingStatus(['GRADED', 'PENDING', 'NEEDS_REVIEW'])).toBe(
+      'NEEDS_REVIEW',
+    );
     expect(attemptGradingStatus(['GRADED', 'PENDING'])).toBe('PENDING');
     expect(attemptGradingStatus(['GRADED', 'GRADED'])).toBe('GRADED');
   });
@@ -245,11 +343,19 @@ describe('MicroContentGradingResultHandler.onFinalFailure', () => {
       new InvalidWorkerResultError('x'),
     );
 
-    expect(answers[1]).toMatchObject({ grading_status: 'NEEDS_REVIEW', score: 0, feedback: expect.stringContaining('Giảng viên sẽ chấm') as string });
+    expect(answers[1]).toMatchObject({
+      grading_status: 'NEEDS_REVIEW',
+      score: 0,
+      feedback: expect.stringContaining('Giảng viên sẽ chấm') as string,
+    });
     expect(answers[2].grading_status).toBe('NEEDS_REVIEW');
     expect(answers[0]).toMatchObject({ grading_status: 'GRADED', score: 100 });
     // Điểm tính trên mọi câu: (100 + 0 + 0) / 3 = 33; còn câu chờ giảng viên.
-    expect(attemptRow).toEqual({ score: 33, passed: false, grading_status: 'NEEDS_REVIEW' });
+    expect(attemptRow).toEqual({
+      score: 33,
+      passed: false,
+      grading_status: 'NEEDS_REVIEW',
+    });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect((prisma.$queryRaw.mock.calls[0] as unknown[])[0]).toEqual(
       expect.arrayContaining([expect.stringContaining('FOR UPDATE')]),
@@ -260,11 +366,16 @@ describe('MicroContentGradingResultHandler.onFinalFailure', () => {
     const answers = [answer(ESSAY_1), answer(ESSAY_2)];
     const { handler } = setup(answers);
     const bad = envelope([graded(ESSAY_1, 101), { answer_id: ESSAY_2 }, 7]);
-    await expect(handler.handle(bad)).rejects.toBeInstanceOf(InvalidWorkerResultError);
+    await expect(handler.handle(bad)).rejects.toBeInstanceOf(
+      InvalidWorkerResultError,
+    );
 
     await handler.onFinalFailure(bad, new InvalidWorkerResultError('score'));
 
-    expect(answers.map((a) => a.grading_status)).toEqual(['NEEDS_REVIEW', 'NEEDS_REVIEW']);
+    expect(answers.map((a) => a.grading_status)).toEqual([
+      'NEEDS_REVIEW',
+      'NEEDS_REVIEW',
+    ]);
   });
 
   it('không đụng câu đã chấm, câu đã chờ giảng viên, câu của lượt nộp khác', async () => {
@@ -283,18 +394,31 @@ describe('MicroContentGradingResultHandler.onFinalFailure', () => {
 
     expect(JSON.stringify(answers)).toBe(snapshot);
     // Không câu nào đổi thì không tính lại lượt nộp.
-    expect(attemptRow).toEqual({ score: 0, passed: false, grading_status: 'PENDING' });
+    expect(attemptRow).toEqual({
+      score: 0,
+      passed: false,
+      grading_status: 'PENDING',
+    });
   });
 
   it.each([
     ['lượt nộp không còn', null],
-    ['lượt nộp thuộc micro content khác', { micro_content_id: OTHER, course_id: COURSE, passing_score: 70 }],
-    ['lượt nộp thuộc khoá khác', { micro_content_id: MICRO, course_id: OTHER, passing_score: 70 }],
+    [
+      'lượt nộp thuộc micro content khác',
+      { micro_content_id: OTHER, course_id: COURSE, passing_score: 70 },
+    ],
+    [
+      'lượt nộp thuộc khoá khác',
+      { micro_content_id: MICRO, course_id: OTHER, passing_score: 70 },
+    ],
   ])('không làm gì khi %s', async (_label, attempt) => {
     const answers = [answer(ESSAY_1)];
     const { handler, attemptRow } = setup(answers, attempt);
 
-    await handler.onFinalFailure(envelope([graded(ESSAY_1, 50)]), new Error('x'));
+    await handler.onFinalFailure(
+      envelope([graded(ESSAY_1, 50)]),
+      new Error('x'),
+    );
 
     expect(answers[0].grading_status).toBe('PENDING');
     expect(attemptRow.grading_status).toBe('PENDING');
@@ -302,10 +426,36 @@ describe('MicroContentGradingResultHandler.onFinalFailure', () => {
 
   it.each([
     ['payload không phải object', 'rác'],
-    ['không có answers', { attempt_id: ATTEMPT, course_id: COURSE, micro_content_id: MICRO }],
-    ['answers không có id hợp lệ', { attempt_id: ATTEMPT, course_id: COURSE, micro_content_id: MICRO, answers: [{ answer_id: 'x' }] }],
-    ['thiếu attempt_id', { course_id: COURSE, micro_content_id: MICRO, answers: [{ answer_id: ESSAY_1 }] }],
-    ['micro_content_id không phải uuid', { attempt_id: ATTEMPT, course_id: COURSE, micro_content_id: 'x', answers: [{ answer_id: ESSAY_1 }] }],
+    [
+      'không có answers',
+      { attempt_id: ATTEMPT, course_id: COURSE, micro_content_id: MICRO },
+    ],
+    [
+      'answers không có id hợp lệ',
+      {
+        attempt_id: ATTEMPT,
+        course_id: COURSE,
+        micro_content_id: MICRO,
+        answers: [{ answer_id: 'x' }],
+      },
+    ],
+    [
+      'thiếu attempt_id',
+      {
+        course_id: COURSE,
+        micro_content_id: MICRO,
+        answers: [{ answer_id: ESSAY_1 }],
+      },
+    ],
+    [
+      'micro_content_id không phải uuid',
+      {
+        attempt_id: ATTEMPT,
+        course_id: COURSE,
+        micro_content_id: 'x',
+        answers: [{ answer_id: ESSAY_1 }],
+      },
+    ],
   ])('không chạm DB khi %s', async (_label, payload) => {
     const answers = [answer(ESSAY_1)];
     const { handler, prisma } = setup(answers);
@@ -332,7 +482,9 @@ describe('MicroContentGradingResultHandler.onFinalFailure', () => {
   });
 
   it('không bao giờ ném ra ngoài khi DB lỗi', async () => {
-    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     const { handler, prisma } = setup([answer(ESSAY_1)]);
     (prisma.$transaction as jest.Mock).mockRejectedValue(new Error('db down'));
 
@@ -348,9 +500,13 @@ describe('micro-content-grading-result: độ dài tính theo code point', () =>
   it('nhận feedback đúng 4000 ký tự ngoài BMP, từ chối 4001', () => {
     const feedback = '𝑓'.repeat(4000);
     const ok = { ...graded(ESSAY_1, 50), feedback };
-    expect(parseMicroContentGradingResult(envelope([ok]).payload).answers[0]).toMatchObject({ feedback });
+    expect(
+      parseMicroContentGradingResult(envelope([ok]).payload).answers[0],
+    ).toMatchObject({ feedback });
     expect(() =>
-      parseMicroContentGradingResult(envelope([{ ...ok, feedback: `${feedback}x` }]).payload),
+      parseMicroContentGradingResult(
+        envelope([{ ...ok, feedback: `${feedback}x` }]).payload,
+      ),
     ).toThrow(/feedback/);
   });
 });
@@ -360,13 +516,18 @@ describe('micro-content-grading-result fixtures', () => {
   const load = (kind: 'valid' | 'invalid') =>
     readdirSync(resolve(dir, kind))
       .filter((f) => f.startsWith('micro-content-grading-result'))
-      .map((f) => [f, JSON.parse(readFileSync(resolve(dir, kind, f), 'utf8'))] as const);
+      .map(
+        (f) =>
+          [f, JSON.parse(readFileSync(resolve(dir, kind, f), 'utf8'))] as const,
+      );
 
   it.each(load('valid'))('%s qua được parser', (_f, fixture) => {
     expect(() => parseMicroContentGradingResult(fixture.payload)).not.toThrow();
   });
 
   it.each(load('invalid'))('%s bị parser từ chối', (_f, fixture) => {
-    expect(() => parseMicroContentGradingResult(fixture.payload)).toThrow(InvalidWorkerResultError);
+    expect(() => parseMicroContentGradingResult(fixture.payload)).toThrow(
+      InvalidWorkerResultError,
+    );
   });
 });

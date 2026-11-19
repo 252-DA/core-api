@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { errorMessage } from '../../common/utils/errors';
 import { AGS_CONFIG, type AgsConfig } from '../../config/ags.config';
@@ -24,7 +30,9 @@ const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 60 * 60_000;
 const CLAIM_LEASE_MS = 2 * 60_000;
 
-type Row = Prisma.essay_submissionsGetPayload<{ include: { essay_processors: true } }>;
+type Row = Prisma.essay_submissionsGetPayload<{
+  include: { essay_processors: true };
+}>;
 
 /**
  * Các bước của một bài nộp nằm ngoài worker vì cần token LTI của tool:
@@ -40,7 +48,9 @@ type Row = Prisma.essay_submissionsGetPayload<{ include: { essay_processors: tru
  * lti_client_id của chính core-api này.
  */
 @Injectable()
-export class EssayReportPublisherService implements OnModuleInit, OnModuleDestroy {
+export class EssayReportPublisherService
+  implements OnModuleInit, OnModuleDestroy
+{
   private readonly logger = new Logger(EssayReportPublisherService.name);
   private running = false;
   private warnedMissingTable = false;
@@ -56,7 +66,9 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
 
   onModuleInit() {
     if (!this.config.enabled || !this.config.clientId) {
-      this.logger.warn('Chấm bài luận (Asset Processor) đang TẮT: thiếu danh tính LTI hoặc AGS_ENABLED=false.');
+      this.logger.warn(
+        'Chấm bài luận (Asset Processor) đang TẮT: thiếu danh tính LTI hoặc AGS_ENABLED=false.',
+      );
       return;
     }
     this.running = true;
@@ -78,7 +90,9 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
       // P2021: bảng chưa có vì migration chưa chạy — báo một lần rồi chờ lâu hơn.
       if ((error as { code?: string }).code === 'P2021') {
         if (!this.warnedMissingTable) {
-          this.logger.warn('Chưa có bảng essay_submissions: chạy prisma migrate deploy để bật chấm bài luận.');
+          this.logger.warn(
+            'Chưa có bảng essay_submissions: chạy prisma migrate deploy để bật chấm bài luận.',
+          );
           this.warnedMissingTable = true;
         }
         delay = 60_000;
@@ -96,7 +110,9 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
     for (const row of await this.due(ESSAY_STATUS.graded)) {
       if (await this.claim(row)) await this.reportGraded(row);
     }
-    for (const row of await this.due(ESSAY_STATUS.failed, { reported_at: null })) {
+    for (const row of await this.due(ESSAY_STATUS.failed, {
+      reported_at: null,
+    })) {
       if (await this.claim(row)) await this.reportFailure(row);
     }
   }
@@ -108,7 +124,9 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
    */
   private async claim(row: Row): Promise<boolean> {
     const submissions = this.prisma.essay_submissions as unknown as {
-      updateMany?: (args: Prisma.essay_submissionsUpdateManyArgs) => Promise<{ count: number }>;
+      updateMany?: (
+        args: Prisma.essay_submissionsUpdateManyArgs,
+      ) => Promise<{ count: number }>;
     };
     if (typeof submissions.updateMany !== 'function') {
       return true;
@@ -133,7 +151,10 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
       where: {
         status,
         essay_processors: { lti_client_id: this.config.clientId },
-        OR: [{ next_attempt_at: null }, { next_attempt_at: { lte: new Date() } }],
+        OR: [
+          { next_attempt_at: null },
+          { next_attempt_at: { lte: new Date() } },
+        ],
         ...extra,
       },
       include: { essay_processors: true },
@@ -147,17 +168,36 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
     // Báo cho giảng viên biết bài đang được chấm; lỗi ở bước này không chặn việc chấm.
     for (const asset of assets) {
       await this.lti
-        .postReport(row.report_url, processingReport({ assetId: asset.asset_id, timestamp: new Date().toISOString() }))
-        .catch((error: unknown) => this.logger.warn(`Báo cáo Processing lỗi (${row.essay_submission_id}): ${errorMessage(error)}`));
+        .postReport(
+          row.report_url,
+          processingReport({
+            assetId: asset.asset_id,
+            timestamp: new Date().toISOString(),
+          }),
+        )
+        .catch((error: unknown) =>
+          this.logger.warn(
+            `Báo cáo Processing lỗi (${row.essay_submission_id}): ${errorMessage(error)}`,
+          ),
+        );
     }
 
     try {
       const stored: EssayAsset[] = [];
       for (const asset of assets) {
-        const { content, contentType } = await this.lti.downloadAsset(asset.url);
-        const withType = { ...asset, content_type: asset.content_type || contentType };
+        const { content, contentType } = await this.lti.downloadAsset(
+          asset.url,
+        );
+        const withType = {
+          ...asset,
+          content_type: asset.content_type || contentType,
+        };
         const key = `essay-submissions/${row.essay_submission_id}/${asset.asset_id}${assetExtension(withType)}`;
-        await this.storage.putObject(key, content, withType.content_type || 'application/octet-stream');
+        await this.storage.putObject(
+          key,
+          content,
+          withType.content_type || 'application/octet-stream',
+        );
         stored.push({ ...withType, size: content.length, storage_key: key });
       }
       await this.prisma.$transaction(async (tx) => {
@@ -185,10 +225,17 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
           }),
         });
       });
-      this.logger.log(`Đã tải ${stored.length} file của bài nộp ${row.lms_submission_id}, giao worker chấm`);
+      this.logger.log(
+        `Đã tải ${stored.length} file của bài nộp ${row.lms_submission_id}, giao worker chấm`,
+      );
     } catch (error) {
       const tooLarge = error instanceof LtiServiceError && error.status === 413;
-      await this.retryOrFail(row, error, tooLarge ? 'ASSET_TOO_LARGE' : 'DOWNLOAD_FAILED', tooLarge);
+      await this.retryOrFail(
+        row,
+        error,
+        tooLarge ? 'ASSET_TOO_LARGE' : 'DOWNLOAD_FAILED',
+        tooLarge,
+      );
     }
   }
 
@@ -199,14 +246,25 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
       for (const asset of assets) {
         await this.lti.postReport(
           row.report_url,
-          gradedReport({ assetId: asset.asset_id, timestamp: new Date().toISOString() }, result, {
-            visibleToOwner: row.essay_processors.visible_to_owner,
-            assetCount: assets.length,
-          }),
+          gradedReport(
+            { assetId: asset.asset_id, timestamp: new Date().toISOString() },
+            result,
+            {
+              visibleToOwner: row.essay_processors.visible_to_owner,
+              assetCount: assets.length,
+            },
+          ),
         );
       }
-      await this.mark(row, { status: ESSAY_STATUS.reported, reported_at: new Date(), attempts: 0, next_attempt_at: null });
-      this.logger.log(`Đã gửi điểm gợi ý ${result.score}/${result.max_score} cho bài nộp ${row.lms_submission_id}`);
+      await this.mark(row, {
+        status: ESSAY_STATUS.reported,
+        reported_at: new Date(),
+        attempts: 0,
+        next_attempt_at: null,
+      });
+      this.logger.log(
+        `Đã gửi điểm gợi ý ${result.score}/${result.max_score} cho bài nộp ${row.lms_submission_id}`,
+      );
     } catch (error) {
       // Kết quả vẫn nằm trong DB: thử lại mãi với nhịp thưa dần, không bỏ.
       await this.mark(row, {
@@ -224,7 +282,11 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
       for (const asset of assets) {
         await this.lti.postReport(
           row.report_url,
-          failedReport({ assetId: asset.asset_id, timestamp: new Date().toISOString() }, row.error_code || 'PROCESSING_FAILED', comment),
+          failedReport(
+            { assetId: asset.asset_id, timestamp: new Date().toISOString() },
+            row.error_code || 'PROCESSING_FAILED',
+            comment,
+          ),
         );
       }
       await this.mark(row, { reported_at: new Date(), next_attempt_at: null });
@@ -233,11 +295,18 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
         attempts: row.attempts + 1,
         next_attempt_at: new Date(Date.now() + backoff(row.attempts)),
       });
-      this.logger.warn(`Gửi báo cáo lỗi về Canvas thất bại (${row.essay_submission_id}): ${errorMessage(error)}`);
+      this.logger.warn(
+        `Gửi báo cáo lỗi về Canvas thất bại (${row.essay_submission_id}): ${errorMessage(error)}`,
+      );
     }
   }
 
-  private async retryOrFail(row: Row, error: unknown, errorCode: string, permanent = false) {
+  private async retryOrFail(
+    row: Row,
+    error: unknown,
+    errorCode: string,
+    permanent = false,
+  ) {
     const attempts = row.attempts + 1;
     const giveUp = permanent || attempts >= MAX_ATTEMPTS;
     this.logger.warn(
@@ -245,7 +314,9 @@ export class EssayReportPublisherService implements OnModuleInit, OnModuleDestro
     );
     await this.mark(row, {
       attempts: giveUp ? 0 : attempts,
-      next_attempt_at: giveUp ? null : new Date(Date.now() + backoff(row.attempts)),
+      next_attempt_at: giveUp
+        ? null
+        : new Date(Date.now() + backoff(row.attempts)),
       error: errorMessage(error).slice(0, 2000),
       ...(giveUp ? { status: ESSAY_STATUS.failed, error_code: errorCode } : {}),
     });

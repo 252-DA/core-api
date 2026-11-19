@@ -144,24 +144,36 @@ describe('CanvasSyncJobsService', () => {
       ['instructor', undefined],
       ['ta', undefined],
       ['instructor', 'administrator'],
-    ])('triggers a roster job for launch role %s / %s', async (role, platform) => {
-      const { service, queue } = setup();
-      await service.triggerRosterLaunch('course-1', 'canvas', role, platform);
-      expect(queue.add).toHaveBeenCalledWith(
-        CANVAS_ROSTER_SYNC,
-        { courseId: 'course-1', actor: { kind: 'system' }, trigger: 'launch' },
-        expect.objectContaining({
-          jobId: 'canvas-roster-course-1',
-          attempts: 3,
-          removeOnComplete: true,
-          removeOnFail: true,
-        }),
-      );
-    });
+    ])(
+      'triggers a roster job for launch role %s / %s',
+      async (role, platform) => {
+        const { service, queue } = setup();
+        await service.triggerRosterLaunch('course-1', 'canvas', role, platform);
+        expect(queue.add).toHaveBeenCalledWith(
+          CANVAS_ROSTER_SYNC,
+          {
+            courseId: 'course-1',
+            actor: { kind: 'system' },
+            trigger: 'launch',
+          },
+          expect.objectContaining({
+            jobId: 'canvas-roster-course-1',
+            attempts: 3,
+            removeOnComplete: true,
+            removeOnFail: true,
+          }),
+        );
+      },
+    );
 
     it('treats an administrator launch as staff even with a learner course role', async () => {
       const { service, queue } = setup();
-      await service.triggerRosterLaunch('course-1', 'canvas', 'learner', 'administrator');
+      await service.triggerRosterLaunch(
+        'course-1',
+        'canvas',
+        'learner',
+        'administrator',
+      );
       expect(queue.add).toHaveBeenCalledTimes(1);
     });
 
@@ -190,7 +202,9 @@ describe('CanvasSyncJobsService', () => {
       // Cooldown của job tài liệu đang chạy không chặn job danh sách lớp.
       await service.triggerRosterLaunch('course-1', 'canvas', 'instructor');
       expect(queue.add).toHaveBeenCalledTimes(1);
-      expect(redis.get).toHaveBeenCalledWith('bull:canvas_sync:roster-cooldown:course-1');
+      expect(redis.get).toHaveBeenCalledWith(
+        'bull:canvas_sync:roster-cooldown:course-1',
+      );
 
       redis.get.mockResolvedValue(1);
       queue.add.mockClear();
@@ -209,8 +223,15 @@ describe('CanvasSyncJobsService', () => {
       const { service, queue, redis } = setup();
       redis.get.mockResolvedValue(1);
       await expect(
-        service.enqueueRoster('course-1', { kind: 'user', userId: 'teacher' }, 'manual'),
-      ).resolves.toEqual({ job_id: 'canvas-roster-course-1', status: 'QUEUED' });
+        service.enqueueRoster(
+          'course-1',
+          { kind: 'user', userId: 'teacher' },
+          'manual',
+        ),
+      ).resolves.toEqual({
+        job_id: 'canvas-roster-course-1',
+        status: 'QUEUED',
+      });
       expect(queue.add).toHaveBeenCalledTimes(1);
     });
 

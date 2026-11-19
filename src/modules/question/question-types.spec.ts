@@ -1,5 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
-import { gradeAnswer, normalizeAnswerKey, normalizeBlank } from './question-types';
+import {
+  gradeAnswer,
+  normalizeAnswerKey,
+  normalizeBlank,
+} from './question-types';
 
 describe('normalizeAnswerKey', () => {
   it('MCQ_SINGLE: 4 phương án khác nhau, đáp án nằm trong phương án', () => {
@@ -10,10 +14,16 @@ describe('normalizeAnswerKey', () => {
       }),
     ).toEqual({ options: ['a', 'b', 'c', 'd'], correct_answer: 'a' });
     expect(() =>
-      normalizeAnswerKey('MCQ_SINGLE', 'Q', { options: ['a', 'A', 'c', 'd'], correct_answer: 'a' }),
+      normalizeAnswerKey('MCQ_SINGLE', 'Q', {
+        options: ['a', 'A', 'c', 'd'],
+        correct_answer: 'a',
+      }),
     ).toThrow(BadRequestException);
     expect(() =>
-      normalizeAnswerKey('MCQ_SINGLE', 'Q', { options: ['a', 'b', 'c', 'd'], correct_answer: 'x' }),
+      normalizeAnswerKey('MCQ_SINGLE', 'Q', {
+        options: ['a', 'b', 'c', 'd'],
+        correct_answer: 'x',
+      }),
     ).toThrow(BadRequestException);
   });
 
@@ -23,7 +33,10 @@ describe('normalizeAnswerKey', () => {
         options: ['a', 'b', 'c', 'd', 'e'],
         correct_answer: ['d', 'b'],
       }),
-    ).toEqual({ options: ['a', 'b', 'c', 'd', 'e'], correct_answer: ['b', 'd'] });
+    ).toEqual({
+      options: ['a', 'b', 'c', 'd', 'e'],
+      correct_answer: ['b', 'd'],
+    });
     expect(() =>
       normalizeAnswerKey('MCQ_MULTI', 'Q', {
         options: ['a', 'b', 'c', 'd'],
@@ -40,10 +53,16 @@ describe('normalizeAnswerKey', () => {
 
   it('TRUE_FALSE: luôn ghi phương án cố định', () => {
     expect(
-      normalizeAnswerKey('TRUE_FALSE', 'Q', { options: ['x'], correct_answer: 'Sai' }),
+      normalizeAnswerKey('TRUE_FALSE', 'Q', {
+        options: ['x'],
+        correct_answer: 'Sai',
+      }),
     ).toEqual({ options: ['Đúng', 'Sai'], correct_answer: 'Sai' });
     expect(() =>
-      normalizeAnswerKey('TRUE_FALSE', 'Q', { options: null, correct_answer: 'True' }),
+      normalizeAnswerKey('TRUE_FALSE', 'Q', {
+        options: null,
+        correct_answer: 'True',
+      }),
     ).toThrow(BadRequestException);
   });
 
@@ -55,7 +74,10 @@ describe('normalizeAnswerKey', () => {
       }),
     ).toEqual({ options: null, correct_answer: ['n-1'] });
     expect(() =>
-      normalizeAnswerKey('FILL_BLANK', 'Không có chỗ trống', { options: null, correct_answer: ['x'] }),
+      normalizeAnswerKey('FILL_BLANK', 'Không có chỗ trống', {
+        options: null,
+        correct_answer: ['x'],
+      }),
     ).toThrow(BadRequestException);
   });
 
@@ -65,7 +87,10 @@ describe('normalizeAnswerKey', () => {
         options: null,
         correct_answer: { model_answer: ' Mẫu ', rubric: ['Ý 1', 'Ý 2'] },
       }),
-    ).toEqual({ options: null, correct_answer: { model_answer: 'Mẫu', rubric: ['Ý 1', 'Ý 2'] } });
+    ).toEqual({
+      options: null,
+      correct_answer: { model_answer: 'Mẫu', rubric: ['Ý 1', 'Ý 2'] },
+    });
     expect(() =>
       normalizeAnswerKey('SHORT_ANSWER', 'Q', {
         options: null,
@@ -75,20 +100,25 @@ describe('normalizeAnswerKey', () => {
   });
 
   it('từ chối kiểu không hỗ trợ', () => {
-    expect(() => normalizeAnswerKey('ESSAY', 'Q', { options: null, correct_answer: null })).toThrow(
-      BadRequestException,
-    );
+    expect(() =>
+      normalizeAnswerKey('ESSAY', 'Q', { options: null, correct_answer: null }),
+    ).toThrow(BadRequestException);
   });
 });
 
 describe('gradeAnswer', () => {
   it('MCQ_SINGLE và TRUE_FALSE so theo giá trị như trước', () => {
-    expect(gradeAnswer({ type: 'MCQ_SINGLE', correct_answer: 'b' }, 'b')).toEqual({
+    expect(
+      gradeAnswer({ type: 'MCQ_SINGLE', correct_answer: 'b' }, 'b'),
+    ).toEqual({
       score: 100,
       isCorrect: true,
       pending: false,
     });
-    expect(gradeAnswer({ type: 'TRUE_FALSE', correct_answer: 'Sai' }, 'Đúng').isCorrect).toBe(false);
+    expect(
+      gradeAnswer({ type: 'TRUE_FALSE', correct_answer: 'Sai' }, 'Đúng')
+        .isCorrect,
+    ).toBe(false);
   });
 
   it('MCQ_MULTI: đúng khi chọn đủ và chỉ đúng các phương án đúng, không kể thứ tự', () => {
@@ -101,7 +131,10 @@ describe('gradeAnswer', () => {
   });
 
   it('FILL_BLANK: chuẩn hoá hoa thường, khoảng trắng và dấu câu', () => {
-    const item = { type: 'FILL_BLANK', correct_answer: ['Đồ thị liên thông', 'connected graph'] };
+    const item = {
+      type: 'FILL_BLANK',
+      correct_answer: ['Đồ thị liên thông', 'connected graph'],
+    };
     expect(gradeAnswer(item, '  đồ   thị Liên thông. ').isCorrect).toBe(true);
     expect(gradeAnswer(item, '"Connected graph"').isCorrect).toBe(true);
     expect(gradeAnswer(item, 'đồ thị').isCorrect).toBe(false);
@@ -110,8 +143,19 @@ describe('gradeAnswer', () => {
   });
 
   it('SHORT_ANSWER: chờ worker chấm, trừ khi bỏ trống', () => {
-    const item = { type: 'SHORT_ANSWER', correct_answer: { model_answer: 'x', rubric: ['x'] } };
-    expect(gradeAnswer(item, 'Bài làm')).toEqual({ score: 0, isCorrect: false, pending: true });
-    expect(gradeAnswer(item, '   ')).toEqual({ score: 0, isCorrect: false, pending: false });
+    const item = {
+      type: 'SHORT_ANSWER',
+      correct_answer: { model_answer: 'x', rubric: ['x'] },
+    };
+    expect(gradeAnswer(item, 'Bài làm')).toEqual({
+      score: 0,
+      isCorrect: false,
+      pending: true,
+    });
+    expect(gradeAnswer(item, '   ')).toEqual({
+      score: 0,
+      isCorrect: false,
+      pending: false,
+    });
   });
 });

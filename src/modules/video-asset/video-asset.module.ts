@@ -12,4 +12,3 @@ import { VideoAssetController } from './video-asset.controller';
   exports: [VideoAssetService],
 })
 export class VideoAssetModule {}
-

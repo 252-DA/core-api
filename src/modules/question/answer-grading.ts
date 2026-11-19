@@ -113,7 +113,10 @@ type AttemptRef = {
  * AWAITING_GRADE của người học trên bài tập đó, đúng như AgsPublisherService
  * gom các dòng PENDING của lesson quiz thành một điểm.
  */
-export async function lockAwaitingGroup(tx: Prisma.TransactionClient, attempt: AttemptRef) {
+export async function lockAwaitingGroup(
+  tx: Prisma.TransactionClient,
+  attempt: AttemptRef,
+) {
   // Khoá các dòng trước khi đếm: giảng viên chấm tay và QuizGradingResultHandler
   // (kết quả của worker) cùng khoá chúng theo một thứ tự, nên hai bên không
   // cùng thấy "còn câu chưa chấm" rồi bỏ lượt nộp kẹt ở AWAITING_GRADE.
@@ -137,7 +140,10 @@ export async function lockAwaitingGroup(tx: Prisma.TransactionClient, attempt: A
  * Mở khoá AGS cho nhóm câu khi mọi câu đã GRADED. Gọi trong transaction đã
  * `lockAwaitingGroup`. Trả số dòng chuyển sang PENDING.
  */
-export async function releaseIfGraded(tx: Prisma.TransactionClient, attemptIds: string[]) {
+export async function releaseIfGraded(
+  tx: Prisma.TransactionClient,
+  attemptIds: string[],
+) {
   if (!attemptIds.length) return 0;
   const ungraded = await tx.quiz_attempts.count({
     where: {
@@ -148,7 +154,10 @@ export async function releaseIfGraded(tx: Prisma.TransactionClient, attemptIds: 
   });
   if (ungraded) return 0;
   const { count } = await tx.quiz_attempts.updateMany({
-    where: { attempt_id: { in: attemptIds }, ags_status: AGS_STATUS.awaitingGrade },
+    where: {
+      attempt_id: { in: attemptIds },
+      ags_status: AGS_STATUS.awaitingGrade,
+    },
     data: { ags_status: AGS_STATUS.pending },
   });
   return count;
@@ -184,7 +193,10 @@ export const MAX_GRADE_FEEDBACK = 4000;
 const MAX_GRADER_MODEL = 200;
 
 function nullableText(value: unknown, max: number) {
-  return value === null || (typeof value === 'string' && isWithinCodePoints(value, max));
+  return (
+    value === null ||
+    (typeof value === 'string' && isWithinCodePoints(value, max))
+  );
 }
 
 /**
@@ -199,15 +211,20 @@ export function parseAnswerGrades(
   label: string,
 ): AnswerGradeResult[] {
   if (!Array.isArray(value) || value.length === 0) {
-    throw new InvalidWorkerResultError(`${label}: answers must be a non-empty array`);
+    throw new InvalidWorkerResultError(
+      `${label}: answers must be a non-empty array`,
+    );
   }
   const seen = new Set<string>();
   return value.map((raw, index) => {
     const where = `${label}: answers[${index}]`;
-    if (!isPlainObject(raw)) throw new InvalidWorkerResultError(`${where} must be an object`);
+    if (!isPlainObject(raw))
+      throw new InvalidWorkerResultError(`${where} must be an object`);
     const id = raw[idKey];
-    if (!isUuid(id)) throw new InvalidWorkerResultError(`${where}.${idKey} must be a uuid`);
-    if (seen.has(id)) throw new InvalidWorkerResultError(`${where}: duplicate ${idKey} ${id}`);
+    if (!isUuid(id))
+      throw new InvalidWorkerResultError(`${where}.${idKey} must be a uuid`);
+    if (seen.has(id))
+      throw new InvalidWorkerResultError(`${where}: duplicate ${idKey} ${id}`);
     seen.add(id);
     const { status, feedback, grader_model: graderModel } = raw;
     const allowed =
@@ -218,18 +235,30 @@ export function parseAnswerGrades(
       .filter((key) => !allowed.includes(key))
       .map((key) => `unexpected field ${key}`);
     if (!('feedback' in raw) || !nullableText(feedback, MAX_GRADE_FEEDBACK)) {
-      problems.push(`feedback must be a string (≤ ${MAX_GRADE_FEEDBACK}) or null`);
+      problems.push(
+        `feedback must be a string (≤ ${MAX_GRADE_FEEDBACK}) or null`,
+      );
     }
-    if (!('grader_model' in raw) || !nullableText(graderModel, MAX_GRADER_MODEL)) {
+    if (
+      !('grader_model' in raw) ||
+      !nullableText(graderModel, MAX_GRADER_MODEL)
+    ) {
       problems.push('grader_model must be a short string or null');
     }
     if (status === GRADING_STATUS.graded) {
       const { score, is_correct: isCorrect } = raw;
-      if (typeof score !== 'number' || !Number.isInteger(score) || score < 0 || score > 100) {
+      if (
+        typeof score !== 'number' ||
+        !Number.isInteger(score) ||
+        score < 0 ||
+        score > 100
+      ) {
         problems.push('score must be an integer in [0, 100]');
       }
-      if (typeof isCorrect !== 'boolean') problems.push('is_correct must be a boolean');
-      if (problems.length) throw new InvalidWorkerResultError(`${where}: ${problems.join('; ')}`);
+      if (typeof isCorrect !== 'boolean')
+        problems.push('is_correct must be a boolean');
+      if (problems.length)
+        throw new InvalidWorkerResultError(`${where}: ${problems.join('; ')}`);
       return {
         id,
         status: GRADING_STATUS.graded,
@@ -242,9 +271,12 @@ export function parseAnswerGrades(
     if (status === GRADING_STATUS.needsReview) {
       const reason = raw.reason;
       if (!(NEEDS_REVIEW_REASONS as readonly unknown[]).includes(reason)) {
-        problems.push(`reason must be one of ${NEEDS_REVIEW_REASONS.join(', ')}`);
+        problems.push(
+          `reason must be one of ${NEEDS_REVIEW_REASONS.join(', ')}`,
+        );
       }
-      if (problems.length) throw new InvalidWorkerResultError(`${where}: ${problems.join('; ')}`);
+      if (problems.length)
+        throw new InvalidWorkerResultError(`${where}: ${problems.join('; ')}`);
       return {
         id,
         status: GRADING_STATUS.needsReview,
@@ -279,7 +311,8 @@ export function salvageAnswerIds(
   if (!Array.isArray(answers)) return [];
   const ids = new Set<string>();
   for (const raw of answers as unknown[]) {
-    if (isPlainObject(raw) && isUuid(raw[idKey])) ids.add(raw[idKey].toLowerCase());
+    if (isPlainObject(raw) && isUuid(raw[idKey]))
+      ids.add(raw[idKey].toLowerCase());
   }
   return [...ids];
 }

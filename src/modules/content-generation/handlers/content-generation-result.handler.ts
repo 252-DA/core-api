@@ -224,7 +224,10 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
   private async applyMicroOutline(
     tx: Prisma.TransactionClient,
     request: LockedRequest,
-    result: Extract<ContentGenerationResult, { status: 'SUCCEEDED'; content_type: 'micro_outline' }>,
+    result: Extract<
+      ContentGenerationResult,
+      { status: 'SUCCEEDED'; content_type: 'micro_outline' }
+    >,
   ): Promise<Outcome> {
     const requestId = request.request_id;
     const doc = await tx.documents.findFirst({
@@ -240,7 +243,12 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
         status: 'FAILED',
         last_error: `Document ${result.document_id} was deleted or does not belong to course ${request.course_id}`,
       });
-      return { applied: true, request_id: requestId, status: 'FAILED', reason: 'document missing' };
+      return {
+        applied: true,
+        request_id: requestId,
+        status: 'FAILED',
+        reason: 'document missing',
+      };
     }
 
     let creatorId = request.requested_by ?? doc.created_by ?? null;
@@ -258,13 +266,23 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
     if (!creatorId) {
       await updateRequest(tx, requestId, {
         status: 'FAILED',
-        last_error: 'Không xác định được giảng viên tạo bản nháp micro-content.',
+        last_error:
+          'Không xác định được giảng viên tạo bản nháp micro-content.',
       });
-      return { applied: true, request_id: requestId, status: 'FAILED', reason: 'creator missing' };
+      return {
+        applied: true,
+        request_id: requestId,
+        status: 'FAILED',
+        reason: 'creator missing',
+      };
     }
 
     const validLos = await tx.learning_outcomes.findMany({
-      where: { course_id: request.course_id, is_current: true, deleted_at: null },
+      where: {
+        course_id: request.course_id,
+        is_current: true,
+        deleted_at: null,
+      },
       select: { lo_id: true },
     });
     const validLoIds = new Set(validLos.map((lo) => lo.lo_id));
@@ -288,7 +306,9 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
     for (let idx = 0; idx < result.sections.length; idx++) {
       const sec = result.sections[idx];
       const loId =
-        sec.suggested_lo_id && validLoIds.has(sec.suggested_lo_id) ? sec.suggested_lo_id : null;
+        sec.suggested_lo_id && validLoIds.has(sec.suggested_lo_id)
+          ? sec.suggested_lo_id
+          : null;
       await tx.micro_contents.create({
         data: {
           course_id: request.course_id,
@@ -328,7 +348,10 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
   private async applyVideoScript(
     tx: Prisma.TransactionClient,
     request: LockedRequest,
-    result: Extract<ContentGenerationResult, { status: 'SUCCEEDED'; content_type: 'video_script' }>,
+    result: Extract<
+      ContentGenerationResult,
+      { status: 'SUCCEEDED'; content_type: 'video_script' }
+    >,
   ): Promise<Outcome> {
     const requestId = request.request_id;
     const item = await tx.micro_contents.findFirst({
@@ -344,10 +367,17 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
         status: 'FAILED',
         last_error: `Micro-content ${result.micro_content_id} missing or deleted`,
       });
-      return { applied: true, request_id: requestId, status: 'FAILED', reason: 'micro_content missing' };
+      return {
+        applied: true,
+        request_id: requestId,
+        status: 'FAILED',
+        reason: 'micro_content missing',
+      };
     }
 
-    const superseded = Boolean(item.script_request_id && item.script_request_id !== requestId);
+    const superseded = Boolean(
+      item.script_request_id && item.script_request_id !== requestId,
+    );
     if (!superseded) {
       await tx.micro_contents.update({
         where: { micro_content_id: item.micro_content_id },
@@ -381,7 +411,10 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
   private async applyMicroQuiz(
     tx: Prisma.TransactionClient,
     request: LockedRequest,
-    result: Extract<ContentGenerationResult, { status: 'SUCCEEDED'; content_type: 'micro_quiz' }>,
+    result: Extract<
+      ContentGenerationResult,
+      { status: 'SUCCEEDED'; content_type: 'micro_quiz' }
+    >,
   ): Promise<Outcome> {
     const requestId = request.request_id;
     const item = await tx.micro_contents.findFirst({
@@ -397,7 +430,12 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
         status: 'FAILED',
         last_error: `Micro-content ${result.micro_content_id} missing or deleted`,
       });
-      return { applied: true, request_id: requestId, status: 'FAILED', reason: 'micro_content missing' };
+      return {
+        applied: true,
+        request_id: requestId,
+        status: 'FAILED',
+        reason: 'micro_content missing',
+      };
     }
 
     const now = new Date();
@@ -415,7 +453,8 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
           type: q.type,
           question: q.question,
           options: (q.options ?? Prisma.DbNull) as Prisma.InputJsonValue,
-          correct_answer: (q.correct_answer ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          correct_answer: (q.correct_answer ??
+            Prisma.JsonNull) as Prisma.InputJsonValue,
           explanation: q.explanation,
         },
       });
@@ -474,17 +513,19 @@ export class ContentGenerationResultHandler implements WorkerResultHandler {
           error instanceof InvalidWorkerResultError
             ? `Invalid worker result: ${error.message}`
             : `Worker result could not be applied: ${error.message}`;
-        const { count } = await this.prisma.content_generation_requests.updateMany({
-          where: { request_id: requestId, status: { in: ACTIVE_STATUSES } },
-          data: {
-            status: 'FAILED',
-            last_error: clip(reason),
-            updated_at: new Date(),
-          },
-        });
+        const { count } =
+          await this.prisma.content_generation_requests.updateMany({
+            where: { request_id: requestId, status: { in: ACTIVE_STATUSES } },
+            data: {
+              status: 'FAILED',
+              last_error: clip(reason),
+              updated_at: new Date(),
+            },
+          });
         if (
-          typeof (this.prisma.micro_contents as { updateMany?: unknown } | undefined)
-            ?.updateMany === 'function'
+          typeof (
+            this.prisma.micro_contents as { updateMany?: unknown } | undefined
+          )?.updateMany === 'function'
         ) {
           await markMicroContentScriptFailed(this.prisma, requestId);
         }

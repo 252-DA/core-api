@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { documents } from '@prisma/client';
@@ -20,7 +25,10 @@ import {
 } from '../../document/document.service';
 import { DocumentStorageService } from '../../../infra/storage/document-storage.service';
 import { DOCUMENT_PROCESSING_QUEUE } from '../../../messaging/queues';
-import { CanvasSyncJobsService, type SyncActor } from '../jobs/canvas-sync-jobs.service';
+import {
+  CanvasSyncJobsService,
+  type SyncActor,
+} from '../jobs/canvas-sync-jobs.service';
 import {
   chapterRefFromFileName,
   classifyModule,
@@ -39,8 +47,17 @@ const MAX_DOWNLOADS_PER_SYNC = 30;
 const CONFIDENCE = { module: 0.8, file_name: 0.7, confirmed: 1 };
 export const MAP_DOCUMENT_LOS_JOB = 'map_document_los';
 
-type Entry = { fileId: string; moduleName: string; published: boolean; cls: ModuleClass };
-type ChapterHint = { code: string; provenance: 'module' | 'file_name'; reason: string };
+type Entry = {
+  fileId: string;
+  moduleName: string;
+  published: boolean;
+  cls: ModuleClass;
+};
+type ChapterHint = {
+  code: string;
+  provenance: 'module' | 'file_name';
+  reason: string;
+};
 
 /**
  * File trong các module theo thứ tự hiển thị. Một file nằm ở nhiều module chỉ
@@ -92,13 +109,23 @@ export class CanvasDocumentSyncService {
     // Validate the course before accepting the manual request. No downloads in
     // the request path; all three triggers share the same per-course job.
     await this.canvasCourses.contextId(courseId);
-    const job = await this.syncJobs.enqueue(courseId, { kind: 'user', userId: claims.sub }, 'manual');
+    const job = await this.syncJobs.enqueue(
+      courseId,
+      { kind: 'user', userId: claims.sub },
+      'manual',
+    );
     // Nút "Đồng bộ từ Canvas" đọc luôn danh sách lớp. Việc này là phần kèm theo:
     // không để nó làm hỏng yêu cầu đồng bộ tài liệu.
     try {
-      await this.syncJobs.enqueueRoster(courseId, { kind: 'user', userId: claims.sub }, 'manual');
+      await this.syncJobs.enqueueRoster(
+        courseId,
+        { kind: 'user', userId: claims.sub },
+        'manual',
+      );
     } catch (error) {
-      this.logger.warn(`Không xếp được job danh sách lớp cho ${courseId}: ${String(error)}`);
+      this.logger.warn(
+        `Không xếp được job danh sách lớp cho ${courseId}: ${String(error)}`,
+      );
     }
     return job;
   }
@@ -148,20 +175,29 @@ export class CanvasDocumentSyncService {
     for (const entry of entries.values()) {
       const file = filesById.get(entry.fileId);
       if (!file) {
-        summary.skipped.push({ name: `file ${entry.fileId}`, reason: 'File không có trong danh sách file của khoá Canvas.' });
+        summary.skipped.push({
+          name: `file ${entry.fileId}`,
+          reason: 'File không có trong danh sách file của khoá Canvas.',
+        });
         continue;
       }
-      const name = file.display_name || file.filename || `canvas-file-${entry.fileId}`;
+      const name =
+        file.display_name || file.filename || `canvas-file-${entry.fileId}`;
       if (!isSupportedDocument(name, file['content-type'])) {
-        summary.skipped.push({ name, reason: 'Định dạng chưa hỗ trợ (chỉ PDF, DOCX, PPTX, Markdown).' });
+        summary.skipped.push({
+          name,
+          reason: 'Định dạng chưa hỗ trợ (chỉ PDF, DOCX, PPTX, Markdown).',
+        });
         continue;
       }
 
       const hint = this.chapterHint(entry, name, sessions, chapterCodes);
       const current = existingByFile.get(entry.fileId);
       const sameVersion =
-        current?.lms_updated_at && file.updated_at &&
-        current.lms_updated_at.getTime() === new Date(file.updated_at).getTime();
+        current?.lms_updated_at &&
+        file.updated_at &&
+        current.lms_updated_at.getTime() ===
+          new Date(file.updated_at).getTime();
 
       if (current && sameVersion) {
         const changed = await this.refreshPlacement(current, entry, hint);
@@ -180,12 +216,23 @@ export class CanvasDocumentSyncService {
       }
 
       if (downloads >= MAX_DOWNLOADS_PER_SYNC) {
-        summary.skipped.push({ name, reason: 'Vượt giới hạn mỗi lần đồng bộ; sẽ tải ở lần sau.' });
+        summary.skipped.push({
+          name,
+          reason: 'Vượt giới hạn mỗi lần đồng bộ; sẽ tải ở lần sau.',
+        });
         continue;
       }
       downloads += 1;
       try {
-        await this.importFile(actor, courseId, entry, file, name, hint, current);
+        await this.importFile(
+          actor,
+          courseId,
+          entry,
+          file,
+          name,
+          hint,
+          current,
+        );
         (current ? summary.updated : summary.created).push(name);
       } catch (error: unknown) {
         summary.skipped.push({ name, reason: (error as Error).message });
@@ -231,12 +278,21 @@ export class CanvasDocumentSyncService {
           chapter_confidence: null,
           chapter_reason: null,
         });
-      } else if (body.chapterCode !== doc.chapter_code || doc.chapter_provenance !== 'confirmed') {
+      } else if (
+        body.chapterCode !== doc.chapter_code ||
+        doc.chapter_provenance !== 'confirmed'
+      ) {
         const chapter = await this.prisma.chapters.findFirst({
-          where: { course_id: doc.course_id, code: body.chapterCode, deleted_at: null },
+          where: {
+            course_id: doc.course_id,
+            code: body.chapterCode,
+            deleted_at: null,
+          },
         });
         if (!chapter) {
-          throw new BadRequestException(`Đề cương không có chương ${body.chapterCode}.`);
+          throw new BadRequestException(
+            `Đề cương không có chương ${body.chapterCode}.`,
+          );
         }
         Object.assign(data, {
           chapter_code: body.chapterCode,
@@ -250,7 +306,10 @@ export class CanvasDocumentSyncService {
       return this.documents.getDocument(claims, documentId);
     }
 
-    await this.prisma.documents.update({ where: { document_id: documentId }, data });
+    await this.prisma.documents.update({
+      where: { document_id: documentId },
+      data,
+    });
     await this.enqueueRemap(doc);
     return this.documents.getDocument(claims, documentId);
   }
@@ -264,7 +323,11 @@ export class CanvasDocumentSyncService {
     // Tài liệu tham khảo trải nhiều chương; worker gắn theo từng phần.
     if (entry.cls.role === 'reference') return null;
     if (entry.cls.chapterRef) {
-      const code = resolveChapterCode(entry.cls.chapterRef, sessions, chapterCodes);
+      const code = resolveChapterCode(
+        entry.cls.chapterRef,
+        sessions,
+        chapterCodes,
+      );
       if (code) {
         return {
           code,
@@ -276,12 +339,20 @@ export class CanvasDocumentSyncService {
     const fileRef = chapterRefFromFileName(fileName);
     const code = fileRef && resolveChapterCode(fileRef, sessions, chapterCodes);
     if (fileRef && code) {
-      return { code, provenance: 'file_name', reason: `Tên file ghi ${describeRef(fileRef)}` };
+      return {
+        code,
+        provenance: 'file_name',
+        reason: `Tên file ghi ${describeRef(fileRef)}`,
+      };
     }
     return null;
   }
 
-  private placementData(entry: Entry, hint: ChapterHint | null, previous?: documents) {
+  private placementData(
+    entry: Entry,
+    hint: ChapterHint | null,
+    previous?: documents,
+  ) {
     const roleConfirmed = previous?.role_provenance === 'confirmed';
     const chapterConfirmed = previous?.chapter_provenance === 'confirmed';
     return {
@@ -304,10 +375,15 @@ export class CanvasDocumentSyncService {
   }
 
   /** File không đổi: cập nhật module/vai trò/chương; đổi thì map lại LO. */
-  private async refreshPlacement(doc: documents, entry: Entry, hint: ChapterHint | null) {
+  private async refreshPlacement(
+    doc: documents,
+    entry: Entry,
+    hint: ChapterHint | null,
+  ) {
     const data: Record<string, unknown> = {};
     if (doc.lms_module !== entry.moduleName) data.lms_module = entry.moduleName;
-    if (doc.lms_published !== entry.published) data.lms_published = entry.published;
+    if (doc.lms_published !== entry.published)
+      data.lms_published = entry.published;
 
     let remap = false;
     if (doc.role_provenance !== 'confirmed' && doc.role !== entry.cls.role) {
@@ -316,10 +392,16 @@ export class CanvasDocumentSyncService {
     }
     if (doc.chapter_provenance !== 'confirmed') {
       const next = this.placementData(entry, hint, doc);
-      const fromName = doc.chapter_provenance === 'module' || doc.chapter_provenance === 'file_name';
+      const fromName =
+        doc.chapter_provenance === 'module' ||
+        doc.chapter_provenance === 'file_name';
       // Chương khớp theo nội dung chỉ bị thay khi tên module/file nay ghi chương.
-      if (hint ? next.chapter_code !== doc.chapter_code || next.chapter_provenance !== doc.chapter_provenance
-               : fromName) {
+      if (
+        hint
+          ? next.chapter_code !== doc.chapter_code ||
+            next.chapter_provenance !== doc.chapter_provenance
+          : fromName
+      ) {
         Object.assign(data, {
           chapter_code: next.chapter_code,
           chapter_provenance: next.chapter_provenance,
@@ -331,7 +413,10 @@ export class CanvasDocumentSyncService {
     }
 
     if (Object.keys(data).length === 0) return false;
-    await this.prisma.documents.update({ where: { document_id: doc.document_id }, data });
+    await this.prisma.documents.update({
+      where: { document_id: doc.document_id },
+      data,
+    });
     if (remap) await this.enqueueRemap(doc);
     return true;
   }
@@ -346,7 +431,9 @@ export class CanvasDocumentSyncService {
     previous?: documents,
   ) {
     const content = await this.canvas.downloadFile(file);
-    const [{ id: documentId }] = await this.prisma.$queryRaw<Array<{ id: string }>>`SELECT uuidv7()::text AS id`;
+    const [{ id: documentId }] = await this.prisma.$queryRaw<
+      Array<{ id: string }>
+    >`SELECT uuidv7()::text AS id`;
     const storageKey = `documents/${courseId}/${documentId}/${safeFileName(name)}`;
     const mimeType = file['content-type'] || 'application/octet-stream';
     await this.storage.putObject(storageKey, content, mimeType);
@@ -381,17 +468,38 @@ export class CanvasDocumentSyncService {
     await this.enqueueProcessingOrMarkError(doc);
   }
 
-  private async enqueueProcessingOrMarkError(doc: Pick<documents, 'document_id' | 'course_id' | 'created_by' | 'file_path' | 'processing_generation'>) {
+  private async enqueueProcessingOrMarkError(
+    doc: Pick<
+      documents,
+      | 'document_id'
+      | 'course_id'
+      | 'created_by'
+      | 'file_path'
+      | 'processing_generation'
+    >,
+  ) {
     try {
       await this.enqueueProcessing(doc);
     } catch (error) {
       // A later sync retries ERROR documents; QUEUED without a job would stick.
-      await this.prisma.documents.update({ where: { document_id: doc.document_id }, data: { status: 'ERROR' } });
+      await this.prisma.documents.update({
+        where: { document_id: doc.document_id },
+        data: { status: 'ERROR' },
+      });
       throw error;
     }
   }
 
-  private async enqueueProcessing(doc: Pick<documents, 'document_id' | 'course_id' | 'created_by' | 'file_path' | 'processing_generation'>) {
+  private async enqueueProcessing(
+    doc: Pick<
+      documents,
+      | 'document_id'
+      | 'course_id'
+      | 'created_by'
+      | 'file_path'
+      | 'processing_generation'
+    >,
+  ) {
     await this.processingQueue.add(
       'process_document',
       {

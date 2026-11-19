@@ -14,7 +14,10 @@ const RECENT_HOURS = 24;
  * tên task (kiểu v5) để mọi lần đổi của một task chung một entity_id.
  */
 export function taskEntityId(task: string) {
-  const bytes = createHash('sha1').update(`llm_model_binding:${task}`).digest().subarray(0, 16);
+  const bytes = createHash('sha1')
+    .update(`llm_model_binding:${task}`)
+    .digest()
+    .subarray(0, 16);
   bytes[6] = (bytes[6] & 0x0f) | 0x50;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = bytes.toString('hex');
@@ -48,7 +51,13 @@ export class ModelSettingsService {
           this.prisma.llm_usage_logs.findFirst({
             where,
             orderBy: { called_at: 'desc' },
-            select: { use_case: true, provider: true, model: true, status: true, called_at: true },
+            select: {
+              use_case: true,
+              provider: true,
+              model: true,
+              status: true,
+              called_at: true,
+            },
           }),
           this.prisma.llm_usage_logs.groupBy({
             by: ['status'],
@@ -73,7 +82,11 @@ export class ModelSettingsService {
         };
       }),
     );
-    return { profiles: catalog.profiles, tasks, ttl_seconds: BINDING_TTL_SECONDS };
+    return {
+      profiles: catalog.profiles,
+      tasks,
+      ttl_seconds: BINDING_TTL_SECONDS,
+    };
   }
 
   /** `profile` rỗng/null = bỏ lựa chọn, task quay về env/mặc định của worker. */
@@ -82,15 +95,21 @@ export class ModelSettingsService {
     const catalog = loadModelCatalog();
     const task = typeof body.task === 'string' ? body.task : '';
     if (!catalog.tasks.some((t) => t.task === task)) {
-      throw new BadRequestException(`Task không hỗ trợ chọn model: ${task || '(trống)'}`);
+      throw new BadRequestException(
+        `Task không hỗ trợ chọn model: ${task || '(trống)'}`,
+      );
     }
     const profile = typeof body.profile === 'string' ? body.profile.trim() : '';
     if (profile && !catalog.profiles.some((p) => p.name === profile)) {
-      throw new BadRequestException(`Model không có trong danh mục: ${profile}`);
+      throw new BadRequestException(
+        `Model không có trong danh mục: ${profile}`,
+      );
     }
 
     await this.prisma.$transaction(async (tx) => {
-      const before = await tx.llm_model_bindings.findUnique({ where: { task } });
+      const before = await tx.llm_model_bindings.findUnique({
+        where: { task },
+      });
       const from = before?.profile ?? null;
       const to = profile || null;
       if (from === to) return;
@@ -98,7 +117,11 @@ export class ModelSettingsService {
         await tx.llm_model_bindings.upsert({
           where: { task },
           create: { task, profile: to, updated_by: claims.sub },
-          update: { profile: to, updated_by: claims.sub, updated_at: new Date() },
+          update: {
+            profile: to,
+            updated_by: claims.sub,
+            updated_at: new Date(),
+          },
         });
       } else {
         await tx.llm_model_bindings.delete({ where: { task } });

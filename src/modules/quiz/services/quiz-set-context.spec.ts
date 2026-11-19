@@ -30,10 +30,7 @@ function setup() {
     canvas,
     canvasCourses,
     load: (body: Parameters<typeof loadCanvasQuizContext>[1]) =>
-      loadCanvasQuizContext(
-        { prisma, canvas, canvasCourses } as never,
-        body,
-      ),
+      loadCanvasQuizContext({ prisma, canvas, canvasCourses } as never, body),
   };
 }
 
@@ -57,7 +54,11 @@ describe('loadCanvasQuizContext', () => {
 
   it('vẫn nhận chương giảng viên chọn khi không có module', async () => {
     const { load } = setup();
-    const result = await load({ courseId: COURSE, moduleId: null, chapterId: CHAPTER });
+    const result = await load({
+      courseId: COURSE,
+      moduleId: null,
+      chapterId: CHAPTER,
+    });
     expect(result.module).toBeNull();
     expect(result.chapter).toMatchObject({ chapter_id: CHAPTER });
   });

@@ -1,4 +1,11 @@
-import { Allow, IsArray, IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  Allow,
+  IsArray,
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import type { VerifiedNotice } from '../essay-processor.service';
 
 export class CreateEssayProcessorDto {

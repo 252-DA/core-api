@@ -221,7 +221,11 @@ describe('CanvasSyncProcessor', () => {
     it('syncs the roster, not the documents, and records a roster run', async () => {
       const { processor, sync, roster, runs, jobs } = setup();
       const job = rosterJob({
-        data: { courseId: 'course-1', actor: { kind: 'system' }, trigger: 'schedule' },
+        data: {
+          courseId: 'course-1',
+          actor: { kind: 'system' },
+          trigger: 'schedule',
+        },
       });
       await expect(processor.process(job as never)).resolves.toEqual({
         total: 3,
@@ -230,7 +234,10 @@ describe('CanvasSyncProcessor', () => {
       expect(roster.syncCourse).toHaveBeenCalledWith('course-1');
       expect(sync.syncCourse).not.toHaveBeenCalled();
       expect(runs.start).toHaveBeenCalledWith('course-1', 'sweep', 'roster');
-      expect(runs.finish).toHaveBeenCalledWith('run-1', { total: 3, created: 2 });
+      expect(runs.finish).toHaveBeenCalledWith('run-1', {
+        total: 3,
+        created: 2,
+      });
       expect(jobs.markRosterAttempt).toHaveBeenCalledTimes(2);
       expect(jobs.markSyncAttempt).not.toHaveBeenCalled();
     });

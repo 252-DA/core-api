@@ -3,7 +3,8 @@ export const ANSWER_GRADING_REQUESTED = 'ANSWER_GRADING_REQUESTED';
 /** Outbox chuyển sự kiện này sang hàng đợi `essay_grading` của worker. */
 export const ESSAY_GRADING_REQUESTED = 'ESSAY_GRADING_REQUESTED';
 /** Outbox chuyển sự kiện này sang hàng đợi `answer_grading` của worker. */
-export const MICRO_CONTENT_GRADING_REQUESTED = 'MICRO_CONTENT_GRADING_REQUESTED';
+export const MICRO_CONTENT_GRADING_REQUESTED =
+  'MICRO_CONTENT_GRADING_REQUESTED';
 /**
  * Lệnh outbox phát cùng transaction ghi đề cương: worker map lại chunk → LO của
  * học phần. OutboxService chuyển nó sang DOCUMENT_PROCESSING_QUEUE.

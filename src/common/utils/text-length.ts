@@ -37,7 +37,10 @@ export function clipCodePoints(text: string, max: number): string {
   for (let count = 0; count < max && end < text.length; count += 1) {
     const high = text.charCodeAt(end);
     const low = end + 1 < text.length ? text.charCodeAt(end + 1) : 0;
-    end += high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff ? 2 : 1;
+    end +=
+      high >= 0xd800 && high <= 0xdbff && low >= 0xdc00 && low <= 0xdfff
+        ? 2
+        : 1;
   }
   return text.slice(0, end);
 }

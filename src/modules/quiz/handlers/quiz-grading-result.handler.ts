@@ -35,11 +35,15 @@ export function parseQuizGradingResult(payload: unknown): QuizGradingResult {
     (key) => !['submission_id', 'course_id', 'answers'].includes(key),
   );
   if (extra.length) {
-    throw new InvalidWorkerResultError(`${label}: unexpected fields ${extra.join(', ')}`);
+    throw new InvalidWorkerResultError(
+      `${label}: unexpected fields ${extra.join(', ')}`,
+    );
   }
   const { submission_id: submissionId, course_id: courseId } = payload;
   if (!isUuid(submissionId) || !isUuid(courseId)) {
-    throw new InvalidWorkerResultError(`${label}: submission_id and course_id must be uuids`);
+    throw new InvalidWorkerResultError(
+      `${label}: submission_id and course_id must be uuids`,
+    );
   }
   return {
     submissionId,
@@ -95,7 +99,8 @@ export class QuizGradingResultHandler implements WorkerResultHandler {
       const stray = rows.filter(
         (r) =>
           r.course_id !== result.courseId ||
-          (r.submission_id !== null && r.submission_id !== result.submissionId) ||
+          (r.submission_id !== null &&
+            r.submission_id !== result.submissionId) ||
           r.submission_id !== first.submission_id ||
           r.user_id !== first.user_id ||
           r.resource_link_id !== first.resource_link_id,
@@ -104,7 +109,9 @@ export class QuizGradingResultHandler implements WorkerResultHandler {
         throw new InvalidWorkerResultError(
           `QUIZ_GRADING_RESULT ${envelope.result_id}: attempts ${stray
             .map((r) => r.attempt_id)
-            .join(', ')} do not belong to submission ${result.submissionId} of course ${result.courseId}`,
+            .join(
+              ', ',
+            )} do not belong to submission ${result.submissionId} of course ${result.courseId}`,
         );
       }
 

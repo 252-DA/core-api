@@ -72,7 +72,11 @@ export class CourseService {
           .map((link) => link.chapters)
           .filter((chapter) => !chapter.deleted_at)
           .sort((a, b) => a.sort_order - b.sort_order);
-        return { ...lo, chapters: chapterList[0] ?? null, chapter_list: chapterList };
+        return {
+          ...lo,
+          chapters: chapterList[0] ?? null,
+          chapter_list: chapterList,
+        };
       })
       .sort(
         (a, b) =>

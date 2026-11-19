@@ -1,12 +1,17 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { errorMessage } from '../../common/utils/errors';
 import { withoutTrailingSlash } from '../../common/utils/url';
-import { AGS_CONFIG, AGS_SCORE_SCOPE, type AgsConfig } from '../../config/ags.config';
+import {
+  AGS_CONFIG,
+  AGS_SCORE_SCOPE,
+  type AgsConfig,
+} from '../../config/ags.config';
 import { AgsTokenService } from '../../integrations/lti-platform/ags-token.service';
 
 const SCORE_CONTENT_TYPE = 'application/vnd.ims.lis.v1.score+json';
 /** Phần mở rộng của Canvas: loại bài nộp mà SpeedGrader hiện cho giảng viên. */
-const CANVAS_SUBMISSION_EXTENSION = 'https://canvas.instructure.com/lti/submission';
+const CANVAS_SUBMISSION_EXTENSION =
+  'https://canvas.instructure.com/lti/submission';
 
 export interface AgsScorePayload {
   userId: string;
@@ -167,7 +172,11 @@ export class AgsClientService {
   }
 }
 
-function attemptsExhausted(result: { ok: false; status: number; error: string }) {
+function attemptsExhausted(result: {
+  ok: false;
+  status: number;
+  error: string;
+}) {
   return (
     result.status === 422 &&
     /maximum number of allowed attempts/i.test(result.error)

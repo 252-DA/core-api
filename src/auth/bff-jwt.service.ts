@@ -50,10 +50,7 @@ export class BffJwtService implements OnModuleInit, OnModuleDestroy {
       'core-api',
     );
 
-    this.cacheCleanupInterval = setInterval(
-      () => this.cleanJtiCache(),
-      60_000,
-    );
+    this.cacheCleanupInterval = setInterval(() => this.cleanJtiCache(), 60_000);
     this.cacheCleanupInterval.unref?.();
   }
 

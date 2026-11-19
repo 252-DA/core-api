@@ -312,7 +312,9 @@ describe('Logging config & HTTP integration', () => {
         { bufferLogs: true },
       );
       app.useLogger(app.get(PinoNestLogger));
-      app.useGlobalFilters(new HttpExceptionLoggingFilter(app.getHttpAdapter()));
+      app.useGlobalFilters(
+        new HttpExceptionLoggingFilter(app.getHttpAdapter()),
+      );
       app.useGlobalPipes(
         new ValidationPipe({ whitelist: true, transform: true }),
       );
@@ -344,7 +346,9 @@ describe('Logging config & HTTP integration', () => {
 
       const lines = capture.parseLines();
       const ctrlLog = lines.find(
-        (l) => l.logger === 'LoggingTestController' && l.event === 'inside controller',
+        (l) =>
+          l.logger === 'LoggingTestController' &&
+          l.event === 'inside controller',
       );
       expect(ctrlLog).toBeDefined();
       expect(ctrlLog?.request_id).toBe('req-valid-123456');
@@ -406,7 +410,8 @@ describe('Logging config & HTTP integration', () => {
 
       const lines401 = capture.parseLines();
       const warn401 = lines401.find(
-        (l) => l.level === 'warning' && l.status === 401 && l.message !== undefined,
+        (l) =>
+          l.level === 'warning' && l.status === 401 && l.message !== undefined,
       );
       expect(warn401).toBeDefined();
       expect(warn401?.request_id).toBe(unauthReqId);
@@ -430,7 +435,8 @@ describe('Logging config & HTTP integration', () => {
 
       const lines400 = capture.parseLines();
       const warn400 = lines400.find(
-        (l) => l.level === 'warning' && l.status === 400 && Array.isArray(l.message),
+        (l) =>
+          l.level === 'warning' && l.status === 400 && Array.isArray(l.message),
       );
       expect(warn400).toBeDefined();
       expect(warn400?.user_id).toBe('user-42');

@@ -26,7 +26,9 @@ describe('DocumentService', () => {
       },
       chunks: { findMany: jest.fn().mockResolvedValue([]) },
       outbox_events: { deleteMany: jest.fn(), create: jest.fn() },
-      $transaction: jest.fn().mockImplementation(async (callback) => callback(prisma)),
+      $transaction: jest
+        .fn()
+        .mockImplementation(async (callback) => callback(prisma)),
     };
     const authz = {
       assertCourseAccess: jest.fn().mockResolvedValue(undefined),
@@ -72,24 +74,40 @@ describe('DocumentService', () => {
   it('scopes system deletion to a live Canvas document in the requested course', async () => {
     const { service, prisma } = setup();
     prisma.documents.findFirst.mockResolvedValue(null);
-    await expect(service.deleteCanvasDocument('course-1', 'doc-other')).rejects.toThrow('Canvas document not found');
-    expect(prisma.documents.findFirst).toHaveBeenCalledWith({ where: {
-      document_id: 'doc-other', course_id: 'course-1', source: 'canvas', deleted_at: null,
-    } });
+    await expect(
+      service.deleteCanvasDocument('course-1', 'doc-other'),
+    ).rejects.toThrow('Canvas document not found');
+    expect(prisma.documents.findFirst).toHaveBeenCalledWith({
+      where: {
+        document_id: 'doc-other',
+        course_id: 'course-1',
+        source: 'canvas',
+        deleted_at: null,
+      },
+    });
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('preserves deletion outbox behavior for system sync without requiring user claims', async () => {
     const { service, prisma, authz } = setup();
-    prisma.documents.findFirst.mockResolvedValue({ document_id: 'doc-1', course_id: 'course-1', source: 'canvas' });
+    prisma.documents.findFirst.mockResolvedValue({
+      document_id: 'doc-1',
+      course_id: 'course-1',
+      source: 'canvas',
+    });
     await service.deleteCanvasDocument('course-1', 'doc-1');
     expect(authz.assertCourseAccess).not.toHaveBeenCalled();
-    expect(prisma.outbox_events.create).toHaveBeenCalledWith({ data: {
-      event_type: 'DOCUMENT_DELETED', aggregate_type: 'document', aggregate_id: 'doc-1',
-      payload: { document_id: 'doc-1', course_id: 'course-1' },
-    } });
+    expect(prisma.outbox_events.create).toHaveBeenCalledWith({
+      data: {
+        event_type: 'DOCUMENT_DELETED',
+        aggregate_type: 'document',
+        aggregate_id: 'doc-1',
+        payload: { document_id: 'doc-1', course_id: 'course-1' },
+      },
+    });
     expect(prisma.documents.update).toHaveBeenCalledWith({
-      where: { document_id: 'doc-1' }, data: { deleted_at: expect.any(Date) },
+      where: { document_id: 'doc-1' },
+      data: { deleted_at: expect.any(Date) },
     });
   });
 
@@ -232,8 +250,14 @@ describe('DocumentService', () => {
     prisma.documents.findMany.mockResolvedValue([storedDocument]);
     prisma.documents.findFirst.mockResolvedValue(storedDocument);
 
-    const [listed] = await service.listDocuments(claims, storedDocument.course_id);
-    const detail = await service.getDocument(claims, storedDocument.document_id);
+    const [listed] = await service.listDocuments(
+      claims,
+      storedDocument.course_id,
+    );
+    const detail = await service.getDocument(
+      claims,
+      storedDocument.document_id,
+    );
 
     expect(prisma.documents.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ include: liveOnly }),
@@ -248,7 +272,9 @@ describe('DocumentService', () => {
 
   it('lists documents hidden on the LMS only to course staff', async () => {
     const { service, prisma, authz } = setup();
-    const hiddenFilter = { OR: [{ lms_published: null }, { lms_published: true }] };
+    const hiddenFilter = {
+      OR: [{ lms_published: null }, { lms_published: true }],
+    };
 
     authz.isCourseStaff.mockResolvedValue(false);
     await service.listDocuments(claims, storedDocument.course_id);
@@ -305,10 +331,15 @@ describe('DocumentService hidden (lms_published = false) documents', () => {
   }
 
   /** Dùng AuthzService thật trên prisma giả, để quy tắc theo từng vai trò được kiểm tra thật. */
-  function setup(opts: { memberships?: string[]; lmsRole?: string | null } = {}) {
+  function setup(
+    opts: { memberships?: string[]; lmsRole?: string | null } = {},
+  ) {
     const memberships = opts.memberships ?? [];
     const prisma = {
-      documents: { findFirst: jest.fn(), findMany: jest.fn().mockResolvedValue([]) },
+      documents: {
+        findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       chunks: { findMany: jest.fn().mockResolvedValue([{ chunk_id: 'c1' }]) },
       course_memberships: {
         findFirst: jest.fn().mockImplementation(async ({ where }) => {
@@ -325,7 +356,9 @@ describe('DocumentService hidden (lms_published = false) documents', () => {
       },
     };
     const storage = {
-      createPresignedDownloadUrl: jest.fn().mockResolvedValue('http://minio:9000/download'),
+      createPresignedDownloadUrl: jest
+        .fn()
+        .mockResolvedValue('http://minio:9000/download'),
     };
     const service = new DocumentService(
       prisma as never,
@@ -341,9 +374,15 @@ describe('DocumentService hidden (lms_published = false) documents', () => {
     prisma.documents.findFirst.mockResolvedValue(document(false));
     const id = document(false).document_id;
 
-    await expect(service.getDocument(claimsFor(), id)).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.getDocumentChunks(claimsFor(), id)).rejects.toBeInstanceOf(NotFoundException);
-    await expect(service.getDocumentFileUrl(claimsFor(), id)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.getDocument(claimsFor(), id)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(
+      service.getDocumentChunks(claimsFor(), id),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.getDocumentFileUrl(claimsFor(), id),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.chunks.findMany).not.toHaveBeenCalled();
     expect(storage.createPresignedDownloadUrl).not.toHaveBeenCalled();
   });
@@ -366,33 +405,48 @@ describe('DocumentService hidden (lms_published = false) documents', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it.each([['instructor'], ['ta']])('lets a course %s read a hidden document', async (role) => {
-    const { service, prisma, storage } = setup({ memberships: [role] });
-    prisma.documents.findFirst.mockResolvedValue(document(false));
-    const id = document(false).document_id;
+  it.each([['instructor'], ['ta']])(
+    'lets a course %s read a hidden document',
+    async (role) => {
+      const { service, prisma, storage } = setup({ memberships: [role] });
+      prisma.documents.findFirst.mockResolvedValue(document(false));
+      const id = document(false).document_id;
 
-    await expect(service.getDocument(claimsFor(), id)).resolves.toMatchObject({
-      document_id: id,
-      lms_published: false,
-    });
-    await expect(service.getDocumentChunks(claimsFor(), id)).resolves.toHaveLength(1);
-    await expect(service.getDocumentFileUrl(claimsFor(), id)).resolves.toMatchObject({
-      url: 'http://minio:9000/download',
-    });
-    expect(storage.createPresignedDownloadUrl).toHaveBeenCalled();
-  });
+      await expect(service.getDocument(claimsFor(), id)).resolves.toMatchObject(
+        {
+          document_id: id,
+          lms_published: false,
+        },
+      );
+      await expect(
+        service.getDocumentChunks(claimsFor(), id),
+      ).resolves.toHaveLength(1);
+      await expect(
+        service.getDocumentFileUrl(claimsFor(), id),
+      ).resolves.toMatchObject({
+        url: 'http://minio:9000/download',
+      });
+      expect(storage.createPresignedDownloadUrl).toHaveBeenCalled();
+    },
+  );
 
   it('lets platform admin scope read a hidden document without any membership', async () => {
     const { service, prisma } = setup({ memberships: [] });
     prisma.documents.findFirst.mockResolvedValue(document(false));
 
     await expect(
-      service.getDocument(claimsFor({ scope: 'admin' }), document(false).document_id),
+      service.getDocument(
+        claimsFor({ scope: 'admin' }),
+        document(false).document_id,
+      ),
     ).resolves.toMatchObject({ lms_published: false });
   });
 
   it('lets an LMS administrator who is a member of the course read a hidden document', async () => {
-    const { service, prisma } = setup({ memberships: ['learner'], lmsRole: 'administrator' });
+    const { service, prisma } = setup({
+      memberships: ['learner'],
+      lmsRole: 'administrator',
+    });
     prisma.documents.findFirst.mockResolvedValue(document(false));
 
     await expect(
@@ -401,7 +455,10 @@ describe('DocumentService hidden (lms_published = false) documents', () => {
   });
 
   it('still needs course membership for an LMS administrator (staff status is not course access)', async () => {
-    const { service, prisma } = setup({ memberships: [], lmsRole: 'administrator' });
+    const { service, prisma } = setup({
+      memberships: [],
+      lmsRole: 'administrator',
+    });
     prisma.documents.findFirst.mockResolvedValue(document(false));
 
     await expect(
@@ -409,22 +466,34 @@ describe('DocumentService hidden (lms_published = false) documents', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it.each([[true], [null]])('keeps lms_published = %s readable by a learner', async (published) => {
-    const { service, prisma, storage } = setup({ memberships: ['learner'] });
-    prisma.documents.findFirst.mockResolvedValue(document(published));
-    const id = document(published).document_id;
+  it.each([[true], [null]])(
+    'keeps lms_published = %s readable by a learner',
+    async (published) => {
+      const { service, prisma, storage } = setup({ memberships: ['learner'] });
+      prisma.documents.findFirst.mockResolvedValue(document(published));
+      const id = document(published).document_id;
 
-    await expect(service.getDocument(claimsFor(), id)).resolves.toMatchObject({ document_id: id });
-    await expect(service.getDocumentChunks(claimsFor(), id)).resolves.toHaveLength(1);
-    await expect(service.getDocumentFileUrl(claimsFor(), id)).resolves.toMatchObject({
-      url: 'http://minio:9000/download',
-    });
-    expect(storage.createPresignedDownloadUrl).toHaveBeenCalled();
-  });
+      await expect(service.getDocument(claimsFor(), id)).resolves.toMatchObject(
+        { document_id: id },
+      );
+      await expect(
+        service.getDocumentChunks(claimsFor(), id),
+      ).resolves.toHaveLength(1);
+      await expect(
+        service.getDocumentFileUrl(claimsFor(), id),
+      ).resolves.toMatchObject({
+        url: 'http://minio:9000/download',
+      });
+      expect(storage.createPresignedDownloadUrl).toHaveBeenCalled();
+    },
+  );
 
   it('keeps the 403 for a learner of another course on a visible document', async () => {
     const { service, prisma } = setup({ memberships: [] });
-    prisma.documents.findFirst.mockResolvedValue({ ...document(true), course_id: OTHER_COURSE });
+    prisma.documents.findFirst.mockResolvedValue({
+      ...document(true),
+      course_id: OTHER_COURSE,
+    });
 
     await expect(
       service.getDocument(claimsFor(), document(true).document_id),

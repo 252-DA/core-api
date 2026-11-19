@@ -1,5 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
-import { CanvasDocumentSyncService, MAP_DOCUMENT_LOS_JOB } from './canvas-document-sync.service';
+import {
+  CanvasDocumentSyncService,
+  MAP_DOCUMENT_LOS_JOB,
+} from './canvas-document-sync.service';
 
 describe('CanvasDocumentSyncService', () => {
   const courseId = '01900000-0000-7000-8000-000000000001';
@@ -13,7 +16,12 @@ describe('CanvasDocumentSyncService', () => {
   };
   const updatedAt = '2026-09-27T02:00:00Z';
 
-  const canvasFile = (id: number, name: string, mime = 'application/pdf', updated = updatedAt) => ({
+  const canvasFile = (
+    id: number,
+    name: string,
+    mime = 'application/pdf',
+    updated = updatedAt,
+  ) => ({
     id,
     display_name: name,
     'content-type': mime,
@@ -29,7 +37,9 @@ describe('CanvasDocumentSyncService', () => {
   }) {
     let nextId = 100;
     const prisma = {
-      $queryRaw: jest.fn().mockImplementation(() => Promise.resolve([{ id: `doc-${nextId++}` }])),
+      $queryRaw: jest
+        .fn()
+        .mockImplementation(() => Promise.resolve([{ id: `doc-${nextId++}` }])),
       course_sessions: {
         findMany: jest.fn().mockResolvedValue([
           { session_no: 1, chapters: { code: '1' } },
@@ -38,17 +48,23 @@ describe('CanvasDocumentSyncService', () => {
         ]),
       },
       chapters: {
-        findMany: jest.fn().mockResolvedValue([{ code: '1' }, { code: '2' }, { code: '3' }]),
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ code: '1' }, { code: '2' }, { code: '3' }]),
         findFirst: jest.fn(),
       },
       documents: {
         findMany: jest.fn().mockResolvedValue(options.existing ?? []),
         findFirst: jest.fn(),
-        create: jest.fn().mockImplementation(({ data }) => Promise.resolve(data)),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) => Promise.resolve(data)),
         update: jest.fn().mockResolvedValue({}),
       },
     };
-    const authz = { assertCourseAccess: jest.fn().mockResolvedValue(undefined) };
+    const authz = {
+      assertCourseAccess: jest.fn().mockResolvedValue(undefined),
+    };
     const canvas = {
       listModules: jest.fn().mockResolvedValue(
         options.modules.map((m, i) => ({
@@ -56,10 +72,18 @@ describe('CanvasDocumentSyncService', () => {
           name: m.name,
           position: i + 1,
           published: true,
-          items: m.files.map((fileId) => ({ id: fileId, title: `f${fileId}`, type: 'File', content_id: fileId, published: true })),
+          items: m.files.map((fileId) => ({
+            id: fileId,
+            title: `f${fileId}`,
+            type: 'File',
+            content_id: fileId,
+            published: true,
+          })),
         })),
       ),
-      listCourseFiles: jest.fn().mockResolvedValue(Object.values(options.files)),
+      listCourseFiles: jest
+        .fn()
+        .mockResolvedValue(Object.values(options.files)),
       getFile: jest.fn(),
       downloadFile: jest.fn().mockResolvedValue(Buffer.from('pdf')),
     };
@@ -71,8 +95,14 @@ describe('CanvasDocumentSyncService', () => {
     };
     const queue = { add: jest.fn().mockResolvedValue({ id: 'job' }) };
     const syncJobs = {
-      enqueue: jest.fn().mockResolvedValue({ job_id: `canvas-sync-${courseId}`, status: 'QUEUED' }),
-      enqueueRoster: jest.fn().mockResolvedValue({ job_id: `canvas-roster-${courseId}`, status: 'QUEUED' }),
+      enqueue: jest.fn().mockResolvedValue({
+        job_id: `canvas-sync-${courseId}`,
+        status: 'QUEUED',
+      }),
+      enqueueRoster: jest.fn().mockResolvedValue({
+        job_id: `canvas-roster-${courseId}`,
+        status: 'QUEUED',
+      }),
     };
     const service = new CanvasDocumentSyncService(
       prisma as never,
@@ -84,30 +114,59 @@ describe('CanvasDocumentSyncService', () => {
       queue as never,
       syncJobs as never,
     );
-    return { service, prisma, canvas, storage, documents, queue, authz, syncJobs };
+    return {
+      service,
+      prisma,
+      canvas,
+      storage,
+      documents,
+      queue,
+      authz,
+      syncJobs,
+    };
   }
 
   describe('manual sync', () => {
     it('authorizes and enqueues without making Canvas API calls', async () => {
-      const { service, authz, syncJobs, canvas } = setup({ modules: [], files: {} });
-      await expect(service.syncFromCanvas(claims, courseId)).resolves.toMatchObject({ status: 'QUEUED' });
-      expect(authz.assertCourseAccess).toHaveBeenCalledWith(claims, courseId, ['instructor', 'ta']);
-      expect(syncJobs.enqueue).toHaveBeenCalledWith(courseId, { kind: 'user', userId: claims.sub }, 'manual');
+      const { service, authz, syncJobs, canvas } = setup({
+        modules: [],
+        files: {},
+      });
+      await expect(
+        service.syncFromCanvas(claims, courseId),
+      ).resolves.toMatchObject({ status: 'QUEUED' });
+      expect(authz.assertCourseAccess).toHaveBeenCalledWith(claims, courseId, [
+        'instructor',
+        'ta',
+      ]);
+      expect(syncJobs.enqueue).toHaveBeenCalledWith(
+        courseId,
+        { kind: 'user', userId: claims.sub },
+        'manual',
+      );
       expect(canvas.listModules).not.toHaveBeenCalled();
     });
 
     it('also enqueues a roster job, but a roster failure does not fail the request', async () => {
       const { service, syncJobs } = setup({ modules: [], files: {} });
       await service.syncFromCanvas(claims, courseId);
-      expect(syncJobs.enqueueRoster).toHaveBeenCalledWith(courseId, { kind: 'user', userId: claims.sub }, 'manual');
+      expect(syncJobs.enqueueRoster).toHaveBeenCalledWith(
+        courseId,
+        { kind: 'user', userId: claims.sub },
+        'manual',
+      );
       syncJobs.enqueueRoster.mockRejectedValue(new Error('queue full'));
-      await expect(service.syncFromCanvas(claims, courseId)).resolves.toMatchObject({ status: 'QUEUED' });
+      await expect(
+        service.syncFromCanvas(claims, courseId),
+      ).resolves.toMatchObject({ status: 'QUEUED' });
     });
 
     it('does not enqueue an unauthorized request', async () => {
       const { service, authz, syncJobs } = setup({ modules: [], files: {} });
       authz.assertCourseAccess.mockRejectedValue(new Error('Forbidden'));
-      await expect(service.syncFromCanvas(claims, courseId)).rejects.toThrow('Forbidden');
+      await expect(service.syncFromCanvas(claims, courseId)).rejects.toThrow(
+        'Forbidden',
+      );
       expect(syncJobs.enqueue).not.toHaveBeenCalled();
       expect(syncJobs.enqueueRoster).not.toHaveBeenCalled();
     });
@@ -117,49 +176,81 @@ describe('CanvasDocumentSyncService', () => {
     it('imports as system without claims and batches file metadata, retaining module scope', async () => {
       const { service, prisma, canvas, authz, queue } = setup({
         modules: [{ name: 'Slides', files: [11, 12] }],
-        files: { 11: canvasFile(11, 'one.pdf'), 12: canvasFile(12, 'two.pdf'), 13: canvasFile(13, 'unattached.pdf') },
+        files: {
+          11: canvasFile(11, 'one.pdf'),
+          12: canvasFile(12, 'two.pdf'),
+          13: canvasFile(13, 'unattached.pdf'),
+        },
       });
       await service.syncCourse(courseId, { kind: 'system' });
       expect(authz.assertCourseAccess).not.toHaveBeenCalled();
       expect(canvas.listCourseFiles).toHaveBeenCalledTimes(1);
       expect(canvas.getFile).not.toHaveBeenCalled();
       expect(prisma.documents.create).toHaveBeenCalledTimes(2);
-      expect(prisma.documents.create.mock.calls[0][0].data.created_by).toBeNull();
+      expect(
+        prisma.documents.create.mock.calls[0][0].data.created_by,
+      ).toBeNull();
       // Tài liệu mới bắt đầu ở lượt 1; job mang lượt để worker gửi kèm kết quả.
-      expect(prisma.documents.create.mock.calls[0][0].data.processing_generation).toBe(1);
-      expect(queue.add.mock.calls[0][1]).toMatchObject({ processing_generation: 1 });
+      expect(
+        prisma.documents.create.mock.calls[0][0].data.processing_generation,
+      ).toBe(1);
+      expect(queue.add.mock.calls[0][1]).toMatchObject({
+        processing_generation: 1,
+      });
     });
 
     it('does not delete existing documents if listing fails or is incomplete', async () => {
       const { service, canvas, documents } = setup({
-        modules: [], files: {},
-        existing: [{ document_id: 'doc-9', lms_file_id: '99', title: 'Keep.pdf' }],
+        modules: [],
+        files: {},
+        existing: [
+          { document_id: 'doc-9', lms_file_id: '99', title: 'Keep.pdf' },
+        ],
       });
       canvas.listCourseFiles.mockRejectedValue(new Error('incomplete listing'));
-      await expect(service.syncCourse(courseId, { kind: 'system' })).rejects.toThrow('incomplete listing');
+      await expect(
+        service.syncCourse(courseId, { kind: 'system' }),
+      ).rejects.toThrow('incomplete listing');
       expect(documents.deleteCanvasDocument).not.toHaveBeenCalled();
     });
 
     it('marks an import ERROR when enqueue fails so the next sync can retry it', async () => {
       const { service, queue, prisma } = setup({
-        modules: [{ name: 'Slides', files: [11] }], files: { 11: canvasFile(11, 'one.pdf') },
+        modules: [{ name: 'Slides', files: [11] }],
+        files: { 11: canvasFile(11, 'one.pdf') },
       });
       queue.add.mockRejectedValue(new Error('Redis unavailable'));
       const summary = await service.syncCourse(courseId, { kind: 'system' });
-      expect(summary.skipped).toEqual([{ name: 'one.pdf', reason: 'Redis unavailable' }]);
-      expect(prisma.documents.update).toHaveBeenCalledWith({ where: { document_id: 'doc-100' }, data: { status: 'ERROR' } });
+      expect(summary.skipped).toEqual([
+        { name: 'one.pdf', reason: 'Redis unavailable' },
+      ]);
+      expect(prisma.documents.update).toHaveBeenCalledWith({
+        where: { document_id: 'doc-100' },
+        data: { status: 'ERROR' },
+      });
     });
 
     it('imports slides from a flat "Slides" module, placing each by its file name', async () => {
       const { service, prisma, storage, queue } = setup({
         modules: [{ name: 'Slides', files: [11, 12] }],
-        files: { 11: canvasFile(11, 'Ch1_Big Data Intro.pdf'), 12: canvasFile(12, 'Overview.pdf') },
+        files: {
+          11: canvasFile(11, 'Ch1_Big Data Intro.pdf'),
+          12: canvasFile(12, 'Overview.pdf'),
+        },
       });
 
-      const summary = await service.syncCourse(courseId, { kind: 'user', userId: claims.sub });
+      const summary = await service.syncCourse(courseId, {
+        kind: 'user',
+        userId: claims.sub,
+      });
 
-      expect(summary.created).toEqual(['Ch1_Big Data Intro.pdf', 'Overview.pdf']);
-      const [first, second] = prisma.documents.create.mock.calls.map(([arg]) => arg.data);
+      expect(summary.created).toEqual([
+        'Ch1_Big Data Intro.pdf',
+        'Overview.pdf',
+      ]);
+      const [first, second] = prisma.documents.create.mock.calls.map(
+        ([arg]) => arg.data,
+      );
       expect(first).toMatchObject({
         source: 'canvas',
         lms_file_id: '11',
@@ -169,9 +260,16 @@ describe('CanvasDocumentSyncService', () => {
         chapter_provenance: 'file_name',
       });
       // Không có tín hiệu tên → để worker khớp nội dung.
-      expect(second).toMatchObject({ role: 'lecture', chapter_code: null, chapter_provenance: null });
+      expect(second).toMatchObject({
+        role: 'lecture',
+        chapter_code: null,
+        chapter_provenance: null,
+      });
       expect(storage.putObject).toHaveBeenCalledTimes(2);
-      expect(queue.add.mock.calls.map(([name]) => name)).toEqual(['process_document', 'process_document']);
+      expect(queue.add.mock.calls.map(([name]) => name)).toEqual([
+        'process_document',
+        'process_document',
+      ]);
     });
 
     it('marks files in a References module as reference without a single chapter', async () => {
@@ -209,9 +307,14 @@ describe('CanvasDocumentSyncService', () => {
         files: { 41: canvasFile(41, 'lecture.mp4', 'video/mp4') },
       });
 
-      const summary = await service.syncCourse(courseId, { kind: 'user', userId: claims.sub });
+      const summary = await service.syncCourse(courseId, {
+        kind: 'user',
+        userId: claims.sub,
+      });
 
-      expect(summary.skipped).toEqual([{ name: 'lecture.mp4', reason: expect.stringContaining('chưa hỗ trợ') }]);
+      expect(summary.skipped).toEqual([
+        { name: 'lecture.mp4', reason: expect.stringContaining('chưa hỗ trợ') },
+      ]);
       expect(prisma.documents.create).not.toHaveBeenCalled();
     });
 
@@ -219,15 +322,27 @@ describe('CanvasDocumentSyncService', () => {
       const { service, prisma, canvas, queue } = setup({
         modules: [{ name: 'Chương 3', files: [11] }],
         files: { 11: canvasFile(11, 'Ch1.pdf') },
-        existing: [{
-          document_id: 'doc-1', course_id: courseId, title: 'Ch1.pdf', lms_file_id: '11',
-          lms_module: 'Chương 3', lms_published: true, lms_updated_at: new Date(updatedAt),
-          role: 'lecture', role_provenance: 'inferred',
-          chapter_code: '1', chapter_provenance: 'confirmed',
-        }],
+        existing: [
+          {
+            document_id: 'doc-1',
+            course_id: courseId,
+            title: 'Ch1.pdf',
+            lms_file_id: '11',
+            lms_module: 'Chương 3',
+            lms_published: true,
+            lms_updated_at: new Date(updatedAt),
+            role: 'lecture',
+            role_provenance: 'inferred',
+            chapter_code: '1',
+            chapter_provenance: 'confirmed',
+          },
+        ],
       });
 
-      const summary = await service.syncCourse(courseId, { kind: 'user', userId: claims.sub });
+      const summary = await service.syncCourse(courseId, {
+        kind: 'user',
+        userId: claims.sub,
+      });
 
       expect(summary.unchanged).toBe(1);
       expect(canvas.downloadFile).not.toHaveBeenCalled();
@@ -239,12 +354,24 @@ describe('CanvasDocumentSyncService', () => {
       const { service, prisma, canvas, queue } = setup({
         modules: [{ name: 'Slides', files: [11] }],
         files: { 11: canvasFile(11, 'Ch1.pdf') },
-        existing: [{
-          document_id: 'doc-1', course_id: courseId, title: 'Ch1.pdf', lms_file_id: '11',
-          lms_module: 'Slides', lms_published: true, lms_updated_at: new Date(updatedAt),
-          role: 'lecture', role_provenance: 'inferred', chapter_code: '1', chapter_provenance: 'file_name',
-          status: 'ERROR', created_by: claims.sub, file_path: `documents/${courseId}/doc-1/Ch1.pdf`,
-        }],
+        existing: [
+          {
+            document_id: 'doc-1',
+            course_id: courseId,
+            title: 'Ch1.pdf',
+            lms_file_id: '11',
+            lms_module: 'Slides',
+            lms_published: true,
+            lms_updated_at: new Date(updatedAt),
+            role: 'lecture',
+            role_provenance: 'inferred',
+            chapter_code: '1',
+            chapter_provenance: 'file_name',
+            status: 'ERROR',
+            created_by: claims.sub,
+            file_path: `documents/${courseId}/doc-1/Ch1.pdf`,
+          },
+        ],
       });
 
       prisma.documents.update.mockImplementation(({ where, data }) =>
@@ -258,7 +385,10 @@ describe('CanvasDocumentSyncService', () => {
         }),
       );
 
-      const summary = await service.syncCourse(courseId, { kind: 'user', userId: claims.sub });
+      const summary = await service.syncCourse(courseId, {
+        kind: 'user',
+        userId: claims.sub,
+      });
 
       expect(summary.retried).toEqual(['Ch1.pdf']);
       expect(canvas.downloadFile).not.toHaveBeenCalled();
@@ -286,15 +416,27 @@ describe('CanvasDocumentSyncService', () => {
       const { service, prisma, queue } = setup({
         modules: [{ name: 'Chương 2', files: [11] }],
         files: { 11: canvasFile(11, 'Overview.pdf') },
-        existing: [{
-          document_id: 'doc-1', course_id: courseId, title: 'Overview.pdf', lms_file_id: '11',
-          lms_module: 'Slides', lms_published: true, lms_updated_at: new Date(updatedAt),
-          role: 'lecture', role_provenance: 'inferred',
-          chapter_code: '3', chapter_provenance: 'content',
-        }],
+        existing: [
+          {
+            document_id: 'doc-1',
+            course_id: courseId,
+            title: 'Overview.pdf',
+            lms_file_id: '11',
+            lms_module: 'Slides',
+            lms_published: true,
+            lms_updated_at: new Date(updatedAt),
+            role: 'lecture',
+            role_provenance: 'inferred',
+            chapter_code: '3',
+            chapter_provenance: 'content',
+          },
+        ],
       });
 
-      const summary = await service.syncCourse(courseId, { kind: 'user', userId: claims.sub });
+      const summary = await service.syncCourse(courseId, {
+        kind: 'user',
+        userId: claims.sub,
+      });
 
       expect(summary.updated).toEqual(['Overview.pdf']);
       expect(prisma.documents.update.mock.calls[0][0].data).toMatchObject({
@@ -312,19 +454,40 @@ describe('CanvasDocumentSyncService', () => {
     it('replaces a file whose Canvas version changed, keeping teacher choices', async () => {
       const { service, prisma, documents } = setup({
         modules: [{ name: 'Slides', files: [11] }],
-        files: { 11: canvasFile(11, 'Ch1.pdf', 'application/pdf', '2026-09-28T00:00:00Z') },
-        existing: [{
-          document_id: 'doc-1', course_id: courseId, title: 'Ch1.pdf', lms_file_id: '11',
-          lms_module: 'Slides', lms_updated_at: new Date(updatedAt),
-          role: 'exercise', role_provenance: 'confirmed',
-          chapter_code: '2', chapter_provenance: 'confirmed', chapter_confidence: 1, chapter_reason: 'Giảng viên chọn',
-        }],
+        files: {
+          11: canvasFile(
+            11,
+            'Ch1.pdf',
+            'application/pdf',
+            '2026-09-28T00:00:00Z',
+          ),
+        },
+        existing: [
+          {
+            document_id: 'doc-1',
+            course_id: courseId,
+            title: 'Ch1.pdf',
+            lms_file_id: '11',
+            lms_module: 'Slides',
+            lms_updated_at: new Date(updatedAt),
+            role: 'exercise',
+            role_provenance: 'confirmed',
+            chapter_code: '2',
+            chapter_provenance: 'confirmed',
+            chapter_confidence: 1,
+            chapter_reason: 'Giảng viên chọn',
+          },
+        ],
       });
 
-      const summary = await service.syncCourse(courseId, { kind: 'user', userId: claims.sub });
+      const summary = await service.syncCourse(courseId, {
+        kind: 'user',
+        userId: claims.sub,
+      });
 
       expect(summary.updated).toEqual(['Ch1.pdf']);
-      const deleteOrder = documents.deleteCanvasDocument.mock.invocationCallOrder[0];
+      const deleteOrder =
+        documents.deleteCanvasDocument.mock.invocationCallOrder[0];
       const createOrder = prisma.documents.create.mock.invocationCallOrder[0];
       expect(deleteOrder).toBeLessThan(createOrder);
       expect(prisma.documents.create.mock.calls[0][0].data).toMatchObject({
@@ -339,20 +502,36 @@ describe('CanvasDocumentSyncService', () => {
       const { service, documents } = setup({
         modules: [{ name: 'Slides', files: [] }],
         files: {},
-        existing: [{ document_id: 'doc-9', course_id: courseId, title: 'Old.pdf', lms_file_id: '99' }],
+        existing: [
+          {
+            document_id: 'doc-9',
+            course_id: courseId,
+            title: 'Old.pdf',
+            lms_file_id: '99',
+          },
+        ],
       });
 
-      const summary = await service.syncCourse(courseId, { kind: 'user', userId: claims.sub });
+      const summary = await service.syncCourse(courseId, {
+        kind: 'user',
+        userId: claims.sub,
+      });
 
       expect(summary.removed).toEqual(['Old.pdf']);
-      expect(documents.deleteCanvasDocument).toHaveBeenCalledWith(courseId, 'doc-9');
+      expect(documents.deleteCanvasDocument).toHaveBeenCalledWith(
+        courseId,
+        'doc-9',
+      );
     });
   });
 
   describe('updatePlacement', () => {
     const doc = {
-      document_id: 'doc-1', course_id: courseId, role: 'lecture',
-      chapter_code: null, chapter_provenance: null,
+      document_id: 'doc-1',
+      course_id: courseId,
+      role: 'lecture',
+      chapter_code: null,
+      chapter_provenance: null,
     };
 
     it('records the teacher choice as confirmed and re-maps LOs', async () => {
@@ -360,13 +539,23 @@ describe('CanvasDocumentSyncService', () => {
       prisma.documents.findFirst.mockResolvedValue(doc);
       prisma.chapters.findFirst.mockResolvedValue({ code: '2' });
 
-      await service.updatePlacement(claims, 'doc-1', { role: 'lecture', chapterCode: '2' });
+      await service.updatePlacement(claims, 'doc-1', {
+        role: 'lecture',
+        chapterCode: '2',
+      });
 
       expect(prisma.documents.update).toHaveBeenCalledWith({
         where: { document_id: 'doc-1' },
-        data: expect.objectContaining({ chapter_code: '2', chapter_provenance: 'confirmed' }),
+        data: expect.objectContaining({
+          chapter_code: '2',
+          chapter_provenance: 'confirmed',
+        }),
       });
-      expect(queue.add).toHaveBeenCalledWith(MAP_DOCUMENT_LOS_JOB, expect.anything(), expect.anything());
+      expect(queue.add).toHaveBeenCalledWith(
+        MAP_DOCUMENT_LOS_JOB,
+        expect.anything(),
+        expect.anything(),
+      );
     });
 
     it('rejects a chapter the syllabus does not have', async () => {
@@ -374,15 +563,19 @@ describe('CanvasDocumentSyncService', () => {
       prisma.documents.findFirst.mockResolvedValue(doc);
       prisma.chapters.findFirst.mockResolvedValue(null);
 
-      await expect(service.updatePlacement(claims, 'doc-1', { chapterCode: '42' })).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.updatePlacement(claims, 'doc-1', { chapterCode: '42' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
       expect(queue.add).not.toHaveBeenCalled();
     });
 
     it('hands the chapter back to the system when the teacher picks "auto"', async () => {
       const { service, prisma } = setup({ modules: [], files: {} });
-      prisma.documents.findFirst.mockResolvedValue({ ...doc, chapter_code: '2', chapter_provenance: 'confirmed' });
+      prisma.documents.findFirst.mockResolvedValue({
+        ...doc,
+        chapter_code: '2',
+        chapter_provenance: 'confirmed',
+      });
 
       await service.updatePlacement(claims, 'doc-1', { chapterCode: '' });
 

@@ -1,6 +1,9 @@
 import { Logger } from '@nestjs/common';
 import { Job, UnrecoverableError } from 'bullmq';
-import { isFinalFailure, WorkerResultsProcessor } from './worker-results.processor';
+import {
+  isFinalFailure,
+  WorkerResultsProcessor,
+} from './worker-results.processor';
 import { WorkerResultHandlerRegistry } from './worker-result-handler.registry';
 import {
   WorkerResultNotImplementedError,
@@ -210,7 +213,10 @@ describe('WorkerResultsProcessor final failure hook', () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
-  function withHook(handle: jest.Mock, onFinalFailure = jest.fn().mockResolvedValue(undefined)) {
+  function withHook(
+    handle: jest.Mock,
+    onFinalFailure = jest.fn().mockResolvedValue(undefined),
+  ) {
     return { handle, onFinalFailure } as unknown as WorkerResultHandler & {
       onFinalFailure: jest.Mock;
     };
@@ -342,7 +348,9 @@ describe('WorkerResultsProcessor final failure hook', () => {
       InvalidWorkerResultError,
     );
 
-    expect((quiz as unknown as { handle: jest.Mock }).handle).not.toHaveBeenCalled();
+    expect(
+      (quiz as unknown as { handle: jest.Mock }).handle,
+    ).not.toHaveBeenCalled();
     expect(quiz.onFinalFailure).toHaveBeenCalledTimes(1);
     const [salvaged, cause] = quiz.onFinalFailure.mock.calls[0] as [
       Record<string, unknown>,
@@ -383,9 +391,9 @@ describe('WorkerResultsProcessor final failure hook', () => {
   it('has no hook to run when no handler is registered', async () => {
     const processor = setup({});
 
-    await expect(
-      processor.process(job(envelope())),
-    ).rejects.toBeInstanceOf(UnrecoverableError);
+    await expect(processor.process(job(envelope()))).rejects.toBeInstanceOf(
+      UnrecoverableError,
+    );
   });
 });
 

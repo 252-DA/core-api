@@ -67,7 +67,9 @@ export class DocumentService {
       where: {
         course_id: courseId,
         deleted_at: null,
-        ...(staff ? {} : { OR: [{ lms_published: null }, { lms_published: true }] }),
+        ...(staff
+          ? {}
+          : { OR: [{ lms_published: null }, { lms_published: true }] }),
       },
       take: limit,
       skip: offset,
@@ -108,7 +110,11 @@ export class DocumentService {
    * — "giải thích trang này" là một phép tra cứu chính xác theo
    * (document_id, page_number), không phải similarity search.
    */
-  async getDocumentChunks(claims: BffClaims, documentId: string, page?: number) {
+  async getDocumentChunks(
+    claims: BffClaims,
+    documentId: string,
+    page?: number,
+  ) {
     await this.getDocument(claims, documentId);
     if (page !== undefined && (!Number.isInteger(page) || page < 1)) {
       throw new BadRequestException('page phải là số nguyên >= 1.');
@@ -259,9 +265,15 @@ export class DocumentService {
   /** Internal sync operation; restricted to a Canvas document in this course. */
   async deleteCanvasDocument(courseId: string, documentId: string) {
     const doc = await this.prisma.documents.findFirst({
-      where: { document_id: documentId, course_id: courseId, source: 'canvas', deleted_at: null },
+      where: {
+        document_id: documentId,
+        course_id: courseId,
+        source: 'canvas',
+        deleted_at: null,
+      },
     });
-    if (!doc) throw new NotFoundException(`Canvas document not found: ${documentId}`);
+    if (!doc)
+      throw new NotFoundException(`Canvas document not found: ${documentId}`);
     return this.softDelete(doc);
   }
 

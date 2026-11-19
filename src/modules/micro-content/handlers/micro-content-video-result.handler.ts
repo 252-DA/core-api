@@ -94,7 +94,9 @@ function isNonNegativeInt(value: unknown, max: number): value is number {
 
 function validateSceneTimeline(raw: unknown, problems: string[]) {
   if (!Array.isArray(raw) || raw.length > MAX_TIMELINE_SCENES) {
-    problems.push(`scene_timeline must be an array of at most ${MAX_TIMELINE_SCENES} items`);
+    problems.push(
+      `scene_timeline must be an array of at most ${MAX_TIMELINE_SCENES} items`,
+    );
     return;
   }
   raw.forEach((entry, idx) => {
@@ -104,13 +106,20 @@ function validateSceneTimeline(raw: unknown, problems: string[]) {
     }
     const e = entry as Record<string, unknown>;
     if (!isNonNegativeInt(e.scene_index, MAX_TIMELINE_SCENES)) {
-      problems.push(`scene_timeline[${idx}].scene_index must be a non-negative integer`);
+      problems.push(
+        `scene_timeline[${idx}].scene_index must be a non-negative integer`,
+      );
     }
     if (typeof e.title !== 'string' || !e.title.trim()) {
       problems.push(`scene_timeline[${idx}].title must be a non-empty string`);
     }
-    if (!isNonNegativeInt(e.start_ms, MAX_INT4) || !isNonNegativeInt(e.end_ms, MAX_INT4)) {
-      problems.push(`scene_timeline[${idx}].start_ms/end_ms must be non-negative integers`);
+    if (
+      !isNonNegativeInt(e.start_ms, MAX_INT4) ||
+      !isNonNegativeInt(e.end_ms, MAX_INT4)
+    ) {
+      problems.push(
+        `scene_timeline[${idx}].start_ms/end_ms must be non-negative integers`,
+      );
     } else if (e.end_ms < e.start_ms) {
       problems.push(`scene_timeline[${idx}].end_ms must be >= start_ms`);
     }
@@ -183,14 +192,18 @@ export function parseMicroContentVideoPayload(
         vtt_object_key.length === 0 ||
         !isWithinCodePoints(vtt_object_key, MAX_OBJECT_KEY))
     ) {
-      problems.push(`vtt_object_key must be a string of 1..${MAX_OBJECT_KEY} chars`);
+      problems.push(
+        `vtt_object_key must be a string of 1..${MAX_OBJECT_KEY} chars`,
+      );
     }
     if (
       transcript_text !== undefined &&
       (typeof transcript_text !== 'string' ||
         !isWithinCodePoints(transcript_text, MAX_TRANSCRIPT))
     ) {
-      problems.push(`transcript_text must be a string of <= ${MAX_TRANSCRIPT} chars`);
+      problems.push(
+        `transcript_text must be a string of <= ${MAX_TRANSCRIPT} chars`,
+      );
     }
     if (scene_timeline !== undefined) {
       validateSceneTimeline(scene_timeline, problems);
@@ -337,7 +350,10 @@ export class MicroContentVideoResultHandler implements WorkerResultHandler<
                   ? { transcript_text: result.transcript_text }
                   : {}),
                 ...(result.scene_timeline !== undefined
-                  ? { scene_timeline: result.scene_timeline as unknown as Prisma.InputJsonValue }
+                  ? {
+                      scene_timeline:
+                        result.scene_timeline as unknown as Prisma.InputJsonValue,
+                    }
                   : {}),
                 error_message: null,
                 updated_at: now,

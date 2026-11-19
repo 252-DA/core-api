@@ -41,7 +41,9 @@ export function pickSyllabusFile(files: CanvasFile[]): CanvasFile | null {
   const supported = files.filter(isSupportedSyllabusFile);
   // Tên upload từ macOS thường ở dạng NFD (dấu tách khỏi chữ cái).
   const named = supported.find((file) =>
-    SYLLABUS_NAME.test(`${file.display_name} ${file.filename ?? ''}`.normalize('NFC')),
+    SYLLABUS_NAME.test(
+      `${file.display_name} ${file.filename ?? ''}`.normalize('NFC'),
+    ),
   );
   return named ?? supported[0] ?? null;
 }

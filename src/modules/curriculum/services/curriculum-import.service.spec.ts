@@ -69,19 +69,17 @@ describe('CurriculumImportService', () => {
         syllabus_body:
           '<a href="/courses/1/files/7">Ch1.pdf</a> <a href="/courses/1/files/42">DCMH</a>',
       }),
-      getFile: jest
-        .fn()
-        .mockImplementation((id: string) =>
-          Promise.resolve(
-            id === '42'
-              ? syllabusPdf
-              : {
-                  id: 7,
-                  display_name: 'Ch1_Big Data Intro.pdf',
-                  'content-type': 'application/pdf',
-                },
-          ),
+      getFile: jest.fn().mockImplementation((id: string) =>
+        Promise.resolve(
+          id === '42'
+            ? syllabusPdf
+            : {
+                id: 7,
+                display_name: 'Ch1_Big Data Intro.pdf',
+                'content-type': 'application/pdf',
+              },
         ),
+      ),
       downloadFile: jest.fn().mockResolvedValue(Buffer.from('pdf')),
     };
     const canvasCourses = { contextId: jest.fn().mockResolvedValue('ctx-1') };

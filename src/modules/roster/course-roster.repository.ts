@@ -51,11 +51,18 @@ function isMissingColumn(error: unknown): boolean {
   let current: unknown = error;
   while (current && typeof current === 'object' && !seen.has(current)) {
     seen.add(current);
-    const e = current as { code?: unknown; meta?: { code?: unknown }; cause?: unknown };
-    if (e.code === UNDEFINED_COLUMN || e.meta?.code === UNDEFINED_COLUMN) return true;
+    const e = current as {
+      code?: unknown;
+      meta?: { code?: unknown };
+      cause?: unknown;
+    };
+    if (e.code === UNDEFINED_COLUMN || e.meta?.code === UNDEFINED_COLUMN)
+      return true;
     current = e.cause;
   }
-  return error instanceof Error && /column .* does not exist/i.test(error.message);
+  return (
+    error instanceof Error && /column .* does not exist/i.test(error.message)
+  );
 }
 
 /**
@@ -204,7 +211,9 @@ export class CourseRosterRepository {
       return rows.map((r) => r.user_id);
     } catch (error) {
       if (!isMissingColumn(error)) throw error;
-      this.logger.warn('Chưa có cột course_memberships.status, tạm coi mọi learner là đang học.');
+      this.logger.warn(
+        'Chưa có cột course_memberships.status, tạm coi mọi learner là đang học.',
+      );
       const rows = await this.prisma.course_memberships.findMany({
         where: { course_id: courseId, role: COURSE_ROLES.LEARNER },
         select: { user_id: true },

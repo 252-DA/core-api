@@ -31,14 +31,22 @@ export interface ReviewEntry {
 const DAY_MS = 86_400_000;
 
 /** 00:00 giờ địa phương của ngày `at` cộng `days` ngày, trả về mốc UTC. */
-export function localDayStart(at: Date, days: number, config: ReviewConfig = REVIEW_DEFAULTS): Date {
+export function localDayStart(
+  at: Date,
+  days: number,
+  config: ReviewConfig = REVIEW_DEFAULTS,
+): Date {
   const offset = config.utcOffsetMinutes * 60_000;
   const localMidnight = Math.floor((at.getTime() + offset) / DAY_MS) * DAY_MS;
   return new Date(localMidnight + days * DAY_MS - offset);
 }
 
 /** LO vừa đạt tiêu chí: vào hộp đầu. */
-export function enterReview(loId: string, masteredAt: Date, config: ReviewConfig = REVIEW_DEFAULTS): ReviewEntry {
+export function enterReview(
+  loId: string,
+  masteredAt: Date,
+  config: ReviewConfig = REVIEW_DEFAULTS,
+): ReviewEntry {
   return {
     loId,
     box: 0,
@@ -55,7 +63,9 @@ export function applyReview(
   at: Date,
   config: ReviewConfig = REVIEW_DEFAULTS,
 ): ReviewEntry {
-  const box = correct ? Math.min(entry.box + 1, config.intervalsDays.length - 1) : 0;
+  const box = correct
+    ? Math.min(entry.box + 1, config.intervalsDays.length - 1)
+    : 0;
   return {
     loId: entry.loId,
     box,

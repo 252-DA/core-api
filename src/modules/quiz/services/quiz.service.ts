@@ -28,7 +28,11 @@ export class QuizService {
     body: {
       lessonId: string;
       resourceLinkId?: string;
-      answers: Array<{ quizId: string; chosenAnswer: unknown; responseTimeMs?: number }>;
+      answers: Array<{
+        quizId: string;
+        chosenAnswer: unknown;
+        responseTimeMs?: number;
+      }>;
     },
   ) {
     const lesson = await this.prisma.lessons.findFirst({
@@ -52,7 +56,9 @@ export class QuizService {
     });
     const quizById = new Map(quizItems.map((item) => [item.quiz_id, item]));
     if (quizItems.length !== body.answers.length) {
-      throw new BadRequestException('Some quiz items are not published or do not exist');
+      throw new BadRequestException(
+        'Some quiz items are not published or do not exist',
+      );
     }
 
     // AgsPublisherService gom mọi dòng PENDING của cùng (user, resource link)
@@ -99,7 +105,9 @@ export class QuizService {
         score: grade.score,
         chosen_answer: answer.chosenAnswer as any,
         is_correct: grade.isCorrect,
-        grading_status: grade.pending ? GRADING_STATUS.pending : GRADING_STATUS.graded,
+        grading_status: grade.pending
+          ? GRADING_STATUS.pending
+          : GRADING_STATUS.graded,
         // Đề đúng như lúc nộp: giảng viên sửa câu sau đó không đổi cách chấm bài này.
         ...(grade.pending ? { grading_input: gradingInput(quiz) } : {}),
         response_time_ms: answer.responseTimeMs,

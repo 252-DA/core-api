@@ -208,18 +208,26 @@ describe('EnrichmentContentResultHandler.onFinalFailure', () => {
       $queryRaw: jest.fn(trap),
       documents: { update: jest.fn(trap), updateMany: jest.fn(trap) },
     };
-    return { prisma, handler: new EnrichmentContentResultHandler(prisma as never) };
+    return {
+      prisma,
+      handler: new EnrichmentContentResultHandler(prisma as never),
+    };
   }
   let warn: jest.SpyInstance;
   beforeEach(() => {
-    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
   });
   afterEach(() => jest.restoreAllMocks());
 
   it('only logs which document and generation lost its drafts; the document status is not touched', async () => {
     const { handler, prisma } = setup();
 
-    await handler.onFinalFailure(envelope(payload()), new InvalidWorkerResultError('boom'));
+    await handler.onFinalFailure(
+      envelope(payload()),
+      new InvalidWorkerResultError('boom'),
+    );
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining(`tài liệu ${DOC} lượt 2`),
@@ -261,10 +269,16 @@ describe('enrichment-content-result: độ dài tính theo code point', () => {
 
   it('accepts a model_id of exactly 200 non-BMP characters and rejects 201', () => {
     expect(() =>
-      parseEnrichmentContentPayload(payload({ model_id: MATH.repeat(200) }), 'r1'),
+      parseEnrichmentContentPayload(
+        payload({ model_id: MATH.repeat(200) }),
+        'r1',
+      ),
     ).not.toThrow();
     expect(() =>
-      parseEnrichmentContentPayload(payload({ model_id: MATH.repeat(201) }), 'r1'),
+      parseEnrichmentContentPayload(
+        payload({ model_id: MATH.repeat(201) }),
+        'r1',
+      ),
     ).toThrow(/model_id/);
   });
 });

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { STAFF_ROLES } from '../../common/constants/course-roles';
 import { PrismaService } from '../../infra/prisma/prisma.service';
@@ -24,7 +28,9 @@ const DRAFT_STATUSES = [
  */
 function unverifiedAfterEdit(evidence: unknown, at: Date) {
   const record =
-    typeof evidence === 'object' && evidence !== null && !Array.isArray(evidence)
+    typeof evidence === 'object' &&
+    evidence !== null &&
+    !Array.isArray(evidence)
       ? (evidence as Record<string, unknown>)
       : null;
   return {
@@ -50,7 +56,11 @@ export class ReviewService {
     private readonly authz: AuthzService,
   ) {}
 
-  async listDrafts(claims: BffClaims, courseId: string, kind?: 'card' | 'quiz') {
+  async listDrafts(
+    claims: BffClaims,
+    courseId: string,
+    kind?: 'card' | 'quiz',
+  ) {
     await this.authz.assertCourseAccess(claims, courseId, STAFF_ROLES);
 
     const [cards, quizItems] = await Promise.all([
@@ -116,7 +126,11 @@ export class ReviewService {
           entity_type: 'lesson_card',
           entity_id: cardId,
           performed_by: claims.sub,
-          raw_changes: { before: card.status, after: 'CHANGES_REQUESTED', reason },
+          raw_changes: {
+            before: card.status,
+            after: 'CHANGES_REQUESTED',
+            reason,
+          },
         },
       });
       return updated;
@@ -236,7 +250,11 @@ export class ReviewService {
           entity_type: 'quiz_item',
           entity_id: quizId,
           performed_by: claims.sub,
-          raw_changes: { before: quiz.status, after: 'CHANGES_REQUESTED', reason },
+          raw_changes: {
+            before: quiz.status,
+            after: 'CHANGES_REQUESTED',
+            reason,
+          },
         },
       });
       return updated;
@@ -246,11 +264,17 @@ export class ReviewService {
   async updateQuizItem(
     claims: BffClaims,
     quizId: string,
-    data: { question?: string; options?: unknown; correct_answer?: unknown; explanation?: string },
+    data: {
+      question?: string;
+      options?: unknown;
+      correct_answer?: unknown;
+      explanation?: string;
+    },
   ) {
     const quiz = await this.getQuizForReview(claims, quizId);
     const question = (data.question ?? quiz.question).trim();
-    if (!question) throw new BadRequestException('Câu hỏi không được để trống.');
+    if (!question)
+      throw new BadRequestException('Câu hỏi không được để trống.');
     // Kiểu câu không đổi khi sửa; đáp án phải đúng dạng của kiểu đó.
     // Câu điền khuyết đổi lời cũng phải giữ chỗ trống, nên sửa câu hỏi cũng kiểm tra.
     const key =
@@ -260,7 +284,9 @@ export class ReviewService {
         ? normalizeAnswerKey(quiz.type, question, {
             options: data.options !== undefined ? data.options : quiz.options,
             correct_answer:
-              data.correct_answer !== undefined ? data.correct_answer : quiz.correct_answer,
+              data.correct_answer !== undefined
+                ? data.correct_answer
+                : quiz.correct_answer,
           })
         : null;
     return this.prisma.$transaction(async (tx) => {
@@ -271,7 +297,8 @@ export class ReviewService {
           question,
           ...(key
             ? {
-                options: (key.options ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+                options: (key.options ??
+                  Prisma.JsonNull) as Prisma.InputJsonValue,
                 correct_answer: key.correct_answer as Prisma.InputJsonValue,
               }
             : {}),

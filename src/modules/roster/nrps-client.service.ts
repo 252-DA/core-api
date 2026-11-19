@@ -1,11 +1,19 @@
-import { BadGatewayException, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadGatewayException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { hostOf } from '../../common/utils/url';
 import {
   AGS_CONFIG,
   resolvePlatformUrl,
   type AgsConfig,
 } from '../../config/ags.config';
-import { AgsTokenService, AgsTokenError } from '../../integrations/lti-platform/ags-token.service';
+import {
+  AgsTokenService,
+  AgsTokenError,
+} from '../../integrations/lti-platform/ags-token.service';
 
 export const NRPS_SCOPE =
   'https://purl.imsglobal.org/spec/lti-nrps/scope/contextmembership.readonly';
@@ -39,7 +47,8 @@ export class NrpsError extends BadGatewayException {
 
 export const NRPS_UNAUTHORIZED_MESSAGE =
   'Canvas từ chối đọc danh sách lớp (401). Kiểm tra tool đã có scope contextmembership.readonly và đã được cài lại.';
-export const NRPS_UNREACHABLE_MESSAGE = 'Không kết nối được Canvas để đọc danh sách lớp';
+export const NRPS_UNREACHABLE_MESSAGE =
+  'Không kết nối được Canvas để đọc danh sách lớp';
 
 /**
  * Names and Role Provisioning Service (NRPS) v2: đọc danh sách thành viên của
@@ -74,7 +83,9 @@ export class NrpsClientService {
       next = page.next;
       // Link do Canvas gửi, nhưng vẫn không đi tới host khác với trang đầu.
       if (next && hostOf(next) !== hostOf(first))
-        throw new NrpsError('Canvas trả link trang kế tiếp ở host lạ, dừng đọc danh sách lớp');
+        throw new NrpsError(
+          'Canvas trả link trang kế tiếp ở host lạ, dừng đọc danh sách lớp',
+        );
     }
     return members;
   }
@@ -89,8 +100,11 @@ export class NrpsClientService {
     }
     const trusted = hostOf(resolvePlatformUrl());
     if (!/^https?:$/.test(url.protocol) || (trusted && url.host !== trusted))
-      throw new NrpsError('Địa chỉ danh sách lớp (NRPS) không thuộc Canvas đã cấu hình');
-    if (!url.searchParams.has('limit')) url.searchParams.set('limit', String(PAGE_LIMIT));
+      throw new NrpsError(
+        'Địa chỉ danh sách lớp (NRPS) không thuộc Canvas đã cấu hình',
+      );
+    if (!url.searchParams.has('limit'))
+      url.searchParams.set('limit', String(PAGE_LIMIT));
     return url.toString();
   }
 
@@ -101,7 +115,8 @@ export class NrpsClientService {
       this.tokens.invalidate(NRPS_SCOPE);
       response = await this.request(url);
     }
-    if (response.status === 401) throw new NrpsError(NRPS_UNAUTHORIZED_MESSAGE, 401);
+    if (response.status === 401)
+      throw new NrpsError(NRPS_UNAUTHORIZED_MESSAGE, 401);
     if (!response.ok) {
       const body = (await response.text().catch(() => '')).slice(0, 200);
       this.logger.warn(`NRPS ${url} trả HTTP ${response.status}: ${body}`);
@@ -114,10 +129,16 @@ export class NrpsClientService {
     try {
       json = (await response.json()) as { members?: unknown };
     } catch {
-      throw new NrpsError('Canvas trả danh sách lớp không phải JSON', response.status);
+      throw new NrpsError(
+        'Canvas trả danh sách lớp không phải JSON',
+        response.status,
+      );
     }
     if (!Array.isArray(json.members))
-      throw new NrpsError('Canvas trả danh sách lớp thiếu trường members', response.status);
+      throw new NrpsError(
+        'Canvas trả danh sách lớp thiếu trường members',
+        response.status,
+      );
     return {
       members: json.members.flatMap((raw) => this.parseMember(raw)),
       next: this.nextLink(response.headers.get('link')),

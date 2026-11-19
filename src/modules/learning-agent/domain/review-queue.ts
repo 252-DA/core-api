@@ -1,6 +1,11 @@
 import type { LoState } from './learner-state';
 import type { NormalizedEvidence } from './observations';
-import { applyReview, enterReview, isDue, type ReviewEntry } from './review-schedule';
+import {
+  applyReview,
+  enterReview,
+  isDue,
+  type ReviewEntry,
+} from './review-schedule';
 
 export interface ReviewQueueEntry extends ReviewEntry {
   /** Đến hạn tại thời điểm hỏi (hoặc bị đánh dấu cần kiểm tra lại). */
@@ -21,7 +26,8 @@ export function reviewQueue(
 ): Map<string, ReviewQueueEntry> {
   const masteredAt = new Map<string, Date>();
   for (const state of states) {
-    if (state.firstMasteredAt) masteredAt.set(state.loId, state.firstMasteredAt);
+    if (state.firstMasteredAt)
+      masteredAt.set(state.loId, state.firstMasteredAt);
   }
   const queue = new Map<string, ReviewQueueEntry>();
   for (const [loId, at] of masteredAt) {
@@ -30,8 +36,12 @@ export function reviewQueue(
   // Quan sát đã xếp theo thời gian; bỏ qua các quan sát tới và gồm mốc đạt.
   for (const obs of evidence.observations) {
     const entry = queue.get(obs.loId);
-    if (!entry || obs.at.getTime() <= masteredAt.get(obs.loId)!.getTime()) continue;
-    queue.set(obs.loId, { ...applyReview(entry, obs.correct, obs.at), due: false });
+    if (!entry || obs.at.getTime() <= masteredAt.get(obs.loId)!.getTime())
+      continue;
+    queue.set(obs.loId, {
+      ...applyReview(entry, obs.correct, obs.at),
+      due: false,
+    });
   }
   for (const [loId, entry] of queue) {
     queue.set(loId, { ...entry, due: isDue(entry, now) });

@@ -47,9 +47,15 @@ export class DocumentStorageService {
   /** Ghi file do chính core-api tải về (vd. đề cương lấy từ Canvas). */
   async putObject(objectName: string, content: Buffer, contentType: string) {
     await this.ensureBucket();
-    await this.client.putObject(this.bucket, objectName, content, content.length, {
-      'Content-Type': contentType,
-    });
+    await this.client.putObject(
+      this.bucket,
+      objectName,
+      content,
+      content.length,
+      {
+        'Content-Type': contentType,
+      },
+    );
   }
 
   private ensureBucket() {

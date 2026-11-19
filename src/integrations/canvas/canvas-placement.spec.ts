@@ -8,7 +8,11 @@ import {
 describe('classifyModule', () => {
   it.each([
     ['Chương 1. Giới thiệu', 'lecture', { unit: 'chapter', number: 1 }],
-    ['Chapter 03 - Dimensionality reduction', 'lecture', { unit: 'chapter', number: 3 }],
+    [
+      'Chapter 03 - Dimensionality reduction',
+      'lecture',
+      { unit: 'chapter', number: 3 },
+    ],
     ['Tuần 5', 'lecture', { unit: 'week', number: 5 }],
     ['Buổi 12: PageRank', 'lecture', { unit: 'session', number: 12 }],
     ['Slides', 'lecture', null],
@@ -28,7 +32,9 @@ describe('classifyModule', () => {
   });
 
   it('handles decomposed Vietnamese names (NFD from macOS)', () => {
-    expect(classifyModule('Tài liệu tham khảo'.normalize('NFD')).role).toBe('reference');
+    expect(classifyModule('Tài liệu tham khảo'.normalize('NFD')).role).toBe(
+      'reference',
+    );
   });
 });
 
@@ -43,12 +49,14 @@ describe('chapterRefFromFileName', () => {
     expect(chapterRefFromFileName(name)).toEqual(ref);
   });
 
-  it.each(['DCMH.CO3137_Big Data.pdf', 'mmds.pdf', 'Big Data Intro.pdf', 'Chapter 99.pdf'])(
-    'finds nothing in %s',
-    (name) => {
-      expect(chapterRefFromFileName(name)).toBeNull();
-    },
-  );
+  it.each([
+    'DCMH.CO3137_Big Data.pdf',
+    'mmds.pdf',
+    'Big Data Intro.pdf',
+    'Chapter 99.pdf',
+  ])('finds nothing in %s', (name) => {
+    expect(chapterRefFromFileName(name)).toBeNull();
+  });
 });
 
 describe('resolveChapterCode', () => {
@@ -62,18 +70,30 @@ describe('resolveChapterCode', () => {
   const chapters = new Set(Array.from({ length: 14 }, (_, i) => String(i + 1)));
 
   it('keeps a chapter number that exists in the syllabus', () => {
-    expect(resolveChapterCode({ unit: 'chapter', number: 3 }, sessions, chapters)).toBe('3');
-    expect(resolveChapterCode({ unit: 'chapter', number: 20 }, sessions, chapters)).toBeNull();
+    expect(
+      resolveChapterCode({ unit: 'chapter', number: 3 }, sessions, chapters),
+    ).toBe('3');
+    expect(
+      resolveChapterCode({ unit: 'chapter', number: 20 }, sessions, chapters),
+    ).toBeNull();
   });
 
   it('maps a week or session inside a multi-session chapter', () => {
-    expect(resolveChapterCode({ unit: 'session', number: 14 }, sessions, chapters)).toBe('13');
-    expect(resolveChapterCode({ unit: 'week', number: 15 }, sessions, chapters)).toBe('14');
+    expect(
+      resolveChapterCode({ unit: 'session', number: 14 }, sessions, chapters),
+    ).toBe('13');
+    expect(
+      resolveChapterCode({ unit: 'week', number: 15 }, sessions, chapters),
+    ).toBe('14');
   });
 
   it('keeps the hint when no syllabus has been applied yet', () => {
-    expect(resolveChapterCode({ unit: 'chapter', number: 3 }, [], new Set())).toBe('3');
-    expect(resolveChapterCode({ unit: 'week', number: 3 }, [], new Set())).toBeNull();
+    expect(
+      resolveChapterCode({ unit: 'chapter', number: 3 }, [], new Set()),
+    ).toBe('3');
+    expect(
+      resolveChapterCode({ unit: 'week', number: 3 }, [], new Set()),
+    ).toBeNull();
   });
 });
 
