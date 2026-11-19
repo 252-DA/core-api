@@ -9,6 +9,7 @@ import {
   ESSAY_GRADING_QUEUE,
   MICRO_CONTENT_VIDEO_QUEUE,
   OUTBOX_RELAY_QUEUE,
+  QUESTION_BANK_SYNC_QUEUE,
   WORKER_RESULTS_QUEUE,
 } from './queues';
 
@@ -25,6 +26,7 @@ import {
       { name: CANVAS_SYNC_QUEUE },
       { name: MICRO_CONTENT_VIDEO_QUEUE },
       { name: OUTBOX_RELAY_QUEUE },
+      { name: QUESTION_BANK_SYNC_QUEUE },
     ),
   ],
   exports: [BullModule],

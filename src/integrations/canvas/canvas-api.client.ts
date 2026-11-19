@@ -5,7 +5,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { errorMessage } from '../../common/utils/errors';
-import { hostOf } from '../../common/utils/url';
+import { hostOf, withoutTrailingSlash } from '../../common/utils/url';
 import {
   loadCanvasApiConfig,
   loadCanvasApiEnv,
@@ -47,6 +47,48 @@ export type CanvasModule = {
   items?: CanvasModuleItem[];
 };
 
+/** Ngân hàng câu hỏi Classic (API đọc có trong canvas-lms từ 2026-01). */
+export type CanvasQuestionBank = {
+  id: number;
+  title: string;
+  context_id?: number;
+  context_type?: string;
+  assessment_question_count?: number;
+};
+
+export type CanvasQuestionAnswer = {
+  id?: number;
+  text?: string;
+  html?: string;
+  weight?: number;
+  comments?: string;
+};
+
+export type CanvasBankQuestion = {
+  id: number;
+  question_name?: string;
+  question_type?: string;
+  question_text?: string;
+  points_possible?: number;
+  neutral_comments?: string;
+  answers?: CanvasQuestionAnswer[];
+};
+
+export type CanvasProgress = {
+  /** queued | running | completed | failed */
+  workflow_state: string;
+  message?: string | null;
+  completion?: number | null;
+};
+
+export type CanvasMigrationIssue = {
+  issue_type?: string;
+  description?: string;
+  error_message?: string | null;
+};
+
+export type CanvasQtiImport = { migrationId: number; progressUrl: string };
+
 const REQUEST_TIMEOUT_MS = 60_000;
 // Giáo trình tham khảo có thể nặng; vẫn giới hạn để không nạp cả video vào RAM.
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
@@ -58,7 +100,7 @@ const WRITE_TIMEOUT_MS = 5_000;
 
 /** Tùy chọn của request ghi; bỏ trống thì là GET như trước. */
 type CanvasFetchInit = {
-  method?: 'PUT';
+  method?: 'PUT' | 'POST';
   body?: string;
   timeoutMs?: number;
   redirect?: RequestRedirect;
@@ -112,6 +154,24 @@ export function toInternalCanvasUrl(
   ];
   if (!publicHosts.includes(target.host)) return url;
   return `${internal}${target.pathname}${target.search}`;
+}
+
+/** Link thuộc chính Canvas (địa chỉ nội bộ hoặc tên miền công khai): chỉ những link này mới được kèm token. */
+export function isCanvasUrl(
+  url: string,
+  env: NodeJS.ProcessEnv = loadCanvasApiEnv(),
+): boolean {
+  let host: string;
+  try {
+    host = new URL(url).host;
+  } catch {
+    return false;
+  }
+  return [
+    hostOf(env.CANVAS_API_URL),
+    hostOf(env.LTI_PLATFORM_URL),
+    hostOf(env.CANVAS_PUBLIC_URL),
+  ].includes(host);
 }
 
 /**
@@ -211,6 +271,168 @@ export class CanvasApiClient {
       );
     }
     return buffer;
+  }
+
+  /**
+   * Địa chỉ định danh của Canvas để ghi vào question_lms_links: tên miền công
+   * khai, không phải địa chỉ nội bộ (đổi theo máy chạy).
+   */
+  lmsBaseUrl(): string {
+    const env = loadCanvasApiEnv();
+    const url = env.CANVAS_PUBLIC_URL || env.LTI_PLATFORM_URL;
+    return url ? withoutTrailingSlash(url) : this.config().baseUrl;
+  }
+
+  /**
+   * Nhập một gói QTI vào khoá Canvas qua Content Migrations, theo luồng
+   * `pre_attachment`: tạo migration → tải file lên `upload_url` → xác nhận.
+   * Canvas tự chạy migration khi file lên xong.
+   *
+   * Luôn gửi `overwrite_quizzes=true`: thiếu cờ này Canvas gắn tiền tố vào
+   * identifier đã có và nhân đôi câu (spike 2026-10-22, question-bank-design §8.5).
+   */
+  async startQtiImport(
+    canvasCourseId: number,
+    fileName: string,
+    data: Buffer,
+  ): Promise<CanvasQtiImport> {
+    const { baseUrl, token } = this.config();
+    const response = await this.fetch(
+      `${baseUrl}/api/v1/courses/${canvasCourseId}/content_migrations`,
+      token,
+      'tạo content migration',
+      true,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          migration_type: 'qti_converter',
+          settings: { overwrite_quizzes: true },
+          pre_attachment: {
+            name: fileName,
+            size: data.length,
+            content_type: 'application/zip',
+          },
+        }),
+      },
+    );
+    const created = (await response.json()) as {
+      id?: number;
+      progress_url?: string;
+      pre_attachment?: {
+        upload_url?: string;
+        upload_params?: Record<string, unknown>;
+        file_param?: string;
+        message?: string;
+      };
+    };
+    const upload = created.pre_attachment;
+    if (!created.id || !created.progress_url || !upload?.upload_url) {
+      throw new CanvasApiError(
+        `Canvas không trả chỗ tải gói QTI lên${upload?.message ? `: ${upload.message}` : ''}.`,
+      );
+    }
+    await this.uploadFile(
+      upload.upload_url,
+      upload.upload_params ?? {},
+      upload.file_param || 'file',
+      fileName,
+      data,
+      token,
+    );
+    return { migrationId: created.id, progressUrl: created.progress_url };
+  }
+
+  async getProgress(progressUrl: string): Promise<CanvasProgress> {
+    if (!isCanvasUrl(progressUrl)) {
+      throw new CanvasApiError('Link tiến độ không thuộc Canvas.');
+    }
+    const { token } = this.config();
+    const response = await this.fetch(progressUrl, token, 'đọc tiến độ import');
+    return (await response.json()) as CanvasProgress;
+  }
+
+  async listMigrationIssues(
+    canvasCourseId: number,
+    migrationId: number,
+  ): Promise<CanvasMigrationIssue[]> {
+    return this.getAllPages<CanvasMigrationIssue>(
+      `/api/v1/courses/${canvasCourseId}/content_migrations/${migrationId}/migration_issues?per_page=${PAGE_SIZE}`,
+      'lỗi import của Canvas',
+    );
+  }
+
+  /** Ngân hàng câu hỏi Classic còn hoạt động của một khoá Canvas. */
+  async listQuestionBanks(
+    canvasCourseId: number,
+  ): Promise<CanvasQuestionBank[]> {
+    return this.getAllPages<CanvasQuestionBank>(
+      `/api/v1/question_banks?context_type=Course&context_id=${canvasCourseId}&include_question_count=true&per_page=${PAGE_SIZE}`,
+      'ngân hàng câu hỏi Canvas',
+    );
+  }
+
+  async listBankQuestions(bankId: number): Promise<CanvasBankQuestion[]> {
+    return this.getAllPages<CanvasBankQuestion>(
+      `/api/v1/question_banks/${bankId}/questions?per_page=${PAGE_SIZE}`,
+      `câu hỏi trong ngân hàng Canvas ${bankId}`,
+    );
+  }
+
+  /**
+   * Bước 2–3 của luồng tải file Canvas. Bước tải lên KHÔNG kèm token: chữ ký
+   * đã nằm trong `upload_params`, và `upload_url` có thể là kho file ngoài
+   * Canvas (S3). Canvas trả 3xx tới link xác nhận; link đó phải gọi GET kèm
+   * token và phải thuộc Canvas.
+   */
+  private async uploadFile(
+    uploadUrl: string,
+    params: Record<string, unknown>,
+    fileParam: string,
+    fileName: string,
+    data: Buffer,
+    token: string,
+  ) {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(params)) {
+      form.append(key, String(value));
+    }
+    // Canvas đòi trường file nằm sau mọi upload_params.
+    form.append(
+      fileParam,
+      new Blob([new Uint8Array(data)], { type: 'application/zip' }),
+      fileName,
+    );
+    let uploaded: Response;
+    try {
+      uploaded = await fetch(toInternalCanvasUrl(uploadUrl), {
+        method: 'POST',
+        body: form,
+        redirect: 'manual',
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+    } catch (error: unknown) {
+      throw new CanvasApiError(
+        `Không kết nối được Canvas khi tải gói QTI lên: ${errorMessage(error)}`,
+      );
+    }
+    const location = uploaded.headers.get('location');
+    if (uploaded.status >= 300 && uploaded.status < 400 && location) {
+      const confirmUrl = new URL(location, uploadUrl).toString();
+      if (!isCanvasUrl(confirmUrl)) {
+        throw new CanvasApiError(
+          'Link xác nhận tải file không thuộc Canvas; không gửi token.',
+        );
+      }
+      await this.fetch(confirmUrl, token, 'xác nhận gói QTI');
+      return;
+    }
+    if (!uploaded.ok) {
+      const detail = (await uploaded.text()).slice(0, 300);
+      throw new CanvasApiError(
+        `Canvas trả HTTP ${uploaded.status} khi tải gói QTI lên${detail ? `: ${detail}` : ''}`,
+        uploaded.status,
+      );
+    }
   }
 
   private async getJson<T>(path: string, what: string): Promise<T> {

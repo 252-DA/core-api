@@ -36,6 +36,8 @@ import { ModelSettingsController } from './modules/model-settings/model-settings
 import { ModelSettingsService } from './modules/model-settings/model-settings.service';
 import { QuestionBankController } from './modules/question-bank/question-bank.controller';
 import { QuestionBankService } from './modules/question-bank/question-bank.service';
+import { QuestionBankSyncController } from './modules/question-bank/canvas/question-bank-sync.controller';
+import { QuestionBankSyncService } from './modules/question-bank/canvas/question-bank-sync.service';
 import { EssayGradingService } from './modules/quiz/services/essay-grading.service';
 import { QuizController } from './modules/quiz/controllers/quiz.controller';
 import { QuizSetController } from './modules/quiz/controllers/quiz-set.controller';
@@ -212,6 +214,12 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
     'retireItem',
     'listVersions',
   ]);
+  const questionBankSync = makeMockService([
+    'requestExport',
+    'listJobs',
+    'getJob',
+    'listCanvasBanks',
+  ]);
 
   const authHeader = { authorization: 'Bearer valid-token' };
 
@@ -253,6 +261,7 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
         MicroContentController,
         VideoAssetController,
         QuestionBankController,
+        QuestionBankSyncController,
       ],
       providers: [
         BffJwtGuard,
@@ -278,6 +287,7 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
         { provide: MicroContentAttemptService, useValue: microContentAttempt },
         { provide: VideoAssetService, useValue: videoAsset },
         { provide: QuestionBankService, useValue: questionBanks },
+        { provide: QuestionBankSyncService, useValue: questionBankSync },
       ],
     }).compile();
 
@@ -915,5 +925,50 @@ describe('HTTP Controllers + ValidationPipe + BffJwtGuard', () => {
       url: '/api/quiz-items/q1/versions',
     });
     expect(questionBanks.listVersions).toHaveBeenCalledWith(claims, 'q1');
+
+    const targetCourse = '00000000-0000-4000-8000-0000000000c2';
+    await injectJson({
+      method: 'POST',
+      url: '/api/question-banks/b1/canvas-export',
+      payload: { courseId: targetCourse, ignored: true },
+    });
+    expect(questionBankSync.requestExport).toHaveBeenCalledWith(claims, 'b1', {
+      courseId: targetCourse,
+    });
+
+    await injectJson({
+      method: 'POST',
+      url: '/api/question-banks/b1/canvas-export',
+    });
+    expect(questionBankSync.requestExport).toHaveBeenLastCalledWith(
+      claims,
+      'b1',
+      { courseId: undefined },
+    );
+
+    const badCourse = await injectJson({
+      method: 'POST',
+      url: '/api/question-banks/b1/canvas-export',
+      payload: { courseId: 'not-a-uuid' },
+    });
+    expect(badCourse.statusCode).toBe(400);
+
+    await injectJson({
+      method: 'GET',
+      url: '/api/question-banks/b1/sync-jobs',
+    });
+    expect(questionBankSync.listJobs).toHaveBeenCalledWith(claims, 'b1');
+
+    await injectJson({
+      method: 'GET',
+      url: '/api/question-bank-sync-jobs/j1',
+    });
+    expect(questionBankSync.getJob).toHaveBeenCalledWith(claims, 'j1');
+
+    await injectJson({
+      method: 'GET',
+      url: '/api/canvas/question-banks?courseId=c1',
+    });
+    expect(questionBankSync.listCanvasBanks).toHaveBeenCalledWith(claims, 'c1');
   });
 });

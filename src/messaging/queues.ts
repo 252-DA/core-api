@@ -9,3 +9,5 @@ export const ESSAY_GRADING_QUEUE = 'essay_grading';
 export const CANVAS_SYNC_QUEUE = 'canvas_sync';
 export const MICRO_CONTENT_VIDEO_QUEUE = 'micro_content_video';
 export const OUTBOX_RELAY_QUEUE = 'outbox_relay';
+/** Xuất/nhập ngân hàng câu hỏi với Canvas; consumer nằm ngay trong core-api. */
+export const QUESTION_BANK_SYNC_QUEUE = 'question_bank_sync';

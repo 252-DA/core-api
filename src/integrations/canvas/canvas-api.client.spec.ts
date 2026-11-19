@@ -330,3 +330,190 @@ describe('CanvasApiClient setAssignmentAllowedAttempts', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe('CanvasApiClient QTI import (question bank export)', () => {
+  const saved = { ...process.env };
+  let fetchMock: jest.SpyInstance;
+  const zipData = Buffer.from('PK\u0005\u0006');
+
+  beforeEach(() => {
+    process.env.CANVAS_API_URL = 'http://canvas.docker:3000';
+    process.env.LTI_PLATFORM_URL = 'https://canvas.example.dev';
+    process.env.CANVAS_API_TOKEN = 'test-token';
+    delete process.env.CANVAS_PUBLIC_URL;
+    fetchMock = jest.spyOn(globalThis, 'fetch');
+  });
+  afterEach(() => {
+    fetchMock.mockRestore();
+    process.env = { ...saved };
+  });
+
+  function createdMigration(uploadUrl: string) {
+    return new Response(
+      JSON.stringify({
+        id: 77,
+        progress_url: 'https://canvas.example.dev/api/v1/progress/9',
+        pre_attachment: {
+          upload_url: uploadUrl,
+          upload_params: { Policy: 'p', Signature: 's' },
+          file_param: 'file',
+        },
+      }),
+    );
+  }
+
+  it('creates the migration with overwrite_quizzes, uploads without the token, then confirms with it', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        createdMigration('https://canvas.example.dev/files_api'),
+      )
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: {
+            Location:
+              'https://canvas.example.dev/api/v1/files/5/create_success?uuid=u',
+          },
+        }),
+      )
+      .mockResolvedValueOnce(new Response('{"id":5}'));
+
+    const result = await new CanvasApiClient().startQtiImport(
+      42,
+      'da-bank-1.zip',
+      zipData,
+    );
+    expect(result).toEqual({
+      migrationId: 77,
+      progressUrl: 'https://canvas.example.dev/api/v1/progress/9',
+    });
+
+    const [createUrl, createInit] = fetchMock.mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    expect(createUrl).toBe(
+      'http://canvas.docker:3000/api/v1/courses/42/content_migrations',
+    );
+    expect(createInit.method).toBe('POST');
+    expect(JSON.parse(createInit.body as string)).toEqual({
+      migration_type: 'qti_converter',
+      settings: { overwrite_quizzes: true },
+      pre_attachment: {
+        name: 'da-bank-1.zip',
+        size: zipData.length,
+        content_type: 'application/zip',
+      },
+    });
+
+    const [uploadUrl, uploadInit] = fetchMock.mock.calls[1] as [
+      string,
+      RequestInit,
+    ];
+    expect(uploadUrl).toBe('http://canvas.docker:3000/files_api');
+    expect(uploadInit.headers).toBeUndefined();
+    expect(uploadInit.redirect).toBe('manual');
+    const form = uploadInit.body as FormData;
+    expect([...form.keys()]).toEqual(['Policy', 'Signature', 'file']);
+
+    const [confirmUrl, confirmInit] = fetchMock.mock.calls[2] as [
+      string,
+      RequestInit,
+    ];
+    expect(confirmUrl).toBe(
+      'http://canvas.docker:3000/api/v1/files/5/create_success?uuid=u',
+    );
+    expect((confirmInit.headers as Record<string, string>).Authorization).toBe(
+      'Bearer test-token',
+    );
+  });
+
+  it('accepts a 201 upload without a confirmation step', async () => {
+    fetchMock
+      .mockResolvedValueOnce(createdMigration('https://s3.example/bucket'))
+      .mockResolvedValueOnce(new Response('{}', { status: 201 }));
+    await new CanvasApiClient().startQtiImport(42, 'a.zip', zipData);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toBe('https://s3.example/bucket');
+  });
+
+  it('never sends the token to a confirmation link outside Canvas', async () => {
+    fetchMock
+      .mockResolvedValueOnce(createdMigration('https://s3.example/bucket'))
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 303,
+          headers: { Location: 'https://evil.example/confirm' },
+        }),
+      );
+    await expect(
+      new CanvasApiClient().startQtiImport(42, 'a.zip', zipData),
+    ).rejects.toThrow('không thuộc Canvas');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails clearly when Canvas gives no upload slot or the upload is rejected', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 1, progress_url: 'x' })),
+    );
+    await expect(
+      new CanvasApiClient().startQtiImport(42, 'a.zip', zipData),
+    ).rejects.toThrow('không trả chỗ tải gói QTI');
+
+    fetchMock
+      .mockResolvedValueOnce(
+        createdMigration('https://canvas.example.dev/files_api'),
+      )
+      .mockResolvedValueOnce(new Response('bad policy', { status: 400 }));
+    await expect(
+      new CanvasApiClient().startQtiImport(42, 'a.zip', zipData),
+    ).rejects.toThrow('HTTP 400 khi tải gói QTI lên: bad policy');
+  });
+
+  it('reads progress through the internal address and refuses foreign progress links', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('{"workflow_state":"completed"}'),
+    );
+    const client = new CanvasApiClient();
+    await expect(
+      client.getProgress('https://canvas.example.dev/api/v1/progress/9'),
+    ).resolves.toEqual({ workflow_state: 'completed' });
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'http://canvas.docker:3000/api/v1/progress/9',
+    );
+    await expect(
+      client.getProgress('https://evil.example/api/v1/progress/9'),
+    ).rejects.toThrow('không thuộc Canvas');
+  });
+
+  it('lists the question banks of a course and the questions of a bank', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response('[{"id":3,"title":"B"}]'))
+      .mockResolvedValueOnce(
+        new Response('[{"id":8,"question_name":"L.O.1 #x"}]'),
+      );
+    const client = new CanvasApiClient();
+    await expect(client.listQuestionBanks(42)).resolves.toEqual([
+      { id: 3, title: 'B' },
+    ]);
+    await expect(client.listBankQuestions(3)).resolves.toEqual([
+      { id: 8, question_name: 'L.O.1 #x' },
+    ]);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'http://canvas.docker:3000/api/v1/question_banks?context_type=Course&context_id=42&include_question_count=true&per_page=100',
+    );
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      'http://canvas.docker:3000/api/v1/question_banks/3/questions?per_page=100',
+    );
+  });
+
+  it('records the public Canvas address, not the internal one, as the LMS identity', () => {
+    expect(new CanvasApiClient().lmsBaseUrl()).toBe(
+      'https://canvas.example.dev',
+    );
+    process.env.CANVAS_PUBLIC_URL = 'https://canvas.public.dev/';
+    expect(new CanvasApiClient().lmsBaseUrl()).toBe(
+      'https://canvas.public.dev',
+    );
+  });
+});

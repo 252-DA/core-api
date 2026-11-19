@@ -99,3 +99,10 @@ export class ForkQuestionBankItemDto {
   @IsUUID()
   targetBankId!: string;
 }
+
+export class CanvasExportDto {
+  /** Khoá DA (đã nối Canvas) nhận câu; bỏ trống là khoá gốc của ngân hàng. */
+  @IsOptional()
+  @IsUUID()
+  courseId?: string;
+}
