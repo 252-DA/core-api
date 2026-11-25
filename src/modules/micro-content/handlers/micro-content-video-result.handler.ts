@@ -37,6 +37,9 @@ export interface MicroContentVideoReady extends VideoResultBase {
   vtt_object_key?: string;
   transcript_text?: string;
   scene_timeline?: SceneTimelineItem[];
+  fallback_used?: boolean;
+  fallback_reason?: string;
+  fallbacks?: Array<Record<string, unknown>>;
 }
 
 export interface MicroContentVideoFailed extends VideoResultBase {
@@ -72,6 +75,9 @@ const READY_KEYS = new Set([
   'vtt_object_key',
   'transcript_text',
   'scene_timeline',
+  'fallback_used',
+  'fallback_reason',
+  'fallbacks',
 ]);
 const FAILED_KEYS = new Set([...BASE_KEYS, 'error']);
 // Giới hạn theo cột: video_duration_ms/duration_ms là INTEGER, object_key
@@ -207,6 +213,28 @@ export function parseMicroContentVideoPayload(
     }
     if (scene_timeline !== undefined) {
       validateSceneTimeline(scene_timeline, problems);
+    }
+    if (
+      payload.fallback_used !== undefined &&
+      typeof payload.fallback_used !== 'boolean'
+    ) {
+      problems.push('fallback_used must be a boolean');
+    }
+    if (
+      payload.fallback_reason !== undefined &&
+      (typeof payload.fallback_reason !== 'string' ||
+        !isWithinCodePoints(payload.fallback_reason, MAX_ERROR))
+    ) {
+      problems.push(`fallback_reason must be a string of <= ${MAX_ERROR} chars`);
+    }
+    if (
+      payload.fallbacks !== undefined &&
+      (!Array.isArray(payload.fallbacks) ||
+        payload.fallbacks.length > MAX_TIMELINE_SCENES)
+    ) {
+      problems.push(
+        `fallbacks must be an array of at most ${MAX_TIMELINE_SCENES} items`,
+      );
     }
   } else if (status === 'FAILED') {
     allowed = FAILED_KEYS;
@@ -355,7 +383,13 @@ export class MicroContentVideoResultHandler implements WorkerResultHandler<
                         result.scene_timeline as unknown as Prisma.InputJsonValue,
                     }
                   : {}),
-                error_message: null,
+                error_message:
+                  result.fallback_used && result.fallback_reason
+                    ? clipCodePoints(
+                        `FLAGGED (Fallback): ${result.fallback_reason}`,
+                        MAX_ERROR,
+                      )
+                    : null,
                 updated_at: now,
               }
             : {
@@ -391,7 +425,13 @@ export class MicroContentVideoResultHandler implements WorkerResultHandler<
                 video_duration_ms: result.duration_ms,
                 video_size_bytes: BigInt(result.size_bytes),
                 video_mime_type: result.mime_type,
-                video_error: null,
+                video_error:
+                  result.fallback_used && result.fallback_reason
+                    ? clipCodePoints(
+                        `FLAGGED (Fallback): ${result.fallback_reason}`,
+                        MAX_ERROR,
+                      )
+                    : null,
                 updated_at: now,
               }
             : {
