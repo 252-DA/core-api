@@ -12,6 +12,7 @@ import { PrismaService } from '../../../infra/prisma/prisma.service';
 import { AuthzService } from '../../../auth/authz.service';
 import { DocumentStorageService } from '../../../infra/storage/document-storage.service';
 import type { BffClaims } from '../../../auth/bff-claims';
+import { extractYoutubeDetails } from '../../video-asset/video-similarity';
 
 const MC_STAFF_ROLES = [...STAFF_ROLES, 'admin'];
 const MC_CLAIM_STAFF_ROLES = [...MC_STAFF_ROLES, 'teacher'];
@@ -148,6 +149,9 @@ export class MicroContentVideoService {
             vtt_subtitles_key: true,
             transcript_text: true,
             scene_timeline: true,
+            source_type: true,
+            object_key: true,
+            ai_options: true,
           },
         },
       },
@@ -186,6 +190,26 @@ export class MicroContentVideoService {
 
     if (!item.video_object_key || item.video_status !== 'READY') {
       throw new BadRequestException('Video chưa sẵn sàng để phát.');
+    }
+
+    if (
+      item.video_source === 'YOUTUBE' ||
+      item.video_object_key.startsWith('youtube:')
+    ) {
+      const yt = extractYoutubeDetails(
+        item.video_object_key,
+        item.video_asset?.ai_options,
+      );
+      if (!yt.youtubeEmbedUrl) {
+        throw new BadRequestException('Liên kết video YouTube không hợp lệ.');
+      }
+      return {
+        url: yt.youtubeEmbedUrl,
+        mimeType: 'video/youtube',
+        durationMs: item.video_duration_ms,
+        title: item.title,
+        ...yt,
+      };
     }
 
     const url = await this.storage.createPresignedDownloadUrl(

@@ -12,6 +12,15 @@ import { DocumentStorageService } from '../../infra/storage/document-storage.ser
 import type { BffClaims } from '../../auth/bff-claims';
 import { video_assets } from '@prisma/client';
 import { serializeVideoAsset } from './video-asset.mapper';
+import {
+  buildMicroContentQueryProfile,
+  buildYoutubeThumbnailUrl,
+  buildYoutubeWatchUrl,
+  extractYoutubeDetails,
+  extractYoutubeVideoId,
+  scoreVideoAssetSimilarity,
+} from './video-similarity';
+import type { AttachYoutubeVideoDto } from './dto/video-asset.dto';
 
 const VISIBILITIES = ['PRIVATE', 'COURSE', 'PUBLIC'];
 const STAFF_ROLES = [...COURSE_STAFF_ROLES, 'admin'];
@@ -331,6 +340,23 @@ export class VideoAssetService {
       throw new ForbiddenException('Bạn không có quyền truy cập video này.');
     }
 
+    if (
+      asset.source_type === 'YOUTUBE' ||
+      asset.object_key?.startsWith('youtube:')
+    ) {
+      const yt = extractYoutubeDetails(asset.object_key, asset.ai_options);
+      if (!yt.youtubeEmbedUrl) {
+        throw new BadRequestException('Liên kết video YouTube không hợp lệ.');
+      }
+      return {
+        url: yt.youtubeEmbedUrl,
+        mimeType: 'video/youtube',
+        durationMs: asset.duration_ms || 0,
+        title: asset.title,
+        ...yt,
+      };
+    }
+
     if (!asset.object_key) {
       throw new BadRequestException('Video chưa sẵn sàng để phát.');
     }
@@ -559,11 +585,17 @@ export class VideoAssetService {
         data: {
           video_asset_id: assetId || null,
           video_object_key: assetRecord?.object_key || null,
+          video_mime_type: assetRecord?.mime_type || null,
           video_duration_ms: assetRecord?.duration_ms || null,
           video_size_bytes: assetRecord?.size_bytes || null,
           video_status: assetRecord?.status || 'NONE',
           video_source:
-            assetRecord?.source_type === 'AI_STUDIO' ? 'AI' : 'UPLOAD',
+            assetRecord?.source_type === 'AI_STUDIO'
+              ? 'AI'
+              : assetRecord?.source_type === 'YOUTUBE'
+                ? 'YOUTUBE'
+                : 'UPLOAD',
+          video_error: null,
           updated_at: new Date(),
         },
       });
@@ -572,6 +604,282 @@ export class VideoAssetService {
         success: true,
         videoAssetId: assetId,
         videoStatus: assetRecord?.status || 'NONE',
+      };
+    });
+  }
+
+  /**
+   * Đề xuất các video sẵn có trong kho học liệu có nội dung tương tự với bài Micro Content.
+   */
+  async recommendForMicroContent(
+    claims: BffClaims,
+    input: { microContentId?: string; limit?: number },
+  ) {
+    if (!input.microContentId || !input.microContentId.trim()) {
+      throw new BadRequestException('Thiếu microContentId.');
+    }
+
+    const mc = await this.prisma.micro_contents.findFirst({
+      where: { micro_content_id: input.microContentId, deleted_at: null },
+      include: {
+        learning_outcome: { select: { code: true, statement_vi: true } },
+        source_document: { select: { document_id: true, title: true } },
+      },
+    });
+    if (!mc) {
+      throw new NotFoundException('Micro content not found');
+    }
+
+    await this.authz.assertCourseAccess(claims, mc.course_id, STAFF_ROLES);
+
+    let slideChunkTexts: string[] = [];
+    if (mc.source_document_id && this.prisma.chunks?.findMany) {
+      const chunkWhere: Record<string, unknown> = {
+        document_id: mc.source_document_id,
+        deleted_at: null,
+      };
+      if (mc.source_page_from || mc.source_page_to) {
+        chunkWhere.page_number = {
+          ...(mc.source_page_from ? { gte: mc.source_page_from } : {}),
+          ...(mc.source_page_to ? { lte: mc.source_page_to } : {}),
+        };
+      }
+      const chunks = await this.prisma.chunks.findMany({
+        where: chunkWhere,
+        take: 6,
+        orderBy: [{ page_number: 'asc' }, { chunk_id: 'asc' }],
+        select: { content: true },
+      });
+      slideChunkTexts = chunks
+        .map((c) => c.content)
+        .filter((t): t is string => Boolean(t));
+    }
+
+    const profile = buildMicroContentQueryProfile({
+      title: mc.title,
+      description: mc.description,
+      loCode: mc.learning_outcome?.code ?? null,
+      loStatement: mc.learning_outcome?.statement_vi ?? null,
+      sourceDocumentTitle: mc.source_document?.title ?? null,
+      aiPrompt: mc.ai_prompt,
+      aiScript: mc.ai_script,
+      slideChunkTexts,
+    });
+
+    const candidates = await this.prisma.video_assets.findMany({
+      where: {
+        deleted_at: null,
+        status: 'READY',
+        OR: [
+          { owner_id: claims.sub },
+          { visibility: 'PUBLIC' },
+          { course_id: mc.course_id, visibility: 'COURSE' },
+        ],
+      },
+      take: 200,
+      orderBy: [{ usage_count: 'desc' }, { created_at: 'desc' }],
+      include: {
+        creator: { select: { display_name: true } },
+        courses: { select: { code: true, name: true } },
+      },
+    });
+
+    const limit = Math.min(Math.max(input.limit || 6, 1), 20);
+    const scored = candidates
+      .map((candidate) => {
+        const sim = scoreVideoAssetSimilarity(profile, candidate, mc.course_id);
+        return {
+          candidate,
+          ...sim,
+        };
+      })
+      .filter((entry) => entry.matchScore >= 10)
+      .sort((a, b) => {
+        if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
+        if (b.candidate.usage_count !== a.candidate.usage_count) {
+          return b.candidate.usage_count - a.candidate.usage_count;
+        }
+        const tA = a.candidate.created_at
+          ? new Date(a.candidate.created_at).getTime()
+          : 0;
+        const tB = b.candidate.created_at
+          ? new Date(b.candidate.created_at).getTime()
+          : 0;
+        return tB - tA;
+      })
+      .slice(0, limit);
+
+    return {
+      microContentId: mc.micro_content_id,
+      suggestedQuery: profile.suggestedQuery,
+      keywords: profile.topKeywords,
+      totalCandidates: candidates.length,
+      items: scored.map(({ candidate, matchScore, matchReasons, matchedKeywords }) => ({
+        ...serializeVideoAsset(candidate),
+        creatorName: candidate.creator?.display_name,
+        courseName: candidate.courses?.name,
+        courseCode: candidate.courses?.code,
+        matchScore,
+        matchReasons,
+        matchedKeywords,
+        isCurrentlyAttached: candidate.asset_id === mc.video_asset_id,
+      })),
+    };
+  }
+
+  /**
+   * Lưu video YouTube vào kho học liệu (hoặc tái sử dụng bản ghi trùng) và gắn vào Micro Content.
+   */
+  async attachYoutubeVideo(claims: BffClaims, input: AttachYoutubeVideoDto) {
+    const videoId = extractYoutubeVideoId(input.youtubeVideoId);
+    if (!videoId) {
+      throw new BadRequestException('ID video YouTube không hợp lệ.');
+    }
+
+    const startSec =
+      typeof input.startSec === 'number' && Number.isFinite(input.startSec)
+        ? Math.max(0, Math.floor(input.startSec))
+        : null;
+    const endSec =
+      typeof input.endSec === 'number' && Number.isFinite(input.endSec)
+        ? Math.floor(input.endSec)
+        : null;
+    if (endSec !== null && endSec <= (startSec ?? 0)) {
+      throw new BadRequestException(
+        'Thời điểm kết thúc phải lớn hơn thời điểm bắt đầu.',
+      );
+    }
+
+    const title = (input.title || '').trim().slice(0, 250);
+    if (!title) {
+      throw new BadRequestException('Tiêu đề video không được để trống.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const currentLesson = await tx.micro_contents.findFirst({
+        where: { micro_content_id: input.microContentId, deleted_at: null },
+        select: {
+          micro_content_id: true,
+          video_asset_id: true,
+          course_id: true,
+        },
+      });
+      if (!currentLesson) {
+        throw new NotFoundException('Micro content not found');
+      }
+      await this.authz.assertCourseAccess(
+        claims,
+        currentLesson.course_id,
+        STAFF_ROLES,
+      );
+
+      const objectKey = `youtube:${videoId}`;
+      const effectiveDurationMs =
+        startSec !== null && endSec !== null
+          ? (endSec - startSec) * 1000
+          : input.durationMs && input.durationMs > 0
+            ? Math.round(input.durationMs)
+            : 180000;
+
+      const aiOptions = {
+        youtubeVideoId: videoId,
+        channelTitle: input.channelTitle?.trim() || null,
+        thumbnailUrl: buildYoutubeThumbnailUrl(videoId),
+        watchUrl: buildYoutubeWatchUrl(videoId),
+        startSec,
+        endSec,
+      };
+
+      const existingSame = await tx.video_assets.findMany({
+        where: {
+          course_id: currentLesson.course_id,
+          object_key: objectKey,
+          source_type: 'YOUTUBE',
+          deleted_at: null,
+        },
+      });
+
+      let chosenAsset = existingSame.find((row) => {
+        const opts =
+          row.ai_options &&
+          typeof row.ai_options === 'object' &&
+          !Array.isArray(row.ai_options)
+            ? (row.ai_options as Record<string, unknown>)
+            : null;
+        const rowStart =
+          typeof opts?.startSec === 'number' ? opts.startSec : null;
+        const rowEnd = typeof opts?.endSec === 'number' ? opts.endSec : null;
+        return rowStart === startSec && rowEnd === endSec;
+      });
+
+      if (!chosenAsset) {
+        const cleanTags = Array.from(
+          new Set([
+            'youtube',
+            ...(Array.isArray(input.tags)
+              ? input.tags
+                  .map((t) => String(t).trim())
+                  .filter(Boolean)
+              : []),
+          ]),
+        ).slice(0, 10);
+
+        chosenAsset = await tx.video_assets.create({
+          data: {
+            title,
+            description: input.description?.trim() || null,
+            tags: cleanTags,
+            source_type: 'YOUTUBE',
+            status: 'READY',
+            transcript_status: 'NONE',
+            object_key: objectKey,
+            duration_ms: effectiveDurationMs,
+            mime_type: 'video/youtube',
+            visibility: 'COURSE',
+            allow_fork: false,
+            ai_options: aiOptions as any,
+            owner_id: claims.sub,
+            course_id: currentLesson.course_id,
+            usage_count: 0,
+          },
+        });
+      }
+
+      if (currentLesson.video_asset_id !== chosenAsset.asset_id) {
+        if (currentLesson.video_asset_id) {
+          await tx.video_assets.updateMany({
+            where: { asset_id: currentLesson.video_asset_id },
+            data: { usage_count: { decrement: 1 } },
+          });
+        }
+        chosenAsset = await tx.video_assets.update({
+          where: { asset_id: chosenAsset.asset_id },
+          data: { usage_count: { increment: 1 } },
+        });
+      }
+
+      await tx.micro_contents.update({
+        where: { micro_content_id: currentLesson.micro_content_id },
+        data: {
+          video_asset_id: chosenAsset.asset_id,
+          video_object_key: objectKey,
+          video_mime_type: 'video/youtube',
+          video_duration_ms: effectiveDurationMs,
+          video_size_bytes: null,
+          video_status: 'READY',
+          video_source: 'YOUTUBE',
+          video_error: null,
+          updated_at: new Date(),
+        },
+      });
+
+      return {
+        success: true,
+        asset: serializeVideoAsset(chosenAsset),
+        videoAssetId: chosenAsset.asset_id,
+        videoStatus: 'READY',
+        videoSource: 'YOUTUBE',
+        ...extractYoutubeDetails(objectKey, aiOptions),
       };
     });
   }

@@ -199,6 +199,37 @@ describe('MicroContentVideoService', () => {
         service.getVideoUrl(instructorClaims, { microContentId }),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('returns YouTube embed URL without calling storage when video_source is YOUTUBE', async () => {
+      const { service, prisma, storage } = setup();
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseId,
+        title: 'Merge Sort YT',
+        status: 'PUBLISHED',
+        video_source: 'YOUTUBE',
+        video_status: 'READY',
+        video_object_key: 'youtube:4VqmGXwpLqc',
+        video_mime_type: 'video/youtube',
+        video_duration_ms: 180000,
+        video_asset: {
+          source_type: 'YOUTUBE',
+          object_key: 'youtube:4VqmGXwpLqc',
+          ai_options: {
+            youtubeVideoId: '4VqmGXwpLqc',
+            channelTitle: 'Michael Sambol',
+            startSec: 15,
+            endSec: 120,
+          },
+        },
+      });
+
+      const res = await service.getVideoUrl(learnerClaims, { microContentId });
+
+      expect(storage.createPresignedDownloadUrl).not.toHaveBeenCalled();
+      expect(res.mimeType).toBe('video/youtube');
+      expect(res.url).toContain('https://www.youtube.com/embed/4VqmGXwpLqc');
+    });
   });
 
   describe('getSubtitlesUrl', () => {

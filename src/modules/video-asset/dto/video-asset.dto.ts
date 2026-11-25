@@ -1,9 +1,11 @@
 import {
   IsArray,
   IsBoolean,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  Min,
 } from 'class-validator';
 
 export class CheckVideoHashDto {
@@ -94,4 +96,43 @@ export class AttachVideoAssetDto {
   @IsOptional()
   @IsString()
   assetId!: string | null;
+}
+
+export class AttachYoutubeVideoDto {
+  @IsString()
+  microContentId!: string;
+
+  @IsString()
+  youtubeVideoId!: string;
+
+  @IsString()
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  channelTitle?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  durationMs?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  startSec?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  endSec?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
 }

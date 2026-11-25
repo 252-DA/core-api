@@ -59,6 +59,7 @@ function setup(memberships: Membership[] = []) {
     video_assets: {
       findFirst: jest.fn(),
       findUnique: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn(async ({ data }: { data: object }) => ({
         asset_id: 'fork-1',
         ...data,
@@ -70,6 +71,7 @@ function setup(memberships: Membership[] = []) {
       updateMany: jest.fn(),
     },
     micro_contents: { findFirst: jest.fn(), update: jest.fn() },
+    chunks: { findMany: jest.fn().mockResolvedValue([]) },
     $transaction: jest.fn(),
   };
   prisma.$transaction.mockImplementation((fn: (tx: typeof prisma) => unknown) =>
@@ -305,6 +307,204 @@ describe('VideoAssetService', () => {
           visibility: 'PUBLIC',
         }),
       ).resolves.toMatchObject({ visibility: 'PUBLIC' });
+    });
+  });
+
+  describe('recommendForMicroContent', () => {
+    const staff = [{ sub: other, courseId: courseA, role: 'instructor' }];
+
+    it('xếp hạng cao hơn cho video trùng từ khóa tiếng Việt không dấu/có dấu', async () => {
+      const { service, prisma } = setup(staff);
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        course_id: courseA,
+        title: 'Thuật toán Merge Sort và Chia để trị',
+        description: 'Minh họa chia mảng thành hai nửa rồi trộn có thứ tự.',
+        ai_prompt: null,
+        ai_script: null,
+        source_document_id: null,
+        source_page_from: null,
+        source_page_to: null,
+        video_asset_id: null,
+        learning_outcome: {
+          code: 'LO2',
+          statement_vi: 'Phân tích độ phức tạp O(n log n) của Merge Sort',
+        },
+        source_document: {
+          document_id: 'doc-1',
+          title: 'Slide Sắp xếp',
+        },
+      });
+      prisma.video_assets.findMany.mockResolvedValue([
+        asset({
+          asset_id: 'unrelated',
+          title: 'Giới thiệu hệ điều hành Linux',
+          description: 'Tiến trình và luồng CPU',
+          tags: ['os', 'linux'],
+          course_id: courseA,
+          visibility: 'COURSE',
+        }),
+        asset({
+          asset_id: 'matched',
+          title: 'Trực quan hóa Merge Sort (Chia để trị)',
+          description: 'Mô phỏng quá trình trộn hai mảng con trong Merge Sort',
+          tags: ['merge-sort', 'sorting'],
+          course_id: courseB,
+          visibility: 'PUBLIC',
+        }),
+      ]);
+
+      const res = await service.recommendForMicroContent(claims(other), {
+        microContentId,
+        limit: 5,
+      });
+
+      expect(res.suggestedQuery).toContain('Merge Sort');
+      expect(res.items).toHaveLength(1);
+      expect(res.items[0].asset_id).toBe('matched');
+      expect(res.items[0].matchScore).toBeGreaterThanOrEqual(30);
+      expect(res.items[0].matchReasons.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('attachYoutubeVideo & YouTube stream/attach', () => {
+    const staff = [{ sub: other, courseId: courseA, role: 'instructor' }];
+
+    it('từ chối YouTube ID hoặc khoảng thời gian không hợp lệ', async () => {
+      const { service } = setup(staff);
+      await expect(
+        service.attachYoutubeVideo(claims(other), {
+          microContentId,
+          youtubeVideoId: 'bad-id',
+          title: 'Video',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.attachYoutubeVideo(claims(other), {
+          microContentId,
+          youtubeVideoId: 'dQw4w9WgXcQ',
+          title: 'Video',
+          startSec: 120,
+          endSec: 60,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('tạo video_assets YOUTUBE và gắn vào micro_content', async () => {
+      const { service, prisma } = setup(staff);
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        video_asset_id: null,
+        course_id: courseA,
+      });
+      prisma.video_assets.findMany.mockResolvedValue([]);
+      prisma.video_assets.create.mockResolvedValue(
+        asset({
+          asset_id: 'yt-asset-1',
+          source_type: 'YOUTUBE',
+          mime_type: 'video/youtube',
+          object_key: 'youtube:4VqmGXwpLqc',
+          visibility: 'COURSE',
+          ai_options: {
+            youtubeVideoId: '4VqmGXwpLqc',
+            channelTitle: 'Michael Sambol',
+            startSec: 10,
+            endSec: 130,
+          },
+        }),
+      );
+      prisma.video_assets.update.mockResolvedValue(
+        asset({
+          asset_id: 'yt-asset-1',
+          source_type: 'YOUTUBE',
+          mime_type: 'video/youtube',
+          object_key: 'youtube:4VqmGXwpLqc',
+          usage_count: 1,
+        }),
+      );
+
+      const res = await service.attachYoutubeVideo(claims(other), {
+        microContentId,
+        youtubeVideoId: 'https://www.youtube.com/watch?v=4VqmGXwpLqc',
+        title: 'Merge sort in 3 minutes',
+        channelTitle: 'Michael Sambol',
+        startSec: 10,
+        endSec: 130,
+      });
+
+      expect(res).toMatchObject({
+        success: true,
+        videoAssetId: 'yt-asset-1',
+        videoSource: 'YOUTUBE',
+        youtubeVideoId: '4VqmGXwpLqc',
+        youtubeStartSec: 10,
+        youtubeEndSec: 130,
+      });
+      expect(prisma.micro_contents.update).toHaveBeenCalledWith({
+        where: { micro_content_id: microContentId },
+        data: expect.objectContaining({
+          video_asset_id: 'yt-asset-1',
+          video_source: 'YOUTUBE',
+          video_mime_type: 'video/youtube',
+          video_duration_ms: 120000,
+        }),
+      });
+    });
+
+    it('getStreamUrl trả về embed URL cho YouTube mà không gọi MinIO', async () => {
+      const { service, prisma, storage } = setup(staff);
+      prisma.video_assets.findUnique.mockResolvedValue(
+        asset({
+          source_type: 'YOUTUBE',
+          mime_type: 'video/youtube',
+          object_key: 'youtube:4VqmGXwpLqc',
+          visibility: 'COURSE',
+          ai_options: {
+            youtubeVideoId: '4VqmGXwpLqc',
+            startSec: 5,
+            endSec: 95,
+          },
+        }),
+      );
+
+      const res = await service.getStreamUrl(claims(other), {
+        assetId: 'asset-1',
+      });
+
+      expect(storage.createPresignedDownloadUrl).not.toHaveBeenCalled();
+      expect(res.mimeType).toBe('video/youtube');
+      expect(res.url).toContain('https://www.youtube.com/embed/4VqmGXwpLqc');
+    });
+
+    it('attachToMicroContent đặt video_source = YOUTUBE cho asset YOUTUBE', async () => {
+      const { service, prisma } = setup(staff);
+      prisma.micro_contents.findFirst.mockResolvedValue({
+        micro_content_id: microContentId,
+        video_asset_id: null,
+        course_id: courseA,
+      });
+      prisma.video_assets.findFirst.mockResolvedValue(
+        asset({
+          source_type: 'YOUTUBE',
+          mime_type: 'video/youtube',
+          object_key: 'youtube:4VqmGXwpLqc',
+          visibility: 'COURSE',
+        }),
+      );
+
+      await service.attachToMicroContent(claims(other), {
+        microContentId,
+        assetId: 'asset-1',
+      });
+
+      expect(prisma.micro_contents.update).toHaveBeenLastCalledWith({
+        where: { micro_content_id: microContentId },
+        data: expect.objectContaining({
+          video_source: 'YOUTUBE',
+          video_mime_type: 'video/youtube',
+        }),
+      });
     });
   });
 });

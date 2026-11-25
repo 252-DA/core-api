@@ -16,6 +16,7 @@ import type { BffClaims } from '../../auth/bff-claims';
 import { parseOptionalInt } from '../../common/utils/query-params';
 import {
   AttachVideoAssetDto,
+  AttachYoutubeVideoDto,
   CheckVideoHashDto,
   ConfirmVideoAssetUploadDto,
   CreateVideoAssetUploadDto,
@@ -64,12 +65,32 @@ export class VideoAssetController {
     return this.videoAsset.createUpload(claims, body);
   }
 
+  @Get('recommendations')
+  async recommendForMicroContent(
+    @CurrentBffClaims() claims: BffClaims,
+    @Query('microContentId') microContentId?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.videoAsset.recommendForMicroContent(claims, {
+      microContentId,
+      limit: parseOptionalInt(limit, 'limit'),
+    });
+  }
+
   @Post('attach')
   async attachToMicroContent(
     @CurrentBffClaims() claims: BffClaims,
     @Body() body: AttachVideoAssetDto,
   ) {
     return this.videoAsset.attachToMicroContent(claims, body);
+  }
+
+  @Post('youtube-attach')
+  async attachYoutubeVideo(
+    @CurrentBffClaims() claims: BffClaims,
+    @Body() body: AttachYoutubeVideoDto,
+  ) {
+    return this.videoAsset.attachYoutubeVideo(claims, body);
   }
 
   @Get(':id')

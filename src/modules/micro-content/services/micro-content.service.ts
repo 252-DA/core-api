@@ -13,6 +13,7 @@ import { isUuid } from '../../../common/utils/uuid';
 import { PrismaService } from '../../../infra/prisma/prisma.service';
 import { AuthzService } from '../../../auth/authz.service';
 import type { BffClaims } from '../../../auth/bff-claims';
+import { extractYoutubeDetails } from '../../video-asset/video-similarity';
 import {
   CONTENT_GENERATION_REQUESTED,
   MICRO_CONTENT_RENDER_REQUESTED,
@@ -228,6 +229,10 @@ export class MicroContentService {
             vtt_subtitles_key: true,
             transcript_text: true,
             scene_timeline: true,
+            source_type: true,
+            object_key: true,
+            mime_type: true,
+            ai_options: true,
           },
         },
         questions: {
@@ -250,6 +255,12 @@ export class MicroContentService {
       ? item.video_asset.scene_timeline
       : [];
     const transcriptText = item.video_asset?.transcript_text ?? null;
+    const yt = extractYoutubeDetails(
+      item.video_object_key ?? item.video_asset?.object_key,
+      item.video_asset?.ai_options,
+    );
+    const videoMimeType =
+      item.video_mime_type ?? item.video_asset?.mime_type ?? null;
 
     if (!isStaff) {
       // Learner chỉ được xem nếu nội dung đã PUBLISHED
@@ -278,6 +289,8 @@ export class MicroContentService {
         videoSource: item.video_source,
         videoStatus: item.video_status,
         videoDurationMs: item.video_duration_ms,
+        videoMimeType,
+        ...yt,
         passingScore: item.passing_score,
         requiredWatchPercent: item.required_watch_percent,
         status: item.status,
@@ -329,6 +342,8 @@ export class MicroContentService {
       videoSource: item.video_source,
       videoStatus: item.video_status,
       videoDurationMs: item.video_duration_ms,
+      videoMimeType,
+      ...yt,
       videoError: item.video_error,
       aiPrompt: item.ai_prompt,
       aiOptions: item.ai_options,
